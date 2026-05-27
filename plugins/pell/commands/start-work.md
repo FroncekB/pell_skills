@@ -188,3 +188,37 @@ On `y`, call `mcp__plugin_atlassian_atlassian__transitionJiraIssue` with:
 On failure, print a single line: "⚠ Failed to transition — `<error message>`." and continue to Step 6. Do NOT roll back the branch or the assignment.
 
 On `n`, continue to Step 6 silently.
+
+## Step 6 — Report
+
+Print this report. Replace bracketed placeholders with the actual values; omit lines that don't apply (e.g. skip the "Assigned" line if assignment was skipped or declined).
+
+```
+✓ On branch `<new branch>` (created from `<base branch from `git rev-parse --abbrev-ref HEAD@{1}` if available, else "current branch">`)
+✓ Assigned <KEY> to you
+✓ Moved <KEY> to "<new status>"
+
+Ticket: <KEY> — <summary>
+Type: <issuetype.name>   Status: <new status, or original if no transition happened>
+
+Description:
+<first ~5 lines of description, truncated with "…" if longer>
+
+You're ready to start.
+```
+
+If the user declined any Jira action, add a single transparency line for each skip:
+
+```
+- Skipped Jira assignment (you answered no)
+- Skipped Jira transition (you said "don't touch jira")
+```
+
+Use the second phrasing only if `don't touch jira` was the trigger; otherwise say "(you answered no)".
+
+## Operator notes
+
+- **Never** push, commit, post comments, open PRs, or stash. None of those are in scope for this command
+- **Never** mutate Jira without explicit consent — either pre-authorization in `$ARGUMENTS` or a `y` answer to a named per-action prompt
+- If any non-fatal step fails (Jira assignment, Jira transition, summary truncation), continue with the next step. The branch is the load-bearing deliverable; Jira changes are convenience
+- The user's `$ARGUMENTS` always wins over defaults. If they typed something this command doesn't explicitly handle, interpret it naturally
