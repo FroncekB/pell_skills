@@ -58,7 +58,7 @@ If 0 issues:
 
 Stop here.
 
-Otherwise group by `priority.name`. Render in this order: `Highest`, `High`, `Medium`, `Low`, `Lowest`, then no-priority. Within each group, preserve API order (already priority DESC, created DESC). The no-priority section header is `## (no priority)` rather than a bare dash — projects without priority configured (common) otherwise render an unhelpful `## —`.
+Otherwise group by `priority.name`. Render in this order: `Blocker`, `Highest`, `High`, `Medium`, `Low`, `Lowest` — then any custom priorities (e.g. `Urgent`, `Trivial`) alphabetically — then no-priority. Within each group, preserve API order (already priority DESC, created DESC). The no-priority section header is `## (no priority)` rather than a bare dash — projects without priority configured (common) otherwise render an unhelpful `## —`.
 
 Number tickets globally (continuous across groups):
 

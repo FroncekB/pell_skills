@@ -54,7 +54,12 @@ If the response has 0 issues:
 
 Stop here.
 
-Otherwise, group issues by `status.name` and render. Sort groups in this preference order (any other statuses come after, alphabetically): `In Progress`, `In Review`, `To Do`, `Open`, `Backlog`, `Blocked`.
+Otherwise, group issues by `status.name` and render. Sort sections in two passes:
+
+1. **By `statusCategory.key`**: all `indeterminate` (In Progress category) sections render before all `new` (To Do category) sections. This keeps active work above dormant backlog even when projects use custom status names. (The JQL already excludes `Done`, so those don't appear.)
+2. **Within each statusCategory**: preference list first in this order — `In Progress`, `In Review`, `To Do`, `Open`, `Backlog`, `Blocked` — then any remaining statuses for that category alphabetically.
+
+Example: RRS uses `In Progress`, `Pending`, `Testing`, `Testing (Develop)` (all `indeterminate`) and `Backlog`, `Unallocated` (both `new`). Final order: `In Progress` → `Pending` → `Testing` → `Testing (Develop)` → `Backlog` → `Unallocated`.
 
 Within each group, preserve the order from the API (already `updated DESC`).
 
@@ -71,15 +76,16 @@ Number issues globally (continuous across groups):
 
 Format rules:
 - `<KEY>` left-padded so the keys in the group align visually
-- `[<issuetype.name> · <priority.name short>]` — abbreviate priority to `Crit`, `High`, `Med`, `Low`, `Lowest` (or `—` if no priority)
+- `[<issuetype.name> · <priority.name short>]` — abbreviate priority to `Blkr`, `Crit`, `High`, `Med`, `Low`, `Lowest` (or `—` if no priority). Any custom priority not in this list renders as its full name truncated to 5 chars.
 - Summary truncated to 80 chars with `…` if longer
 - `(updated <relative time>)` — e.g. `5h ago`, `2d ago`, `1w ago`, `3mo ago`, `4y ago` (use the largest unit that gives an integer ≥ 1)
 
-Below the list, print the result count:
+Below the list, render exactly one of:
 
-```
-Showing N tickets matching: <description of filters, or "all open assigned to you">.
-```
+- `Showing N tickets matching: <description of filters, or "all open assigned to you">.` — when `isLast: true`
+- `Showing N tickets matching: <description>. More pages available — narrow with a project key or status filter.` — when `isLast: false`
+
+The `searchJiraIssuesUsingJql` MCP returns `isLast`/`nextPageToken` but no total count. Don't promise a total you can't deliver.
 
 ## Step 5 — Offer to chain into start-work
 
