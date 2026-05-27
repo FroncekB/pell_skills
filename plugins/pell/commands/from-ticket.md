@@ -62,3 +62,43 @@ Read `~/.claude/pell-config.json` (treat missing as `{}`).
 - Remote links (title + url + application.name)
 
 After the fetch, print one line: `Loaded <KEY> — <summary> (status: <status>, type: <type>).`
+
+## Step 3 — Existing-artifact detection
+
+Glob for prior artifacts in the working directory:
+
+```bash
+ls docs/superpowers/specs/<KEY>-*.md 2>/dev/null
+ls docs/superpowers/plans/<KEY>-*.md 2>/dev/null
+```
+
+If `docs/superpowers/` doesn't exist, treat as "no artifacts found."
+
+**If `--reset` was passed:** enumerate all matched files, then ask once:
+
+> Remove N existing artifacts for `<KEY>`?
+> - `<path1>`
+> - `<path2>`
+> (y/n)
+
+On `y`, delete all listed files and proceed as Fresh below. On `n`, exit cleanly.
+
+**Otherwise, branch on what was found:**
+
+| Specs | Plans | Behavior |
+|-|-|-|
+| 0 | 0 | Fresh — proceed through all stages normally |
+| ≥1 | 0 | Prompt: "Design spec exists for `<KEY>`: `<path>`. Pick one: (1) resume — skip brainstorming, dispatch writing-plans against this spec; (2) rewrite — `--reset` and start fresh; (3) cancel." |
+| 0 | ≥1 | Prompt: "Plan file exists for `<KEY>` without a matching spec: `<path>`. Pick one: (1) open the plan in your editor and proceed manually; (2) rewrite — `--reset` and start fresh; (3) cancel." Don't auto-dispatch — anomalous state. |
+| ≥1 | ≥1 | Prompt: "Both spec and plan exist for `<KEY>`:\n  spec: `<spec path>`\n  plan: `<plan path>`\nPick one: (1) open both — work is done; (2) rewrite — `--reset` and start fresh; (3) cancel." |
+
+**Multiple files in either category:** list all paths, then ask the user which to use via numbered prompt. Don't pick the newest automatically — multiple files usually indicates a prior abort needing cleanup attention.
+
+**Skip-flag interactions:**
+- `plan only` + spec found → silently resume (this is exactly what plan-only means).
+- `plan only` + no spec found → error per Step 1.
+- `design only` + spec found → ignore the existing spec, run brainstorming fresh. Brainstorming writes a new spec file with a different timestamp suffix.
+
+**Resume implies "skip start-work":** when the user picks option (1) for any non-fresh state, treat it as if `skip start-work` was also passed. The assumption is they're already on a `<KEY>-*` branch. If they aren't, they can re-invoke `/pell:from-ticket <KEY>` without resuming to get the branch created.
+
+**Rewrite option (2):** sets the `--reset` flag inline and re-enters Step 3 from the top.
