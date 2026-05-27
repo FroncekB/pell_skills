@@ -143,6 +143,34 @@ Composite — runs all three reviewers in parallel against a Bitbucket PR with l
 
 **Output:** markdown report + optional Bitbucket inline comments.
 
+### `/pell:start-work <KEY>`
+
+Fetch a Jira ticket, create a properly-named local branch (`<KEY>-<sentence-case-description>`), and optionally assign / transition the ticket. Read-only against Jira by default — side-effects only fire when you pre-authorize inline or answer `y` to a named per-action prompt.
+
+**Usage:**
+
+```
+/pell:start-work RRS-1020
+/pell:start-work RRS-1020 call it Fixing-cart-bug          # override the derived description
+/pell:start-work RRS-1020 assign to me                     # pre-authorize assignment
+/pell:start-work RRS-1020 yeah move it to in-progress      # pre-authorize transition
+/pell:start-work RRS-1020 assign to me and move to in-progress
+/pell:start-work RRS-1020 don't touch jira                 # branch only, no Jira side-effects
+/pell:start-work RRS-1020 --reset                          # re-prompt cached transition for this project
+```
+
+**Behavior:**
+
+1. Parses `<KEY>` and any inline pre-authorizations from `$ARGUMENTS`
+2. Fetches the ticket via the Atlassian Jira MCP (cloud_id cached transparently on first use)
+3. Pre-flight: aborts if not in a git repo or the working tree is dirty; offers to switch to an existing branch for the same key
+4. Derives a sentence-case-with-hyphens description from the Jira summary; asks you to accept, override, or cancel
+5. `git checkout -b <KEY>-<description>` from your current branch (no base switching)
+6. Optionally assigns and transitions the ticket — each as its own `y/n` prompt with the specific status name, or pre-authorized inline
+7. Reports what changed
+
+**Side-effects:** branch creation requires confirmation; Jira changes are strictly opt-in. Never commits, pushes, or opens a PR.
+
 ### `/pell:local-review`
 
 Composite — runs all three reviewers against local uncommitted changes. Each reviewer reads `CLAUDE.md` and convention files to ground findings in the repo's actual style. Offers to apply suggested fixes in-place.
@@ -205,7 +233,7 @@ This is the foundation of Bucket 3 (workflow composers) — future commands like
 
 Per the roadmap in [`docs/specs/2026-05-27-pell-skills-architecture.md`](docs/specs/2026-05-27-pell-skills-architecture.md):
 
-- **Jira workflow ops:** `start-work`, `triage`, `related`, `finish-work` — adaptive to per-project Jira transition workflows
+- **Jira workflow ops:** `triage`, `related`, `finish-work`, `my-tickets` — adaptive to per-project Jira transition workflows
 - **House-style guidance:** `claude-md-init` (scaffold a project-specific CLAUDE.md from a Pell template)
 - **Workflow composers:** `from-ticket` (Jira → branch → brainstorm → plan → TDD), `wrap-up` (review → open PR → comment → close ticket)
 

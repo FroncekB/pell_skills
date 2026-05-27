@@ -107,14 +107,11 @@ Schema sketch (refine as skills are built):
   "bitbucket": {
     "workspace": "pellsoftware",
     "default_base_branch": "develop"
-  },
-  "gitflow": {
-    "feature_prefix": "feature/",
-    "bugfix_prefix": "bugfix/",
-    "hotfix_prefix": "hotfix/"
   }
 }
 ```
+
+> Note: branch names are flat (`<KEY>-<description>`, no GitFlow prefix) — confirmed during `/pell:start-work` design. See [`2026-05-27-pell-start-work-design.md`](2026-05-27-pell-start-work-design.md) §5.
 
 ### Conventions for using the file
 
