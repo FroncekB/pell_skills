@@ -270,6 +270,22 @@ Fetch a Jira ticket, create a properly-named local branch (`<KEY>-<sentence-case
 
 **Side-effects:** branch creation requires confirmation; Jira changes are strictly opt-in. Never commits, pushes, or opens a PR.
 
+### `/pell:from-ticket <JIRA-KEY> [freeform context]`
+
+Composes the full pre-implementation workflow in one command: fetches the Jira ticket and its connections, creates a branch via `/pell:start-work`, then hands off to `superpowers:brainstorming` → `superpowers:writing-plans` for the design spec and implementation plan.
+
+```
+/pell:from-ticket RRS-1020
+/pell:from-ticket RRS-1020 assign to me, move it to In Progress
+/pell:from-ticket RRS-1020 skip start-work, design only
+/pell:from-ticket RRS-1020 plan only         # resume from existing spec
+/pell:from-ticket RRS-1020 --reset           # delete artifacts and start over
+```
+
+**Side effects:** delegated to the dispatched stages. `from-ticket` itself does not mutate Jira, commit, push, or open PRs. `--reset` deletes prior `docs/superpowers/specs/<KEY>-*.md` and `plans/<KEY>-*.md` files after one consolidated confirmation.
+
+**When `superpowers` is missing:** falls back to a lightweight inline substitute (3 questions, writes a starter spec) so the user still leaves the command with a useful artifact. Install `superpowers@claude-plugins-official` for the full design + plan workflow.
+
 ### `/pell:related [KEY]`
 
 Show the connection graph for a Jira ticket — linked issues (blocks, is blocked by, relates to, duplicates), parent/subtasks, external links (PR URLs, docs), and any Bitbucket PRs in the current repo whose title or branch references the key. Auto-detects the key from the current branch if you don't pass one. Strictly read-only.
