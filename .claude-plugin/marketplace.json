@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "pell-skills",
+  "description": "Pell Software internal Claude Code marketplace",
+  "owner": {
+    "name": "Pell Software"
+  },
+  "plugins": [
+    {
+      "name": "pell",
+      "description": "Pell Software's Claude Code toolkit: PR/local code reviewers (correctness, quality, security), and Jira workflow ops to come. One plugin, many skills.",
+      "source": "./plugins/pell",
+      "category": "productivity"
+    }
+  ]
+}

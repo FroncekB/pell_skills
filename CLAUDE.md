@@ -1,0 +1,95 @@
+# CLAUDE.md — pell_skills
+
+You're working in **Pell Software's Claude Code skill marketplace**. This repo ships a single plugin (`pell`) that bundles every Pell-specific command, sub-agent, and auto-invoked skill. Engineers across Pell install it once and get the whole kit.
+
+The architecture spec at `docs/specs/2026-05-27-pell-skills-architecture.md` is the source of truth for every decision below. Read it before making structural changes.
+
+## Repo layout
+
+```
+pell_skills/
+├── .claude-plugin/marketplace.json     # lists ONLY the `pell` plugin — do not add others here
+├── docs/specs/                          # architectural specs
+└── plugins/pell/
+    ├── .claude-plugin/plugin.json
+    ├── commands/<name>.md               # slash commands — /pell:<name>
+    ├── agents/<name>.md                 # composable sub-agents — dispatched via subagent_type
+    └── skills/<name>/SKILL.md           # auto-invoked skills (description-matched)
+```
+
+**Everything goes into `plugins/pell/`.** Don't add new plugin directories under `plugins/` and don't add new entries to `marketplace.json` — the design is one giant `pell` plugin.
+
+## Conventions when adding a command
+
+1. **Filename = invocation:** `commands/foo.md` becomes `/pell:foo`.
+2. **Frontmatter is required:**
+   ```yaml
+   ---
+   description: One sentence on what the command does
+   argument-hint: <expected positional shape>
+   ---
+   ```
+3. **Arguments are freeform-first.** Parse `$ARGUMENTS` as natural-language context; pull out structured pieces (ticket key, PR URL, paths) but let the user override behavior with free text ("skip jira", "use bitbucket", "treat as hotfix").
+4. **Reserved flags:** `--reset` (clear cached config), `--dry-run` (preview, no side effects), `--verbose`.
+5. **Default to read-only.** Any side effect (file edit, Bitbucket comment, Jira transition, branch creation) is gated on a `(y/n)` prompt that names exactly what will change.
+6. **Notify, never force, for external plugin dependencies** (e.g. `superpowers`, `frontend-design`). Skip the step or substitute inline — don't halt the workflow.
+
+## Conventions when adding an agent
+
+1. **Filename = subagent_type:** `agents/foo-reviewer.md` is dispatched via `subagent_type="foo-reviewer"`.
+2. **Frontmatter:**
+   ```yaml
+   ---
+   name: foo-reviewer
+   description: When to use this agent (used for tool routing)
+   model: inherit
+   ---
+   ```
+3. **Omit the `tools:` line** so the agent inherits the orchestrator's tool surface (including MCP tools when needed).
+4. **Output JSON, not prose.** Orchestrators parse the trailing JSON object. Use the shape `{"findings": [...], "summary": "..."}`.
+5. **Surface everything** with severity tags. Never pre-filter — the orchestrator decides what's actionable.
+
+## Context source convention (reviewer agents)
+
+Reviewers read surrounding code from one of two sources:
+- **`local` (default)** — `Read`/`Grep`/`Glob` against `<repo_root>` (the user's working dir, assumed to be a checkout of the target repo).
+- **`bitbucket` (override)** — `mcp__atlassian-bitbucket__bitbucketRepoContent` against the PR's source branch.
+
+Override is triggered by freeform `$ARGUMENTS` phrases: `use bitbucket`, `use mcp`, `use remote`, `fetch via bitbucket`, `not LFS`, `not local`.
+
+## Shared config
+
+Per-user preferences (Jira project transitions, GitFlow defaults, etc.) live in `~/.claude/pell-config.json`. Schema sketched in the architecture spec §5. **No secrets** — those stay in MCP config.
+
+Reads are free; writes are atomic per-section; any cached value is re-promptable via `--reset`.
+
+## Validation and reload loop
+
+After editing anything under `plugins/pell/`:
+
+```bash
+claude plugin validate ./plugins/pell
+```
+
+To test the change locally:
+
+```
+/plugin marketplace update pell-skills
+/reload-plugins
+```
+
+Then invoke the affected command.
+
+## Style preferences
+
+- Keep command bodies under ~150 lines. If a command grows, factor logic into a sub-agent
+- Severity vocabulary: correctness uses `blocker/major/minor/nit`; quality uses `major/minor/nit`; security uses `critical/high/medium/low/nit`
+- When unsure about how to structure something, mirror an existing command. Don't invent new patterns without updating the architecture spec first
+- This repo is read by humans and Claude alike. Prefer clarity over cleverness in command bodies — they're prompts, not code
+
+## MCP servers used
+
+- `atlassian-bitbucket` (API token, see repo README) — PR data, diffs, file content, inline comments
+- `plugin:atlassian:atlassian` (OAuth) — Jira issue lookup, transitions
+
+Both must coexist via the dual-endpoint workaround described in the user's `~/.claude/projects/.../memory/atlassian-mcp-setup.md`.
