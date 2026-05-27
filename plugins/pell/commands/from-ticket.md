@@ -29,3 +29,36 @@ Extract from `$ARGUMENTS` (all matches independent; freeform-first):
 - Unrecognized text passes through as informational context. It does NOT affect control flow at the from-ticket layer; brainstorming sees it as additional seed context.
 
 Extract `projectKey` from the Jira key (everything before the `-`).
+
+## Step 2 — Fetch ticket + related
+
+**Resolve `cloudId`:**
+
+Read `~/.claude/pell-config.json` (treat missing as `{}`).
+- If `jira.cloud_id` is set, use it.
+- Otherwise call `mcp__plugin_atlassian_atlassian__getAccessibleAtlassianResources`, use the first result's `id`, atomically write it back to `pell-config.json:jira.cloud_id`.
+
+**Run the two MCP calls in parallel:**
+
+1. `mcp__plugin_atlassian_atlassian__getJiraIssue` with:
+   - `cloudId`
+   - `issueIdOrKey`: `<KEY>`
+   - `fields`: `["summary", "description", "status", "issuetype", "priority", "assignee", "reporter", "labels", "issuelinks", "subtasks", "parent"]`
+   - `responseContentFormat`: `"markdown"`
+
+2. `mcp__plugin_atlassian_atlassian__getJiraIssueRemoteIssueLinks` with `cloudId` and `issueIdOrKey: <KEY>`.
+
+**Failure handling:**
+- Ticket 404 → exit: "`<KEY>` doesn't exist in Jira (or you don't have access)."
+- Ticket MCP unreachable → exit: "Jira MCP isn't responding — see the README prerequisites."
+- Remote-links 404 or empty → continue silently; render `(no external links)` in the seed.
+- Remote-links other failure → continue; render `(remote links unavailable — <error>)` in the seed.
+
+**Capture for later stages:**
+- `summary`, `description` (full markdown, no truncation)
+- `status.name`, `issuetype.name`, `priority.name`, `labels`
+- `assignee.displayName` (default `"unassigned"`), `reporter.displayName` (default `"unknown"` — Atlassian MCP sometimes omits this even when requested)
+- `parent` (key + summary + status), `subtasks` (key + summary + status list), `issuelinks` (relationship + key + summary + status list)
+- Remote links (title + url + application.name)
+
+After the fetch, print one line: `Loaded <KEY> — <summary> (status: <status>, type: <type>).`
