@@ -20,3 +20,35 @@ Extract from `$ARGUMENTS`:
 The rest of `$ARGUMENTS` is informational context (e.g. "this is urgent") — let it color tone but don't let it drive control flow.
 
 Extract `projectKey` from the Jira key (everything before the `-`).
+
+## Step 2 — Fetch the Jira ticket
+
+**Resolve `cloudId`:**
+
+Read `~/.claude/pell-config.json` (use the Read tool; if the file doesn't exist, treat it as empty config `{}`).
+
+- If `jira.cloud_id` is set in the config, use it
+- Otherwise, call `mcp__plugin_atlassian_atlassian__getAccessibleAtlassianResources`. Use the first result's `id` as `cloudId`. Then atomically write it back:
+  1. Re-read the config (or use the empty `{}` if it didn't exist)
+  2. Set `jira.cloud_id = <cloudId>`
+  3. Write the merged JSON back to `~/.claude/pell-config.json`
+
+`cloud_id` is an identifier, not a preference — caching it on first use is transparent, no prompt needed.
+
+**Fetch the ticket:**
+
+Call `mcp__plugin_atlassian_atlassian__getJiraIssue` with:
+- `cloudId`: the resolved value above
+- `issueIdOrKey`: the parsed `<KEY>`
+- `responseContentFormat`: `"markdown"`
+
+Capture these fields for later steps:
+- `summary` (string)
+- `issuetype.name` (string)
+- `status.name` (string)
+- `assignee.displayName` and `assignee.accountId` (may be null if unassigned)
+- `description` (markdown — keep the first ~5 lines for the Step 6 summary)
+
+If the call fails with "not found" or 404 → exit with: "Couldn't find `<KEY>`. Check the key and your Jira MCP connection."
+
+If the MCP call fails for any other reason (connection, auth) → exit with: "Jira MCP isn't responding — see the README prerequisites and try `/mcp` to verify the connection."
