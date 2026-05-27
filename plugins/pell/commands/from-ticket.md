@@ -112,3 +112,60 @@ Skip this entire step when:
 Otherwise, invoke `/pell:start-work <KEY> <forwarded args>` where `<forwarded args>` is the concatenation of all pre-auth substrings captured in Step 1 (assign/transition/skip-jira/branch-name phrases).
 
 If `/pell:start-work` exits non-zero (cancellation, git error, etc.), `from-ticket` exits too. No partial state — the design phase is meaningless without a working branch.
+
+## Step 5 — Hand off to `superpowers:brainstorming`
+
+**Presence check:** attempt to invoke the `superpowers:brainstorming` skill via the Skill tool. If the call errors with "skill not found" or equivalent, fall through to Step 6 (inline substitute). Test the specific skill being invoked — if `brainstorming` is missing but `writing-plans` is present (or vice versa), only the missing one falls back.
+
+**Plan-only path (resume from Step 3):**
+
+If the user chose option (1) in a spec-found case, skip brainstorming entirely. Dispatch `superpowers:writing-plans` directly via the Skill tool with these args:
+
+```
+Plan implementation based on the existing spec at <spec path>.
+Save the plan to docs/superpowers/plans/<KEY>-YYYY-MM-DD-<feature>.md.
+```
+
+If `superpowers:writing-plans` is also missing, exit with: "plan only requires `superpowers:writing-plans`, which isn't installed."
+
+**Normal path — invoke brainstorming with this seed:**
+
+Print one line first: `Handing off to superpowers:brainstorming...`
+
+Then invoke `superpowers:brainstorming` via the Skill tool with these args:
+
+```
+Design implementation of <KEY>: <summary>
+
+Ticket context:
+- Status: <status>  ·  Type: <issuetype>  ·  Priority: <priority>
+- Assignee: <assignee>  ·  Reporter: <reporter>
+- Labels: <labels or "none">
+
+Description:
+<full description markdown>
+
+Connections:
+- Parent: <key — summary> [<status>]                     (omit if absent)
+- Subtasks:
+  - <key — summary> [<status>]
+  - ...                                                  (omit section if no subtasks)
+- Linked issues:
+  - <relationship> <key> — <summary> [<status>]
+  - ...                                                  (omit section if no links)
+- External links:
+  - [<title>](<url>) — <application.name>
+  - ...                                                  (omit section if no remote links)
+
+Save the design spec to docs/superpowers/specs/<KEY>-YYYY-MM-DD-<topic>-design.md (topic slug chosen during brainstorming).
+
+When invoking writing-plans, instruct it to save the plan to docs/superpowers/plans/<KEY>-YYYY-MM-DD-<feature>.md.
+
+<any unrecognized freeform text from $ARGUMENTS>
+```
+
+**`design only` modification:**
+
+Append to the seed: `Do not chain into writing-plans after the design is approved. Stop after the user approves the written spec.`
+
+After dispatching brainstorming, `from-ticket` is done. Brainstorming owns the design conversation and auto-chains into writing-plans per its own checklist.
