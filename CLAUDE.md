@@ -49,6 +49,20 @@ pell_skills/
 4. **Output JSON, not prose.** Orchestrators parse the trailing JSON object. Use the shape `{"findings": [...], "summary": "..."}`.
 5. **Surface everything** with severity tags. Never pre-filter — the orchestrator decides what's actionable.
 
+## Conventions when adding a skill
+
+1. **Directory = name:** `skills/foo/SKILL.md` becomes the auto-invoked skill `foo`.
+2. **Frontmatter is required:**
+   ```yaml
+   ---
+   name: foo
+   description: Use when … — this string drives auto-invocation, so be specific about the trigger
+   ---
+   ```
+3. **Description = trigger.** Skills fire on description match. Write the description so Claude can decide in one read whether the skill applies. Lead with "Use when …" and enumerate the conditions.
+4. **Body is short.** A skill is a router or a workflow — not a tutorial. Mirror `skills/frontend-router/SKILL.md` for routing skills; defer to longer guidance only when the skill *is* the workflow.
+5. **Notify, never block** when the skill recommends an external plugin. Match the policy in §4 of the architecture spec.
+
 ## Context source convention (reviewer agents)
 
 Reviewers read surrounding code from one of two sources:

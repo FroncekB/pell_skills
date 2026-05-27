@@ -169,6 +169,24 @@ Composite — runs all three reviewers against local uncommitted changes. Each r
 
 ---
 
+## Auto-invoked skills
+
+These are description-matched — Claude invokes them automatically when the task fits, no slash command needed.
+
+### `frontend-router`
+
+Fires at the start of UI/frontend work (new components, pages, redesigns, marketing surfaces). Routes the work to `/frontend-design:frontend-design` if the plugin is installed, otherwise notifies the user it would help and asks whether to install or proceed without it. Notify-don't-force per the architecture spec.
+
+To install the recommended companion:
+
+```
+/plugin install frontend-design@claude-plugins-official
+```
+
+The skill is deliberately quiet about pure bug fixes, refactors, tests, and non-visual frontend work — it only triggers when the deliverable is something a human will look at.
+
+---
+
 ## Composable building blocks (sub-agents)
 
 The three reviewers are also exposed as composable agents — any current or future command in the `pell` plugin can dispatch them:
@@ -188,7 +206,7 @@ This is the foundation of Bucket 3 (workflow composers) — future commands like
 Per the roadmap in [`docs/specs/2026-05-27-pell-skills-architecture.md`](docs/specs/2026-05-27-pell-skills-architecture.md):
 
 - **Jira workflow ops:** `start-work`, `triage`, `related`, `finish-work` — adaptive to per-project Jira transition workflows
-- **House-style guidance:** `frontend-router` (defers UI work to `/frontend-design:frontend-design`), `claude-md-init` (scaffold a project-specific CLAUDE.md from a Pell template)
+- **House-style guidance:** `claude-md-init` (scaffold a project-specific CLAUDE.md from a Pell template)
 - **Workflow composers:** `from-ticket` (Jira → branch → brainstorm → plan → TDD), `wrap-up` (review → open PR → comment → close ticket)
 
 ---
