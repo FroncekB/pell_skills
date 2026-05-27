@@ -46,7 +46,7 @@ A 404 or empty response is fine — just means no external links attached. Conti
 
 Skip this step if the user said `skip bitbucket` in Step 1, or if `git rev-parse --show-toplevel` fails (not in a repo).
 
-Parse `git remote get-url origin` — expect `git@bitbucket.org:<workspace>/<repo>.git` or `https://bitbucket.org/<workspace>/<repo>.git`. If parsing fails (not a Bitbucket remote), skip this step silently — note in the final report under "Bitbucket PRs" that the origin isn't Bitbucket.
+Parse `git remote get-url origin` — expect `git@bitbucket.org:<workspace>/<repo>.git` or `https://bitbucket.org/<workspace>/<repo>.git`. If parsing fails (not a Bitbucket remote), skip this step silently — but **capture the detected host** (e.g. `github.com`, `gitlab.com`, or the raw URL) so the final report can name it. Note in the final report under "Bitbucket PRs" that the origin isn't Bitbucket and which host was detected.
 
 Call `mcp__atlassian-bitbucket__bitbucketPullRequest` with:
 - `action`: `list`
@@ -64,8 +64,8 @@ If the MCP returns an error, render the PR section with `_Bitbucket query failed
 ## <ticket_key> — <summary>
 
 **Status:** <status.name>  ·  **Type:** <issuetype.name>  ·  **Priority:** <priority.name or —>
-**Assignee:** <assignee.displayName or "unassigned">  ·  **Reporter:** <reporter.displayName>
-<labels: comma-joined, or omit the line if empty>
+**Assignee:** <assignee.displayName or "unassigned">  ·  **Reporter:** <reporter.displayName or "unknown">
+**Labels:** <comma-joined labels>     ← omit this entire line when labels is empty/missing
 
 ### Parent / Subtasks
 - Parent: <parent.key> — <parent.fields.summary> [<parent.fields.status.name>]
@@ -107,7 +107,7 @@ From `getJiraIssueRemoteIssueLinks` response. Each entry has `object.title`, `ob
 
 From Step 5's response. If skipped, render: `### Bitbucket PRs\n_Skipped (not in a git repo, or `skip bitbucket` was set)._`
 
-If origin isn't Bitbucket: `_Origin isn't a Bitbucket remote — skipped._`
+If origin isn't Bitbucket: `_Origin is <detected-host> — Bitbucket PR query skipped._` (e.g. `_Origin is github.com — Bitbucket PR query skipped._`)
 
 If 0 results: `_No PRs reference <ticket_key> in this repo._`
 
@@ -128,3 +128,4 @@ End the response. Do NOT offer to act on any linked issue or PR. This command is
 - If the user passes both an explicit key and is on a branch with a different key, the explicit arg wins. Don't second-guess.
 - For tickets with very large `issuelinks` arrays (>30 links), render all of them — truncation hides important context. The list is still scannable.
 - If `getJiraIssue` succeeds but `responseContentFormat: "markdown"` isn't honored by this MCP build, the response should still have the structured fields we need. Don't fall back; just parse the structured response.
+- The Atlassian MCP sometimes omits `reporter` from the response even when requested in `fields` (observed against real tickets). Always use the `or "unknown"` fallback rather than assuming it's present.
