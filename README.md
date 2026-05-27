@@ -161,6 +161,35 @@ List the open Jira tickets assigned to you. Optional freeform filters by project
 
 **Side-effects:** read-only against Jira (no transitions, no assignments). The transparent `cloud_id` cache write to `pell-config.json` is the only file change.
 
+### `/pell:finish-work`
+
+Close out a branch by opening a Bitbucket PR and (only on explicit consent) transitioning the linked Jira ticket and adding a PR-link comment. Read-only against Jira by default; PR creation is always confirmed even when other actions are pre-authorized.
+
+**Usage:**
+
+```
+/pell:finish-work                                          # uses current branch, infers Jira key
+/pell:finish-work RRS-1020                                 # explicit key (rare — usually inferred)
+/pell:finish-work into develop                             # override base branch
+/pell:finish-work title: "Fix cart quantity update"        # override PR title
+/pell:finish-work push it and move to in review            # pre-authorize push + transition
+/pell:finish-work don't touch jira                         # PR only, no Jira side-effects
+/pell:finish-work skip the comment                         # PR + transition, no Jira comment
+/pell:finish-work --reset                                  # re-prompt cached "in_review" transition
+```
+
+**Behavior:**
+
+1. Parses args + inline pre-authorizations from `$ARGUMENTS`
+2. Resolves the Jira key from `$ARGUMENTS` or the current branch name (`<KEY>-*` shape from `/pell:start-work`)
+3. Fetches the ticket + resolves the base branch (`git symbolic-ref refs/remotes/origin/HEAD` → config → ask)
+4. Pre-flight: offers to push if the branch has unpushed commits or no upstream; detects an already-open PR for the source branch and offers to skip create
+5. Creates the PR via Bitbucket MCP after a confirmation that names the title, source, and target — **always** confirmed, even with pre-auth
+6. Optionally transitions the ticket to the project's "in review" status (discovered + cached on first use per project, like `/pell:start-work`)
+7. Optionally adds a comment to the ticket with the PR URL
+
+**Side-effects:** PR creation always confirmed; push, Jira transition, and comment are opt-in (per-action `y` or inline pre-auth). Never merges, approves, or closes anything.
+
 ### `/pell:start-work <KEY>`
 
 Fetch a Jira ticket, create a properly-named local branch (`<KEY>-<sentence-case-description>`), and optionally assign / transition the ticket. Read-only against Jira by default — side-effects only fire when you pre-authorize inline or answer `y` to a named per-action prompt.
@@ -251,7 +280,7 @@ This is the foundation of Bucket 3 (workflow composers) — future commands like
 
 Per the roadmap in [`docs/specs/2026-05-27-pell-skills-architecture.md`](docs/specs/2026-05-27-pell-skills-architecture.md):
 
-- **Jira workflow ops:** `triage`, `related`, `finish-work` — adaptive to per-project Jira transition workflows
+- **Jira workflow ops:** `triage`, `related` — adaptive to per-project Jira transition workflows
 - **House-style guidance:** `claude-md-init` (scaffold a project-specific CLAUDE.md from a Pell template)
 - **Workflow composers:** `from-ticket` (Jira → branch → brainstorm → plan → TDD), `wrap-up` (review → open PR → comment → close ticket)
 
