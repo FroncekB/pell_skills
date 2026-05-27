@@ -89,10 +89,13 @@ Otherwise, ask:
 Resolve the workspace and repo. Run `git remote get-url origin` and parse the Bitbucket URL — expect `git@bitbucket.org:<workspace>/<repo>.git` or `https://bitbucket.org/<workspace>/<repo>.git`. If parsing fails → ask the user for the workspace/repo. Cache nothing.
 
 Call `mcp__atlassian-bitbucket__bitbucketPullRequest` with:
-- `action`: `list` (if unsupported by the MCP, try `search` or whatever the equivalent is — query the source branch)
+- `action`: `list`
 - `workspaceId`: `<workspace>`
 - `repoId`: `<repo>`
-- Filter to source branch = `<branch>` and state = OPEN
+- `state`: `OPEN`
+- `q`: `source.branch.name="<branch>"` (Bitbucket's BBQL filter syntax)
+
+The response is paginated; pagelen defaults are fine for this check (we expect 0 or 1 result).
 
 If a PR exists, print:
 
@@ -134,7 +137,7 @@ On `y`, call `mcp__atlassian-bitbucket__bitbucketPullRequest` with:
 - `workspaceId`: `<workspace>`
 - `repoId`: `<repo>`
 - `sourceBranch`: `<branch>`
-- `destinationBranch`: `<base>`
+- `targetBranch`: `<base>`
 - `title`: the assembled title
 - `description`: the assembled description
 
