@@ -138,3 +138,53 @@ On `y`, call `mcp__plugin_atlassian_atlassian__editJiraIssue` with:
 On failure, print a single line: "⚠ Failed to assign — `<error message>`." and continue to Step 5b. Do NOT roll back the branch.
 
 On `n`, continue to Step 5b silently.
+
+### Step 5b — Status transition
+
+**Discover the "start" transition for this project:**
+
+If `$ARGUMENTS` contained `--reset`, clear `pell-config.json:jira.transitions[<projectKey>].start` (read config, delete the key, write back) before continuing.
+
+Look up `pell-config.json:jira.transitions[<projectKey>].start`:
+
+- **Cached and the ticket's current `status.name` matches it (case-insensitive)** → skip Step 5b entirely. Nothing to do; the ticket is already in the start status. Print one line: "Ticket already in `<status.name>` — skipping transition."
+
+- **Cached but the ticket is NOT in that status** → use the cached transition name. Skip discovery.
+
+- **Not cached** → run discovery:
+  1. Call `mcp__plugin_atlassian_atlassian__getTransitionsForJiraIssue` with `cloudId` and `issueIdOrKey: <KEY>`. Capture the list of `{id, name}` objects from the response
+  2. Filter out names that match (case-insensitive) any of: `done`, `closed`, `resolved`, `won't do`, `wont do`, `cancelled`, `canceled`, `rejected`. These are never "start" candidates
+  3. If 0 candidates remain → exit with: "No 'start' transitions available for `<KEY>`. Available transitions: `<comma-separated list of all names from the unfiltered response>`. Pass one explicitly with `move it to <name>` to bypass discovery."
+  4. If exactly 1 candidate remains → use it. Ask:
+     > Use `<name>` as the 'start work' transition for `<projectKey>` going forward? (y/n)
+
+     On `y`, write the selection to config (`jira.transitions.<projectKey>.start = "<name>"`, atomic read-modify-write). On `n`, use the transition for this invocation but do NOT cache.
+  5. If 2+ candidates remain → render a numbered list and ask:
+     > Which of these means 'start work' for `<projectKey>`?
+     > 1. `<name1>`
+     > 2. `<name2>`
+     > ...
+
+     User picks a number. Write the selection to config (always cache here — multi-option means the user made a deliberate choice).
+
+**If the user pre-authorized `move it to <status>` (or `move to <status>` / `transition to <status>`) inline:**
+
+Resolve the target by matching `<status>` (case-insensitive) against the candidate names from discovery (or against the cached selection if cached):
+
+- Exactly one match → use it as the chosen transition, skip the per-action prompt below. Cache the match if not already cached.
+- Zero or multiple matches → fall back to the discovery flow above.
+
+**Apply the transition:**
+
+If the user pre-authorized inline, run the transition without prompting. Otherwise ask:
+
+> Want me to move `<KEY>` to `<chosen transition name>`?
+
+On `y`, call `mcp__plugin_atlassian_atlassian__transitionJiraIssue` with:
+- `cloudId`: from Step 2
+- `issueIdOrKey`: `<KEY>`
+- `transition`: the `{id}` object from the candidate (you must pass the ID, not the name)
+
+On failure, print a single line: "⚠ Failed to transition — `<error message>`." and continue to Step 6. Do NOT roll back the branch or the assignment.
+
+On `n`, continue to Step 6 silently.
