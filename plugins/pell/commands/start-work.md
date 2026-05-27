@@ -52,3 +52,29 @@ Capture these fields for later steps:
 If the call fails with "not found" or 404 → exit with: "Couldn't find `<KEY>`. Check the key and your Jira MCP connection."
 
 If the MCP call fails for any other reason (connection, auth) → exit with: "Jira MCP isn't responding — see the README prerequisites and try `/mcp` to verify the connection."
+
+## Step 3 — Pre-flight checks
+
+Run the three blocking checks first; abort on first failure. Then surface the two non-blocking warnings.
+
+**Blocking:**
+
+1. **In a git repo?** Run `git rev-parse --show-toplevel`. If the command fails (non-zero exit), exit with: "I need to be in a git checkout to create a branch. `cd` to the target repo and re-run."
+
+2. **Working tree clean?** Run `git status --porcelain`. If the output is non-empty, exit with: "You have uncommitted changes. Stash, commit, or reset, then re-run." Do NOT auto-stash.
+
+3. **Branch already exists for this key?** Run `git branch --list "<KEY>-*"`. If any branches match, ask:
+
+   > A branch for `<KEY>` already exists: `<existing-branch>`. Switch to it instead of creating a new one? (y/n)
+
+   - `y` → run `git checkout <existing-branch>`, then skip to Step 5
+   - `n` → continue to Step 4 (the user accepts that they'll have two branches for this ticket)
+
+**Resolve current user identity (for warnings + Step 5a):**
+
+Call `mcp__plugin_atlassian_atlassian__atlassianUserInfo`. Capture `accountId` and `displayName`. Hold this in session memory — do NOT write it to `pell-config.json`. Identity is not a preference and the file may be shared across projects.
+
+**Non-blocking warnings — surface and continue:**
+
+- If `assignee.accountId` is set and != current user's `accountId`, print: "Heads up: this ticket is assigned to `<assignee.displayName>`."
+- If `pell-config.json:jira.transitions[<projectKey>].start` is set AND `status.name` matches it (case-insensitive), print: "Ticket is already in `<status.name>`."
