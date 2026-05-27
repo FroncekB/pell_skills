@@ -143,6 +143,24 @@ Composite — runs all three reviewers in parallel against a Bitbucket PR with l
 
 **Output:** markdown report + optional Bitbucket inline comments.
 
+### `/pell:my-tickets`
+
+List the open Jira tickets assigned to you. Optional freeform filters by project key or status. After rendering, offers to chain straight into `/pell:start-work` for any ticket you pick.
+
+**Usage:**
+
+```
+/pell:my-tickets                                # all open assigned to you
+/pell:my-tickets RRS                            # filter to project RRS
+/pell:my-tickets in progress                    # filter by status
+/pell:my-tickets blocked
+/pell:my-tickets RRS in progress                # combine project + status
+```
+
+**Output:** numbered list grouped by status (In Progress → In Review → To Do → others), each line showing key, type, priority, summary, and relative updated time. Reply with a number to start work on that ticket — invokes `/pell:start-work <KEY>` directly. Reply `n` to skip.
+
+**Side-effects:** read-only against Jira (no transitions, no assignments). The transparent `cloud_id` cache write to `pell-config.json` is the only file change.
+
 ### `/pell:start-work <KEY>`
 
 Fetch a Jira ticket, create a properly-named local branch (`<KEY>-<sentence-case-description>`), and optionally assign / transition the ticket. Read-only against Jira by default — side-effects only fire when you pre-authorize inline or answer `y` to a named per-action prompt.
@@ -233,7 +251,7 @@ This is the foundation of Bucket 3 (workflow composers) — future commands like
 
 Per the roadmap in [`docs/specs/2026-05-27-pell-skills-architecture.md`](docs/specs/2026-05-27-pell-skills-architecture.md):
 
-- **Jira workflow ops:** `triage`, `related`, `finish-work`, `my-tickets` — adaptive to per-project Jira transition workflows
+- **Jira workflow ops:** `triage`, `related`, `finish-work` — adaptive to per-project Jira transition workflows
 - **House-style guidance:** `claude-md-init` (scaffold a project-specific CLAUDE.md from a Pell template)
 - **Workflow composers:** `from-ticket` (Jira → branch → brainstorm → plan → TDD), `wrap-up` (review → open PR → comment → close ticket)
 
