@@ -161,6 +161,24 @@ List the open Jira tickets assigned to you. Optional freeform filters by project
 
 **Side-effects:** read-only against Jira (no transitions, no assignments). The transparent `cloud_id` cache write to `pell-config.json` is the only file change.
 
+### `/pell:triage <KEY>`
+
+List the **unclaimed** Jira tickets in a project (the work nobody owns yet), grouped by priority. Per-ticket prompt to claim it (assign to you), start work on it, view its full description, or skip. Read-only unless you say `y` per ticket — sister of `/pell:my-tickets`, but for the team pool instead of your queue.
+
+**Usage:**
+
+```
+/pell:triage RRS                                # unclaimed RRS tickets, grouped by priority
+/pell:triage RRS high                           # filter to High/Highest priority
+/pell:triage RRS today                          # only tickets created in last 24h
+/pell:triage RRS all                            # include already-assigned (the full backlog)
+/pell:triage RRS assign to me                   # pre-authorize the claim prompt
+```
+
+**Per-ticket actions:** `c` = claim, `s` = claim + start-work, `v` = view full description, `n` = next, `q` = quit. Claiming requires `y` confirmation unless `assign to me` was pre-authorized.
+
+**Side-effects:** assignment writes only on per-ticket `y`. Never transitions or modifies any other field.
+
 ### `/pell:repo-review`
 
 Whole-repo code-quality audit. Walks the codebase, dispatches `repo-quality-reviewer` sub-agents in parallel, and aggregates findings into one report. Looks for duplicated logic, dead code, convention drift, oversized files, tight coupling, and ignored warnings. Read-only — never modifies files.
@@ -251,6 +269,23 @@ Fetch a Jira ticket, create a properly-named local branch (`<KEY>-<sentence-case
 7. Reports what changed
 
 **Side-effects:** branch creation requires confirmation; Jira changes are strictly opt-in. Never commits, pushes, or opens a PR.
+
+### `/pell:related [KEY]`
+
+Show the connection graph for a Jira ticket — linked issues (blocks, is blocked by, relates to, duplicates), parent/subtasks, external links (PR URLs, docs), and any Bitbucket PRs in the current repo whose title or branch references the key. Auto-detects the key from the current branch if you don't pass one. Strictly read-only.
+
+**Usage:**
+
+```
+/pell:related RRS-1020                          # explicit key
+/pell:related                                   # auto-detect from current branch
+/pell:related RRS-1020 skip bitbucket           # Jira-only context
+/pell:related RRS-1020 open only                # filter Bitbucket PRs to OPEN state
+```
+
+**Output:** sectioned report — ticket header, parent/subtasks, linked issues (with their statuses), external links, Bitbucket PRs, and a one-line connection-density summary. Useful before starting work, or as quick context when reviewing a PR.
+
+**Side-effects:** none. No writes, no transitions, no comments.
 
 ### `/pell:local-review`
 
