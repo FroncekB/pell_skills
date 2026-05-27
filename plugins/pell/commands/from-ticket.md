@@ -102,3 +102,13 @@ On `y`, delete all listed files and proceed as Fresh below. On `n`, exit cleanly
 **Resume implies "skip start-work":** when the user picks option (1) for any non-fresh state, treat it as if `skip start-work` was also passed. The assumption is they're already on a `<KEY>-*` branch. If they aren't, they can re-invoke `/pell:from-ticket <KEY>` without resuming to get the branch created.
 
 **Rewrite option (2):** sets the `--reset` flag inline and re-enters Step 3 from the top.
+
+## Step 4 — Dispatch `/pell:start-work`
+
+Skip this entire step when:
+- Any of `skip start-work` / `branch ready` / `already on branch` was in `$ARGUMENTS`
+- The user picked option (1) for any non-fresh state in Step 3
+
+Otherwise, invoke `/pell:start-work <KEY> <forwarded args>` where `<forwarded args>` is the concatenation of all pre-auth substrings captured in Step 1 (assign/transition/skip-jira/branch-name phrases).
+
+If `/pell:start-work` exits non-zero (cancellation, git error, etc.), `from-ticket` exits too. No partial state — the design phase is meaningless without a working branch.
