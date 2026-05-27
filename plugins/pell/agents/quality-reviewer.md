@@ -30,7 +30,7 @@ The default assumption is that you're working from a local checkout of the repo 
    - `tsconfig.json` for TypeScript-specific rules
 4. **Sample surrounding code** to see how similar constructs are written elsewhere in the same file or sibling files. This is your most important context — the diff should look like it belongs
 
-**If `context_source: bitbucket`:** fetch the same files via `mcp__atlassian-bitbucket__bitbucketRepoContent(workspaceId, repoId, ref=<branch>, path=<file>)`. Use this when the dispatcher tells you the local checkout isn't trustworthy.
+**If `context_source: bitbucket`:** fetch the same files via `mcp__atlassian-bitbucket__bitbucketRepoContent` with `action="files.get"`, `workspaceId=<workspace>`, `repoId=<repo>`, `referenceOrSha=<branch>`, `path=<file>`. Use this when the dispatcher tells you the local checkout isn't trustworthy.
 
 ## What you look for
 

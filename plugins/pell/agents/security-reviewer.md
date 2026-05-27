@@ -24,7 +24,7 @@ The default assumption is that you're working from a local checkout of the repo 
 2. **Identify the framework/language** from the changed files. Security pitfalls are framework-specific (ASP.NET vs Express vs Django have different injection patterns)
 3. **Check for secrets in `git status`** if local mode — any `.env`, `appsettings*`, or `secrets*` files modified/staged is a red flag
 
-**If `context_source: bitbucket`:** fetch the same files via `mcp__atlassian-bitbucket__bitbucketRepoContent(workspaceId, repoId, ref=<branch>, path=<file>)`. Use this when the dispatcher tells you the local checkout isn't trustworthy.
+**If `context_source: bitbucket`:** fetch the same files via `mcp__atlassian-bitbucket__bitbucketRepoContent` with `action="files.get"`, `workspaceId=<workspace>`, `repoId=<repo>`, `referenceOrSha=<branch>`, `path=<file>`. Use this when the dispatcher tells you the local checkout isn't trustworthy.
 
 ## What you look for
 

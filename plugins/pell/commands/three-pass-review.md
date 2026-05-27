@@ -16,7 +16,7 @@ Parse `$ARGUMENTS`:
 
 **Context source** for the reviewers' surrounding-code fetches:
 - Default: `local` — assume the user is in a local checkout of the same repo. Reviewers will use `Read`/`Grep`/`Glob` against `<repo_root>`
-- If `$ARGUMENTS` contains `use bitbucket`, `use mcp`, `use remote`, `fetch via bitbucket`, `not LFS`, or `not local` → use `bitbucket` — reviewers will fetch via `mcp__atlassian-bitbucket__bitbucketRepoContent` against the PR's source branch
+- If `$ARGUMENTS` contains `use bitbucket`, `use mcp`, `use remote`, `fetch via bitbucket`, `not LFS`, or `not local` → use `bitbucket` — reviewers will fetch via `mcp__atlassian-bitbucket__bitbucketRepoContent` (action `files.get`) against the PR's source branch
 
 Honor other freeform context too (e.g. "skip jira", "treat as urgent").
 
@@ -39,7 +39,7 @@ If no key is found, **stop and ask**: "I couldn't find a Jira key in the PR titl
 
 If a key was found or supplied (not `skip`):
 1. Use `mcp__plugin_atlassian_atlassian__getAccessibleAtlassianResources` to get the cloud ID (cache it for this session)
-2. Call `mcp__plugin_atlassian_atlassian__getJiraIssue` with `issueIdOrKey=<key>` and `responseContentFormat="markdown"`
+2. Call `mcp__plugin_atlassian_atlassian__getJiraIssue` with `cloudId=<cloudId>`, `issueIdOrKey=<key>`, `responseContentFormat="markdown"`
 3. Capture summary, description (with acceptance criteria), status
 
 ## Step 4 — WIP detection

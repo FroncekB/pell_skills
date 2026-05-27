@@ -200,7 +200,8 @@ Otherwise ask:
 On `y`, call `mcp__plugin_atlassian_atlassian__addCommentToJiraIssue` with:
 - `cloudId`
 - `issueIdOrKey`: `<KEY>`
-- `commentBody`: `PR opened: <PR URL>` (use markdown if the MCP supports it)
+- `commentBody`: `PR opened: <PR URL>`
+- `contentFormat`: `"markdown"`
 
 On failure, print: "⚠ Failed to comment — `<error>`." Continue to Step 8.
 

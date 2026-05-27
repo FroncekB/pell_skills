@@ -40,7 +40,7 @@ Call `mcp__plugin_atlassian_atlassian__searchJiraIssuesUsingJql` with:
 - `cloudId`: from Step 2
 - `jql`: the assembled string
 - `fields`: `["summary", "status", "issuetype", "priority", "updated"]`
-- `limit`: 25
+- `maxResults`: 25
 
 If the call fails with a JQL syntax error → exit with: "Jira rejected that filter — `<error message>`. Try again without the status filter, or use a simpler one (`in progress`, `to do`, `blocked`)."
 

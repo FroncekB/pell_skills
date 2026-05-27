@@ -27,7 +27,7 @@ The default assumption is that you're working from a local checkout of the repo 
 3. **Surrounding code** — use `Read` and `Grep` freely to inspect anything the diff references
 
 **If `context_source: bitbucket`:**
-- Fetch the same files via `mcp__atlassian-bitbucket__bitbucketRepoContent(workspaceId=<workspace>, repoId=<repo>, ref=<branch>, path=<file>)`. Use this when the dispatcher tells you the local checkout isn't trustworthy for this review
+- Fetch the same files via `mcp__atlassian-bitbucket__bitbucketRepoContent` with `action="files.get"`, `workspaceId=<workspace>`, `repoId=<repo>`, `referenceOrSha=<branch>`, `path=<file>`. Use this when the dispatcher tells you the local checkout isn't trustworthy for this review
 
 In `pr` mode, you may also have Jira context — read it for what the code is *supposed* to do.
 
