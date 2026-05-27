@@ -1,6 +1,6 @@
 ---
 name: frontend-router
-description: Use at the START of any user-facing UI work in a Pell repo — building React components, pages, layouts, design systems, styling, Tailwind/CSS, marketing pages, dashboards, forms, or any task whose deliverable is something a human will look at in a browser. Routes UI work to the `frontend-design` plugin when available, or notifies the user that it would help.
+description: Use at the START of any user-facing UI work in a Pell repo — building React components, pages, layouts, design systems, styling, Tailwind/CSS, marketing pages, dashboards, forms, or any task whose deliverable is something a human will look at in a browser.
 ---
 
 # Pell Frontend Router

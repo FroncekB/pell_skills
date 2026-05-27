@@ -161,6 +161,40 @@ List the open Jira tickets assigned to you. Optional freeform filters by project
 
 **Side-effects:** read-only against Jira (no transitions, no assignments). The transparent `cloud_id` cache write to `pell-config.json` is the only file change.
 
+### `/pell:repo-review`
+
+Whole-repo code-quality audit. Walks the codebase, dispatches `repo-quality-reviewer` sub-agents in parallel, and aggregates findings into one report. Looks for duplicated logic, dead code, convention drift, oversized files, tight coupling, and ignored warnings. Read-only — never modifies files.
+
+**Usage:**
+
+```
+/pell:repo-review                                     # quick scan (~50 recent files)
+/pell:repo-review --standard                          # broader scan (~250 files)
+/pell:repo-review --full                              # walk the entire repo
+/pell:repo-review src/api                             # restrict to a path
+/pell:repo-review focus on the auth module            # freeform context biases agents
+/pell:repo-review --full skip tests
+```
+
+**Behavior:**
+
+1. Walks the repo (recency-weighted from `git log` in quick/standard, full `git ls-files` for `--full`), applies a deny-list for generated/vendor paths
+2. Chunks files by language and dispatches up to ~12 parallel `repo-quality-reviewer` agents
+3. Aggregates findings, dedupes by `(finding, fix)` text across chunks (so a pattern repeated in N files renders once with all locations)
+4. Renders a markdown report grouped by severity (`major` / `minor` / `nit`)
+
+**Side-effects:** none — read-only by design.
+
+### `/pell:repo-security-review`
+
+Whole-repo security audit. Same orchestration shape as `/pell:repo-review` but dispatches `repo-security-reviewer` agents. Each agent runs two passes per file: a regex scan for sensitive data (SSNs, credit cards, API keys, JWTs, private keys, driver's license patterns) followed by code-level vulnerability review (XSS, SQLi, path traversal, hardcoded credentials, crypto misuse, PII logging).
+
+**Usage:** same shape as `/pell:repo-review` (path scope, `--quick`/`--standard`/`--full`, freeform).
+
+**Output policy:** findings include the **literal matched value** for sensitive-data hits (you chose this trade-off during design). Treat the output as sensitive — don't paste it into chat or PR comments without consideration.
+
+**Side-effects:** none — read-only.
+
 ### `/pell:finish-work`
 
 Close out a branch by opening a Bitbucket PR and (only on explicit consent) transitioning the linked Jira ticket and adding a PR-link comment. Read-only against Jira by default; PR creation is always confirmed even when other actions are pre-authorized.
@@ -271,6 +305,8 @@ The three reviewers are also exposed as composable agents — any current or fut
 | Correctness reviewer | `correctness-reviewer` | JSON: `{findings: [{severity, file, line, finding, fix}], summary}` |
 | Quality reviewer | `quality-reviewer` | Same shape |
 | Security reviewer | `security-reviewer` | Same shape |
+| Repo quality reviewer | `repo-quality-reviewer` | Same shape, with optional `also_in` for cross-file findings within a chunk |
+| Repo security reviewer | `repo-security-reviewer` | Same shape |
 
 This is the foundation of Bucket 3 (workflow composers) — future commands like `pell:wrap-up` will dispatch these without re-implementing review logic.
 
