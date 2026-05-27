@@ -227,3 +227,23 @@ This step runs **only** when Step 5's presence check failed. Other failure modes
 ```
 
 If the filesystem write fails, print the error verbatim and leave the user on the branch start-work created. Do not retry.
+
+## Operator notes
+
+- **Never** mutate Jira from this command directly. All Jira side-effects route through `/pell:start-work`'s gates.
+- **Never** commit, push, or open a PR. Out of scope.
+- **Never** auto-pick artifacts. When multiple specs or plans exist for a key, always ask the user which to use.
+- **No rollback ever.** If `start-work` creates a branch and brainstorming subsequently errors, the branch stays. The user's working tree is the source of truth; `from-ticket` doesn't undo work.
+- The seed sent to brainstorming is a one-shot context dump. If brainstorming asks for follow-up details mid-conversation, the user can re-run `/pell:related <KEY>` separately for that.
+- The inline substitute is reserved for the missing-plugin case. Other dispatch errors (e.g. brainstorming throws mid-run) surface verbatim — they're not what the substitute is for.
+- If `superpowers:writing-plans` exists but `superpowers:brainstorming` doesn't (or vice versa), treat them independently. The plan-only resume case in Step 5 needs only `writing-plans`; the normal path needs `brainstorming`.
+
+## Out of scope
+
+The following are explicitly NOT part of `/pell:from-ticket`:
+
+- Implementation execution (use `superpowers:executing-plans` or `superpowers:subagent-driven-development` separately once the plan exists).
+- Multi-ticket batches (one key at a time).
+- Comment-thread synthesis from Jira (too noisy per design decision).
+- Auto-cleanup of stale plans/specs (handled by `--reset` only, not background sweeping).
+- Branch base override (defers to `/pell:start-work`'s own behavior).
