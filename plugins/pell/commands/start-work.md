@@ -113,3 +113,28 @@ Otherwise, print:
 Run `git checkout -b <KEY>-<description>`. The base is wherever the user is now — don't switch to `develop` or `main` first.
 
 If `git checkout -b` fails (e.g. invalid branch name, branch already exists despite the Step 3 check having said otherwise), surface the git error verbatim and exit. Do NOT proceed to Step 5 — branch creation is the gating prerequisite for the Jira side-effects.
+
+## Step 5 — Jira side-effects (opt-in, one at a time)
+
+If the user typed `don't touch jira`, `skip jira`, or `no jira changes` in `$ARGUMENTS`, skip this entire step. Do NOT prompt for either action.
+
+Otherwise, run 5a and 5b in order. Each is independent — `n` on 5a does not skip 5b.
+
+### Step 5a — Assignment
+
+Skip this sub-step entirely if `assignee.accountId` (from Step 2) equals the current user's `accountId` (from Step 3). The ticket is already yours.
+
+If the user pre-authorized inline (`assign to me`, `assign me`) → call the assign MCP directly without prompting.
+
+Otherwise, ask:
+
+> Want me to assign `<KEY>` to you?
+
+On `y`, call `mcp__plugin_atlassian_atlassian__editJiraIssue` with:
+- `cloudId`: from Step 2
+- `issueIdOrKey`: `<KEY>`
+- `fields`: `{"assignee": {"accountId": "<current user accountId>"}}`
+
+On failure, print a single line: "⚠ Failed to assign — `<error message>`." and continue to Step 5b. Do NOT roll back the branch.
+
+On `n`, continue to Step 5b silently.
