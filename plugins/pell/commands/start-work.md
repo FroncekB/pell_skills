@@ -78,3 +78,38 @@ Call `mcp__plugin_atlassian_atlassian__atlassianUserInfo`. Capture `accountId` a
 
 - If `assignee.accountId` is set and != current user's `accountId`, print: "Heads up: this ticket is assigned to `<assignee.displayName>`."
 - If `pell-config.json:jira.transitions[<projectKey>].start` is set AND `status.name` matches it (case-insensitive), print: "Ticket is already in `<status.name>`."
+
+## Step 4 — Confirm and create the branch
+
+**Derive the suggested description from the ticket summary:**
+
+1. Start with `summary` from Step 2
+2. Strip any leading `[<KEY>]` prefix Jira sometimes embeds (regex: `^\[?<KEY>\]?\s*[:\-]?\s*`)
+3. Replace whitespace and punctuation runs with `-`
+4. Split on `-`, take the first 5 tokens, rejoin with `-`. Also apply a 40-char soft cap: if the joined result exceeds 40 chars, drop tokens from the end until it fits (keep at least 2 tokens)
+5. Preserve the summary's original casing — Pell convention is sentence-case-with-hyphens (e.g. `Fixing-broken-item`), not lowercase-kebab-case
+6. Trim leading/trailing hyphens
+
+Worked example: `"Cart fails to update item quantity"` → tokens `Cart`, `fails`, `to`, `update`, `item` → `Cart-fails-to-update-item` → final branch `<KEY>-Cart-fails-to-update-item`.
+
+**Confirm the branch name:**
+
+If the user pre-authorized a branch description inline (`call it <slug>`, `name it <slug>`, `branch <slug>`), use that slug verbatim as the description; skip the prompt.
+
+Otherwise, print:
+
+> Ticket: `<KEY> — <summary>` (status: `<status.name>`, type: `<issuetype.name>`)
+>
+> Suggested branch: `<KEY>-<derived-description>`
+>
+> Press Enter to accept, type a different description (e.g. `Fixing-cart`), or `n` to cancel.
+
+- Empty response → accept the suggestion
+- Any non-`n` text → use that as the description verbatim (don't re-derive)
+- `n` → exit cleanly: "Cancelled. No branch created, no Jira changes made."
+
+**Create the branch:**
+
+Run `git checkout -b <KEY>-<description>`. The base is wherever the user is now — don't switch to `develop` or `main` first.
+
+If `git checkout -b` fails (e.g. invalid branch name, branch already exists despite the Step 3 check having said otherwise), surface the git error verbatim and exit. Do NOT proceed to Step 5 — branch creation is the gating prerequisite for the Jira side-effects.
