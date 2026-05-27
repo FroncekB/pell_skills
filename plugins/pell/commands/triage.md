@@ -58,7 +58,7 @@ If 0 issues:
 
 Stop here.
 
-Otherwise group by `priority.name`. Render in this order: `Highest`, `High`, `Medium`, `Low`, `Lowest`, then no-priority (`—`). Within each group, preserve API order (already priority DESC, created DESC).
+Otherwise group by `priority.name`. Render in this order: `Highest`, `High`, `Medium`, `Low`, `Lowest`, then no-priority. Within each group, preserve API order (already priority DESC, created DESC). The no-priority section header is `## (no priority)` rather than a bare dash — projects without priority configured (common) otherwise render an unhelpful `## —`.
 
 Number tickets globally (continuous across groups):
 
@@ -69,20 +69,24 @@ Number tickets globally (continuous across groups):
 
 ## High
 3. RRS-1037 [Story] Add CSV export to admin dashboard  (1w ago)
+
+## (no priority)
+4. RRS-485 [Task] Add a New BilledOutsideRM Email  (3y ago)
 ```
 
 Format rules:
 - Keys left-padded so they align within a group
 - `[<issuetype.name>]` only — no priority (it's the section header)
 - Summary truncated to 80 chars with `…`
-- `(<relative created>)` — `5h ago`, `2d ago`, `1w ago`
+- `(<relative created>)` — use the largest unit that gives an integer ≥ 1: `5h ago`, `2d ago`, `1w ago`, `3mo ago`, `4y ago`
 - If `all` was set, append `· assigned to <displayName>` for tickets where `assignee` is non-null
 
-Below the list:
+Below the list, render exactly one of:
 
-```
-Showing N unclaimed tickets in <KEY>. Pool depth: <total> matching.
-```
+- `Showing N unclaimed tickets in <KEY>.` — when the response has `isLast: true` (full pool fits in N)
+- `Showing N unclaimed tickets in <KEY>. More pages available — narrow with \`high\`, \`today\`, or \`this week\` to filter.` — when `isLast: false`
+
+The `searchJiraIssuesUsingJql` MCP doesn't return a total count, only `isLast`/`nextPageToken`. Don't promise a total you can't deliver.
 
 ## Step 5 — Per-ticket action prompt
 

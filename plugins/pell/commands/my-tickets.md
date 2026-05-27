@@ -73,7 +73,7 @@ Format rules:
 - `<KEY>` left-padded so the keys in the group align visually
 - `[<issuetype.name> · <priority.name short>]` — abbreviate priority to `Crit`, `High`, `Med`, `Low`, `Lowest` (or `—` if no priority)
 - Summary truncated to 80 chars with `…` if longer
-- `(updated <relative time>)` — e.g. `5h ago`, `2d ago`, `1w ago`, `3mo ago` (use the largest unit that gives an integer ≥ 1)
+- `(updated <relative time>)` — e.g. `5h ago`, `2d ago`, `1w ago`, `3mo ago`, `4y ago` (use the largest unit that gives an integer ≥ 1)
 
 Below the list, print the result count:
 
