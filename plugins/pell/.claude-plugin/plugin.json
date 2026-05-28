@@ -1,6 +1,6 @@
 {
   "name": "pell",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "Pell Software's Claude Code toolkit: PR/local code reviewers (correctness, quality, security), Jira workflow ops, and house-style guidance. One plugin, many skills.",
   "author": {
     "name": "Pell Software"
