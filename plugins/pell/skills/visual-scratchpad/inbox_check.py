@@ -67,7 +67,7 @@ def main():
             "additionalContext": format_context(events),
         }
     }
-    sys.stdout.write(json.dumps(out))
+    sys.stdout.write(json.dumps(out) + "\n")
 
 
 if __name__ == "__main__":
