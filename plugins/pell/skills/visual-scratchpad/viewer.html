@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pell visual scratchpad</title>
+<script src="/marked.min.js"></script>
+<style>
+  :root { color-scheme: light dark; }
+  body { margin: 0; font: 15px/1.6 -apple-system, system-ui, sans-serif;
+         background: Canvas; color: CanvasText; }
+  #bar { position: fixed; top: 8px; right: 12px; font-size: 12px; opacity: .6; }
+  #dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+         background: #c33; vertical-align: middle; margin-right: 5px; }
+  #dot.on { background: #3a3; }
+  #view { max-width: 900px; margin: 0 auto; padding: 32px 24px 80px; }
+  #view table { border-collapse: collapse; }
+  #view th, #view td { border: 1px solid #8884; padding: 4px 10px; }
+  #view pre { background: #8881; padding: 12px; border-radius: 6px; overflow: auto; }
+  #view button { font: inherit; padding: 6px 14px; margin: 4px 6px 4px 0;
+                 border-radius: 6px; border: 1px solid #8886; cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="bar"><span id="dot"></span><span id="status">connecting…</span></div>
+<div id="view"></div>
+<script>
+  const view = document.getElementById("view");
+  const dot = document.getElementById("dot");
+  const status = document.getElementById("status");
+
+  function render(text) {
+    if (text.trimStart().startsWith("<")) {
+      view.innerHTML = text;
+    } else {
+      view.innerHTML = window.marked ? marked.parse(text) : text;
+    }
+  }
+
+  window.pellSend = function (payload) {
+    return fetch("/event", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+  };
+
+  const es = new EventSource("/stream");
+  es.onopen = () => { dot.classList.add("on"); status.textContent = "live"; };
+  es.onerror = () => { dot.classList.remove("on"); status.textContent = "reconnecting…"; };
+  es.onmessage = (e) => render(e.data);
+</script>
+</body>
+</html>
