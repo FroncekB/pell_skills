@@ -1,6 +1,6 @@
 # Pell Skills — Architecture Spec
 
-**Status:** draft (decisions in §1-§3 confirmed; §4-§7 are working assumptions to refine)
+**Status:** implemented — conventions stable; see §12 for build status. Remaining gaps tracked in [`2026-05-28-pell-toolkit-improvements-plan.md`](2026-05-28-pell-toolkit-improvements-plan.md).
 **Author:** Brandon Froncek + Claude
 **Date:** 2026-05-27
 
@@ -157,17 +157,17 @@ Default: skills are **read-only unless explicitly told otherwise.** Side effects
 
 ## 8. Reviewer composition pattern
 
-**Decision: reviewers are independent skills; composites orchestrate them. No bundled reviewer agents inside composite plugins.**
+**Decision: reviewers are independent primitives; composites orchestrate them. No reviewer logic duplicated inside composites.**
 
-Each review dimension is its own plugin with both a user-facing slash command **and** a sub-agent:
+Each review dimension is a sibling in the one `pell` plugin, exposed as both a user-facing slash command **and** a composable sub-agent (per §1, everything lives in `pell` — there are no separate per-dimension plugins):
 
-| Plugin | Slash command (user-invokable) | Agent (composable) |
+| Dimension | Slash command (user-invokable) | Agent (`subagent_type`) |
 |-|-|-|
-| `pell-correctness-review` | `/pell-correctness-review:...` | `pell-correctness-review:correctness-reviewer` |
-| `pell-quality-review` | `/pell-quality-review:...` | `pell-quality-review:quality-reviewer` |
-| `pell-security-review` | `/pell-security-review:...` | `pell-security-review:security-reviewer` |
+| Correctness | `/pell:correctness-review` | `correctness-reviewer` |
+| Quality | `/pell:quality-review` | `quality-reviewer` |
+| Security | `/pell:security-review` | `security-reviewer` |
 
-Composite plugins do NOT ship their own reviewer agents. They dispatch the three above as parallel sub-agents and act on the aggregated findings.
+Composites (`/pell:three-pass-review`, `/pell:local-review`) do NOT reimplement review logic. They dispatch the agents above as parallel sub-agents and act on the aggregated findings. The same pattern extends to the repo-wide audits (`repo-quality-reviewer`, `repo-security-reviewer`).
 
 ### Reviewer responsibilities (uniform contract)
 
@@ -222,7 +222,7 @@ Composites are thin orchestrators that:
 
 - **Reuse:** one reviewer prompt, many consumers
 - **Composability:** future workflows (e.g. `pell-feature:wrap-up`) can pick which reviewers to run
-- **Direct user access:** a user who just wants a quick security pass can run `/pell-security-review:pell-security-review` without invoking the full three-pass machinery
+- **Direct user access:** a user who just wants a quick security pass can run `/pell:security-review` without invoking the full three-pass machinery
 - **Cleaner mental model:** reviewers report, orchestrators act
 
 ## 9. Repo layout
@@ -231,36 +231,47 @@ Composites are thin orchestrators that:
 pell_skills/
 ├── .claude-plugin/marketplace.json          # lists `pell` (the main plugin)
 ├── docs/specs/                              # design docs (this file lives here)
-├── README.md
+├── README.md                                # canonical command reference
 └── plugins/
     └── pell/                                # ONE plugin containing everything
         ├── .claude-plugin/plugin.json
-        ├── README.md
+        ├── README.md                        # thin index → defers to root README
+        ├── hooks/hooks.json                 # UserPromptSubmit: surfaces scratchpad clicks
         ├── commands/
-        │   # Reviewer primitives (Bucket: review)
+        │   # Reviewer primitives (single-dimension, read-only)
         │   ├── correctness-review.md
         │   ├── quality-review.md
         │   ├── security-review.md
         │   # Review composites
         │   ├── three-pass-review.md         # PR + Jira context → optional inline comments
         │   ├── local-review.md              # working tree → optional in-place fixes
+        │   # Repo-wide audits
+        │   ├── repo-review.md
+        │   ├── repo-security-review.md
         │   # Bucket 1: Jira ops
-        │   ├── start-work.md
-        │   ├── related.md
+        │   ├── my-tickets.md
         │   ├── triage.md
+        │   ├── related.md
+        │   ├── start-work.md
         │   ├── finish-work.md
         │   # Bucket 3: composers
-        │   ├── from-ticket.md               # future
-        │   └── wrap-up.md                   # future
+        │   ├── from-ticket.md
+        │   ├── wrap-up.md
+        │   # Visual
+        │   └── visualize.md
         ├── skills/
         │   # Bucket 2: house-style guidance (auto-invoked)
         │   ├── frontend-router/SKILL.md     # nudges toward /frontend-design
-        │   └── claude-md-init/SKILL.md      # future
+        │   └── visual-scratchpad/           # SKILL.md + server.py + viewer.html + tests
+        │   # claude-md-init/ — planned, not yet built (see improvements plan §5)
         └── agents/
-            # Reusable reviewer agents (composable primitives)
+            # Diff-based reviewer agents (composable primitives)
             ├── correctness-reviewer.md
             ├── quality-reviewer.md
-            └── security-reviewer.md
+            ├── security-reviewer.md
+            # Repo-based reviewer agents
+            ├── repo-quality-reviewer.md
+            └── repo-security-reviewer.md
 ```
 
 ### Optional companion: `pell-everything` meta-plugin
@@ -299,3 +310,11 @@ All previously-open questions are now resolved:
 - ✅ **Reviewer output filtering** — reviewers surface everything including nits, with severity. Consumer triages (§8)
 - ✅ **Direct-invoke output mode** — pretty markdown when invoked via slash command, raw JSON when dispatched via `Agent` tool. Reviewer detects mode and adapts (§8)
 - ✅ **Meta-plugin** — `pell-everything` to be added after `pell` is stable (§9)
+
+## 12. Implementation status
+
+The conventions above are stable and the bulk of the roadmap shipped:
+
+- **Built:** all three review primitives + both composites; both repo-wide audits (`repo-review`, `repo-security-review`) with their `repo-*-reviewer` agents; Jira ops (`my-tickets`, `triage`, `related`, `start-work`, `finish-work`); composers (`from-ticket`, `wrap-up`); the `frontend-router` skill; and the `visual-scratchpad` skill + `/pell:visualize` command (a surface not anticipated in the original build order).
+- **Not yet built:** `claude-md-init` (§10.6) and the optional `pell-everything` meta-plugin (§9).
+- **Remaining gaps + the next wave of work** (doc reconciliation, a test-coverage review dimension, `address-review`, `review-queue`, and second-tier composers) are tracked in [`2026-05-28-pell-toolkit-improvements-plan.md`](2026-05-28-pell-toolkit-improvements-plan.md).
