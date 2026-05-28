@@ -23,3 +23,17 @@ The user passed: `$ARGUMENTS`
 **Everything else is forwarded** to both `/pell:local-review` (Stage A) and `/pell:finish-work` (Stage C). Each dispatched stage parses what it understands (e.g. local-review consumes `apply minor+`, finish-work consumes `move it to <status>`) and ignores the rest. wrap-up never re-interprets these.
 
 Capture `<forwarded args>` = `$ARGUMENTS` with the wrap-up-owned flags from the table above stripped out. The same `<forwarded args>` is passed to both Stage A and Stage C.
+
+## Step 2 — Stage A: Dispatch `/pell:local-review`
+
+Skip this entire stage when any of `skip review` / `already reviewed` / `no review` was in `$ARGUMENTS`.
+
+Otherwise, print: `Running /pell:local-review...`
+
+Then invoke `/pell:local-review <forwarded args>` via the Skill tool.
+
+**Failure handling:**
+
+- If `local-review` reports "No changes to review." → treat Stage A as complete; proceed to Stage B (which will also see a clean tree and skip).
+- If `local-review` exits non-zero (rare; usually means a reviewer-agent crash that local-review couldn't gracefully degrade) → surface the error and exit. Do NOT proceed to Stage B or C. The user's working tree is unchanged.
+- If `local-review` applies fixes and the user declines further review-action prompts, that's normal flow — Stage A completes when local-review returns control.
