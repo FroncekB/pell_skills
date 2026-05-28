@@ -182,10 +182,10 @@ The missing receiving end of review. `three-pass-review` *posts* comments; nothi
 
 **This phase requires a design pass first** — the comment-grouping UX and the "what counts as addressed" model are genuine design questions. Do not author the command body before the spec exists.
 
-- [ ] **Task 3.1: Brainstorm + write the design spec.** Use `superpowers:brainstorming` (notify-don't-force if absent) → `docs/specs/2026-05-28-pell-address-review-design.md`. Resolve the open questions below.
-- [ ] **Task 3.2: Verify the `action=comments` *response* shape** (the tool itself is confirmed in the MCP matrix). Make one real call and confirm the response exposes: comment id, inline anchor (path + line), author, resolved/outdated state, and thread/parent linkage. Confirm whether resolved comments can be filtered server-side or must be filtered client-side. Record findings in the spec.
-- [ ] **Task 3.3: Write `plugins/pell/commands/address-review.md`** per the approved spec, mirroring `local-review`'s fix-application section. Validate + smoke-test against a real PR with open comments.
-- [ ] **Task 3.4: Update both READMEs; commit per task.**
+- [x] **Task 3.1: Brainstorm + write the design spec.** Use `superpowers:brainstorming` (notify-don't-force if absent) → `docs/specs/2026-05-28-pell-address-review-design.md`. Resolve the open questions below.
+- [x] **Task 3.2: Verify the `action=comments` *response* shape** (the tool itself is confirmed in the MCP matrix). Make one real call and confirm the response exposes: comment id, inline anchor (path + line), author, resolved/outdated state, and thread/parent linkage. Confirm whether resolved comments can be filtered server-side or must be filtered client-side. Record findings in the spec.
+- [x] **Task 3.3: Write `plugins/pell/commands/address-review.md`** per the approved spec, mirroring `local-review`'s fix-application section. Validate + smoke-test against a real PR with open comments. _(Authored, validated, subagent application-tested; read-path smoke-tested against PR #1. Live side-effect run — applying a fix / posting a reply on a real PR — deferred, can't be done unprompted.)_
+- [x] **Task 3.4: Update both READMEs; commit per task.**
 
 **Open design questions (resolve in 3.1):**
 - Scope of comments: all open / unresolved-only / since-last-push / by-author? Default?
