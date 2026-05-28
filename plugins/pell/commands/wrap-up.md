@@ -91,3 +91,18 @@ Run `git diff --cached --quiet`. If it returns exit 0 (no staged changes — typ
 Run `git commit -m "<resolved message>"`. On failure, surface the git error verbatim and exit. Do NOT proceed to Stage C — the PR would be opened from the wrong tip.
 
 On success, print: `✓ Committed working-tree changes: "<resolved message>"`
+
+## Step 4 — Stage C: Dispatch `/pell:finish-work`
+
+Always runs unless an earlier stage exited.
+
+Print: `Running /pell:finish-work...`
+
+Then invoke `/pell:finish-work <forwarded args>` via the Skill tool. (`<forwarded args>` is `$ARGUMENTS` with all wrap-up-owned flags from Step 1 stripped out — same value used for Stage A.)
+
+**Failure handling:**
+
+- `finish-work` has its own gates and exits cleanly on user cancellation (e.g. `n` at the PR-create prompt). When that happens, `wrap-up` does NOT retry — exit silently. The user can re-run when ready.
+- `finish-work` non-zero exit on a hard error (push failure, Bitbucket MCP unreachable, etc.) → `wrap-up` also exits, surfacing finish-work's error. No rollback of the Stage B commit — the user can amend, reset, or re-run wrap-up.
+
+`wrap-up` exits after dispatching Stage C. finish-work's Step 8 report is the final "all done" signal.
