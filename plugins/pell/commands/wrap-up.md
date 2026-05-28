@@ -106,3 +106,48 @@ Then invoke `/pell:finish-work <forwarded args>` via the Skill tool. (`<forwarde
 - `finish-work` non-zero exit on a hard error (push failure, Bitbucket MCP unreachable, etc.) → `wrap-up` also exits, surfacing finish-work's error. No rollback of the Stage B commit — the user can amend, reset, or re-run wrap-up.
 
 `wrap-up` exits after dispatching Stage C. finish-work's Step 8 report is the final "all done" signal.
+
+## Step 5 — Error handling summary
+
+| Stage | Failure | Behavior |
+|-|-|-|
+| Parse args | Conflicting/unrecognized control flags | Pass through to stages; do NOT block |
+| Stage A | local-review reports "No changes to review." | Continue to Stage B |
+| Stage A | local-review crash or non-zero exit | Surface error; exit; no Stage B or C |
+| Stage B | `git status --porcelain` empty | Skip silently |
+| Stage B | User declines y/n | Exit with named reason; no Stage C |
+| Stage B | Only-untracked-files case | Exit with named reason; no Stage C |
+| Stage B | `git commit` non-zero | Surface git error verbatim; exit; no Stage C |
+| Stage C | finish-work clean cancellation | Exit silently; commit from Stage B stays |
+| Stage C | finish-work hard error | Surface error; exit; commit from Stage B stays |
+
+**No rollback ever.** If Stage B commits and Stage C fails, the commit stays. The user can amend, reset, or re-run wrap-up as needed.
+
+## Step 6 — wrap-up's own output
+
+`wrap-up` prints these lines and nothing else; each dispatched stage owns its own output:
+
+- Before Stage A: `Running /pell:local-review...` (omit when `skip review`)
+- Before Stage B (only when the tree is dirty): `Working tree has uncommitted changes:` followed by `git status --short` output
+- After Stage B commits: `✓ Committed working-tree changes: "<message>"`
+- Before Stage C: `Running /pell:finish-work...`
+
+No final synthesis report. finish-work's Step 8 is the last word.
+
+## Operator notes
+
+- **Never** commit without explicit consent (either y/n gate OR `auto-commit` pre-auth).
+- **Never** rollback Stage B's commit on Stage C failure. The user's working tree is the source of truth.
+- **Never** add a third dimension to wrap-up (e.g. post-merge cleanup, branch deletion). Those belong in a separate composer if ever built.
+- **Never** modify Jira from `wrap-up` directly. All Jira side-effects route through `/pell:finish-work`'s gates.
+- The user's `$ARGUMENTS` always wins over defaults. If they typed something neither wrap-up nor the dispatched stages explicitly handle, it's treated as informational context.
+
+## Out of scope
+
+The following are explicitly NOT part of `/pell:wrap-up`:
+
+- **Post-merge actions** — closing the Jira ticket to "Done", deleting the local branch, removing worktrees. A separate command is the right place if those become routine. For now: manual.
+- **Merging the PR** — out of scope for any Pell composer.
+- **Auto-amending the Stage B commit if Stage C fails** — too much hidden state. The user can amend manually.
+- **Re-running Stage A after Stage B's commit** — if the user wants to review the fix commit, they invoke local-review again. wrap-up runs the pipeline once per invocation.
+- **Reviewing diff against the PR base** — local-review's default scope is `git diff HEAD`. Reviewing against `develop`/`main` requires passing `--range <a>..<b>` in `$ARGUMENTS` (which wrap-up forwards verbatim).
