@@ -1,5 +1,5 @@
 ---
-description: Three-pass review of a Bitbucket PR — dispatches correctness, quality, and security reviewers in parallel with linked Jira context. Optionally posts findings as inline PR comments.
+description: Three-pass review of a Bitbucket PR — dispatches correctness, quality, and security reviewers in parallel with linked Jira context; add "with tests" for an optional fourth test-coverage pass. Optionally posts findings as inline PR comments.
 argument-hint: <PR url | repo#number | bare PR number>
 ---
 
@@ -17,6 +17,8 @@ Parse `$ARGUMENTS`:
 **Context source** for the reviewers' surrounding-code fetches:
 - Default: `local` — assume the user is in a local checkout of the same repo. Reviewers will use `Read`/`Grep`/`Glob` against `<repo_root>`
 - If `$ARGUMENTS` contains `use bitbucket`, `use mcp`, `use remote`, `fetch via bitbucket`, `not LFS`, or `not local` → use `bitbucket` — reviewers will fetch via `mcp__atlassian-bitbucket__bitbucketRepoContent` (action `files.get`) against the PR's source branch
+
+**Test pass:** off by default. If `$ARGUMENTS` contains `with tests`, `include tests`, or `+tests` → also dispatch the test-coverage reviewer in Step 5.
 
 Honor other freeform context too (e.g. "skip jira", "treat as urgent").
 
@@ -52,11 +54,12 @@ Wait for confirmation.
 
 ## Step 5 — Dispatch the three reviewers in parallel
 
-In a **single assistant message**, make three `Agent` tool calls:
+In a **single assistant message**, make the reviewer `Agent` tool calls — the three core reviewers, plus `test-reviewer` only if the test pass was enabled in Step 1:
 
 1. `subagent_type="correctness-reviewer"`
 2. `subagent_type="quality-reviewer"`
 3. `subagent_type="security-reviewer"`
+4. `subagent_type="test-reviewer"` (include only if `with tests` / `include tests` / `+tests` was passed)
 
 Each agent gets the same prepared prompt:
 
@@ -110,10 +113,18 @@ Parse each agent's JSON output. Render a single report:
 **Critical:** _None._  |  **High:** _None._  |  **Medium:** _None._  |  **Low:** _None._  |  **Nits:** _None._
 - ...
 
+### Test Coverage
+**Major:** _None._  |  **Minor:** _None._  |  **Nits:** _None._
+- [severity] `file:line` — finding. **Fix:** …
+- ...
+
+(Include the **Test Coverage** section only if the test pass was enabled via `with tests`.)
+
 ### Counts
 - Correctness: <blocker> blocker, <major> major, <minor> minor, <nit> nits
 - Quality: <major> major, <minor> minor, <nit> nits
 - Security: <critical> critical, <high> high, <medium> medium, <low> low, <nit> nits
+- Test Coverage: <major> major, <minor> minor, <nit> nits   (include only if test pass enabled)
 - **Total:** <N findings>
 
 ### Verdict

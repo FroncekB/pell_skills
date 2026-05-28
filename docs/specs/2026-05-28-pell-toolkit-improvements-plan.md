@@ -162,17 +162,17 @@ git commit -m "feat(review): add /pell:test-review primitive"
 - Modify: `plugins/pell/commands/three-pass-review.md` (Step 5 dispatch, Step 6 render, Step 1 parse)
 - Modify: `plugins/pell/commands/local-review.md` (Step 2 dispatch, Step 3 render, Step 1 parse)
 
-- [ ] **Step 1: Make it a 4th parallel agent, on by default, suppressible.** In both composites' parse step, recognize `skip tests` / `no test review` → omit the test pass. Otherwise dispatch `test-reviewer` alongside the existing three in the same single-message parallel `Agent` block.
-- [ ] **Step 2: Add a `### Test Coverage` section** to both report templates (after `### Security`), with `Major / Minor / Nits` sub-lines, and add a Test line to the `### Counts` block. The composites are no longer "three-pass" in dimension count — keep the command name (renaming is churn) but update the in-report heading to not claim a fixed number. Update `three-pass-review`'s top-of-file framing sentence accordingly.
-- [ ] **Step 3: Update the README** (root + the now-thin plugin index from Task 1.1) to list `test-review` and note the composites include a test pass by default (suppress with `skip tests`).
-- [ ] **Step 4: Validate** → PASS. **Smoke-test:** run `/pell:local-review` on a diff that adds untested logic; confirm the Test Coverage section appears and flags it; run `/pell:local-review skip tests` and confirm it's omitted.
+- [ ] **Step 1: Make it a 4th parallel agent, opt-in (off by default).** In both composites' parse step, recognize `with tests` / `include tests` / `+tests` → also dispatch `test-reviewer` alongside the existing three in the same single-message parallel `Agent` block. Default (no flag) runs the three core reviewers only. (Decision: the test pass is opt-in, not default — a review pass shouldn't be forced on every run.)
+- [ ] **Step 2: Add a `### Test Coverage` section** to both report templates (after `### Security`), rendered **only when the test pass was enabled**, with `Major / Minor / Nits` sub-lines, and add a matching Test line to the `### Counts` block. Keep the `three-pass-review` command name (renaming is churn); update its frontmatter description to note the optional fourth pass.
+- [ ] **Step 3: Update the README** (root + the now-thin plugin index from Task 1.1) to list `test-review` and note the composites can add an optional test pass via `with tests`.
+- [ ] **Step 4: Validate** → PASS. **Smoke-test:** run `/pell:local-review with tests` on a diff that adds untested logic; confirm the Test Coverage section appears and flags it; run `/pell:local-review` (no flag) and confirm the section is absent.
 - [ ] **Step 5: Commit.**
 ```bash
 git add plugins/pell/commands/three-pass-review.md plugins/pell/commands/local-review.md README.md plugins/pell/README.md
 git commit -m "feat(review): add test-coverage pass to three-pass and local review composites"
 ```
 
-**Phase 2 acceptance:** `/pell:test-review` works standalone in PR and local mode; both composites include a Test Coverage section by default and omit it on `skip tests`; the agent reuses the standard JSON contract so future composers can dispatch it.
+**Phase 2 acceptance:** `/pell:test-review` works standalone in PR and local mode; both composites add a Test Coverage section only when `with tests` is passed (off by default); the agent reuses the standard JSON contract so future composers can dispatch it.
 
 ---
 

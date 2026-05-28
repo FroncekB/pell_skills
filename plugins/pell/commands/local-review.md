@@ -1,5 +1,5 @@
 ---
-description: Three-pass review of local uncommitted changes — dispatches correctness, quality, and security reviewers that respect CLAUDE.md and surrounding code conventions. Optionally applies suggested fixes.
+description: Three-pass review of local uncommitted changes — dispatches correctness, quality, and security reviewers that respect CLAUDE.md and surrounding code conventions; add "with tests" for an optional fourth test-coverage pass. Optionally applies suggested fixes.
 argument-hint: [--staged | --uncommitted | --range <a>..<b> | <path>]
 ---
 
@@ -18,6 +18,8 @@ Parse `$ARGUMENTS`:
 
 Honor any freeform context (e.g. "ignore the test files", "focus on the new module").
 
+**Test pass:** off by default. If `$ARGUMENTS` contains `with tests`, `include tests`, or `+tests` → also dispatch the test-coverage reviewer in Step 2.
+
 Run the appropriate `git diff`. If empty, tell the user "No changes to review." and stop.
 
 Also capture:
@@ -26,11 +28,12 @@ Also capture:
 
 ## Step 2 — Dispatch the three reviewers in parallel
 
-In a **single assistant message**, make three `Agent` tool calls:
+In a **single assistant message**, make the reviewer `Agent` tool calls — the three core reviewers, plus `test-reviewer` only if the test pass was enabled in Step 1:
 
 1. `subagent_type="correctness-reviewer"`
 2. `subagent_type="quality-reviewer"`
 3. `subagent_type="security-reviewer"`
+4. `subagent_type="test-reviewer"` (include only if `with tests` / `include tests` / `+tests` was passed)
 
 Each agent gets:
 
@@ -72,8 +75,14 @@ Same report shape as `/pell:three-pass-review`:
 **Critical:** _None._  |  **High:** _None._  |  **Medium:** _None._  |  **Low:** _None._  |  **Nits:** _None._
 - ...
 
+### Test Coverage
+**Major:** _None._  |  **Minor:** _None._  |  **Nits:** _None._
+- ...
+
+(Include the **Test Coverage** section only if the test pass was enabled via `with tests`.)
+
 ### Counts
-- (same as three-pass-review)
+- (same as three-pass-review, including the Test Coverage line only if the test pass was enabled)
 
 ### Verdict
 <one paragraph>
@@ -100,7 +109,8 @@ For each finding to apply:
 1. **Re-locate the target line by content.** The diff line may have shifted since review. Read the file and find the relevant code by content, not just by line number
 2. Use `Edit` (or `MultiEdit` if multiple fixes touch the same file in one batch) to apply the suggested fix
 3. If the fix is ambiguous (e.g. "consider extracting this method"), skip it with a note — only apply concrete, mechanical fixes. Never guess
-4. After all fixes:
+4. **Test-coverage findings are different:** applying one means *writing the suggested test* into the right test file, following the project's framework and test-location conventions (discover them as the reviewer did). If you can't confidently locate the framework or the correct test file, skip the finding with a note rather than scaffolding a test in the wrong place. Never weaken a test to make it pass
+5. After all fixes:
    - Run any obvious test/lint command derivable from the project (e.g. `npm test`, `dotnet test`, `pytest`). Look for clues in `package.json` scripts, a `Makefile`, etc. **If you can't identify one, skip — do not guess.**
    - Show `git diff --stat` so the user sees what changed
 

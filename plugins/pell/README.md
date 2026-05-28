@@ -13,6 +13,7 @@ Pell Software's Claude Code toolkit. One plugin, many skills. Install once, get 
 | `/pell:correctness-review [<PR-or-local>]` | Logic errors, broken invariants, missing error handling, regressions. |
 | `/pell:quality-review [<PR-or-local>]` | Readability, naming, duplication, convention adherence. |
 | `/pell:security-review [<PR-or-local>]` | Injection, authn/authz, secrets, OWASP top-10. |
+| `/pell:test-review [<PR-or-local>]` | Test adequacy — untested behavior, tests that can't fail, missing edge/error coverage. |
 
 ### Review composites (multi-dimension, optional side effects)
 
@@ -20,6 +21,8 @@ Pell Software's Claude Code toolkit. One plugin, many skills. Install once, get 
 |-|-|
 | `/pell:three-pass-review <PR>` | All reviewers in parallel against a Bitbucket PR with Jira context; offers inline PR comments. |
 | `/pell:local-review` | All reviewers against local uncommitted changes; offers in-place fixes. |
+
+Both composites can add a test-coverage pass — pass `with tests` to enable it (off by default).
 
 ### Repo-wide audits (read-only)
 
@@ -60,7 +63,7 @@ Pell Software's Claude Code toolkit. One plugin, many skills. Install once, get 
 
 Diff-based reviewers (dispatched by the composites, reusable by any future command):
 
-- `correctness-reviewer` · `quality-reviewer` · `security-reviewer`
+- `correctness-reviewer` · `quality-reviewer` · `security-reviewer` · `test-reviewer`
 
 Repo-based reviewers (dispatched by the repo audits):
 
@@ -77,6 +80,7 @@ Each dimension uses its own scale; reviewers surface everything (no pre-filterin
 | Correctness | `blocker` / `major` / `minor` / `nit` |
 | Quality | `major` / `minor` / `nit` |
 | Security | `critical` / `high` / `medium` / `low` / `nit` |
+| Test coverage | `major` / `minor` / `nit` |
 
 ## Prerequisites
 

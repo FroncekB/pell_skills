@@ -116,9 +116,17 @@ Single-dimension review for security. Looks for injection (SQL, command, XSS, te
 
 **Output:** markdown report grouped by severity (`critical` / `high` / `medium` / `low` / `nit`). Read-only.
 
+### `/pell:test-review`
+
+Single-dimension review for test adequacy. Judges the *tests*, not the production code: untested new behavior, tests that can't fail (assertion-free, tautological, or asserting only on mocks — the mock/prod-divergence trap), happy-path-only coverage, wrong-layer tests, and flaky patterns. Does not demand tests for behavior-free changes (renames, formatting, config).
+
+**Usage:** same shape as `/pell:correctness-review`.
+
+**Output:** markdown report grouped by severity (`major` / `minor` / `nit` — no blocker tier; a missing test isn't a production blocker). Read-only.
+
 ### `/pell:three-pass-review <PR>`
 
-Composite — runs all three reviewers in parallel against a Bitbucket PR with linked Jira context. Aggregates findings into a unified report. Offers to post each finding as an inline comment on the PR.
+Composite — runs the correctness, quality, and security reviewers in parallel against a Bitbucket PR with linked Jira context (add `with tests` for a fourth test-coverage pass). Aggregates findings into a unified report. Offers to post each finding as an inline comment on the PR.
 
 **Usage:**
 
@@ -127,6 +135,7 @@ Composite — runs all three reviewers in parallel against a Bitbucket PR with l
 /pell:three-pass-review https://bitbucket.org/pellsoftware/vrs_default/pull-requests/42
 /pell:three-pass-review 42                                       # if cwd is the target repo's checkout
 /pell:three-pass-review 42 skip jira                             # don't prompt for Jira if no key found
+/pell:three-pass-review 42 with tests                            # add the optional test-coverage pass
 /pell:three-pass-review 42 use bitbucket                         # fetch surrounding context via MCP instead of local FS
 ```
 
@@ -137,7 +146,7 @@ Composite — runs all three reviewers in parallel against a Bitbucket PR with l
 3. Searches PR title, source branch (GitFlow-aware), and description for a Jira key. Prompts the user if none found
 4. Fetches the linked Jira ticket
 5. Detects WIP/draft PRs and asks for confirmation before proceeding
-6. Dispatches all three reviewer agents in parallel
+6. Dispatches the reviewer agents in parallel — correctness, quality, security, and (opt-in via `with tests`) test-coverage
 7. Renders a unified report grouped by dimension and severity
 8. Asks which severity threshold (if any) to post as inline comments: `blockers-only`, `major+`, `minor+` (default), `all`, `select`, or `no`
 
@@ -341,7 +350,7 @@ Show the connection graph for a Jira ticket — linked issues (blocks, is blocke
 
 ### `/pell:local-review`
 
-Composite — runs all three reviewers against local uncommitted changes. Each reviewer reads `CLAUDE.md` and convention files to ground findings in the repo's actual style. Offers to apply suggested fixes in-place.
+Composite — runs the correctness, quality, and security reviewers against local uncommitted changes (add `with tests` for a fourth test-coverage pass). Each reviewer reads `CLAUDE.md` and convention files to ground findings in the repo's actual style. Offers to apply suggested fixes in-place.
 
 **Usage:**
 
@@ -351,13 +360,14 @@ Composite — runs all three reviewers against local uncommitted changes. Each r
 /pell:local-review --uncommitted            # unstaged only
 /pell:local-review --range main..HEAD       # changes between two refs
 /pell:local-review src/components/          # restrict to a path
+/pell:local-review with tests               # add the optional test-coverage pass
 /pell:local-review focus on the new auth module
 ```
 
 **Behavior:**
 
 1. Resolves the diff scope from `$ARGUMENTS`
-2. Dispatches all three reviewer agents in parallel (each discovers CLAUDE.md and conventions on its own)
+2. Dispatches the reviewer agents in parallel — correctness, quality, security, and (opt-in via `with tests`) test-coverage — each discovers CLAUDE.md and conventions on its own
 3. Renders a unified report grouped by dimension and severity
 4. Asks which severity threshold to apply as fixes: same selection menu as `/pell:three-pass-review`
 
@@ -392,6 +402,7 @@ The three reviewers are also exposed as composable agents — any current or fut
 | Correctness reviewer | `correctness-reviewer` | JSON: `{findings: [{severity, file, line, finding, fix}], summary}` |
 | Quality reviewer | `quality-reviewer` | Same shape |
 | Security reviewer | `security-reviewer` | Same shape |
+| Test-coverage reviewer | `test-reviewer` | Same shape |
 | Repo quality reviewer | `repo-quality-reviewer` | Same shape, with optional `also_in` for cross-file findings within a chunk |
 | Repo security reviewer | `repo-security-reviewer` | Same shape |
 
