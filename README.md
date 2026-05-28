@@ -388,6 +388,8 @@ The full architecture spec lives at [`docs/specs/2026-05-27-pell-skills-architec
 
 ## Contributing
 
+**When to build a skill:** if you find yourself using the same workaround twice, hand-rolling a bespoke tool for a problem someone else might hit, or walking through the same manual workflow on every ticket — that's a skill waiting to be written. Skills are how Pell engineers' tribal knowledge becomes shared leverage. If it would have saved you five minutes the second time, it'll save the team hours over a quarter.
+
 See [`CLAUDE.md`](CLAUDE.md) for conventions when adding a new command, agent, or skill. The TL;DR:
 
 1. **Everything goes into `plugins/pell/`** — don't add new plugin directories or new marketplace entries
