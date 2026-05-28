@@ -23,6 +23,14 @@ Render the concept to a live browser pad instead of (or alongside) explaining it
 
 3. **Mention the URL once** per session: `http://127.0.0.1:<port>`.
 
+4. **Start watch mode** (default). If you have NOT already started the inbox watcher this session, start a zero-token shell watcher via the Monitor tool (`persistent: true`), streaming new lines so each click reacts in near-real-time:
+
+   ```bash
+   tail -n0 -F ~/.claude/pell-visual/inbox.jsonl
+   ```
+
+   Each line is a browser event `{"ts":…, "payload":…}` — parse the payload and react. **At most one watcher per session** — if one is already running, skip this step. Never poll with a recurring agent, `loop`, or cron.
+
 ## Collecting input
 
 To get a choice back, include interactive HTML that calls `pellSend(...)`:
@@ -31,10 +39,10 @@ To get a choice back, include interactive HTML that calls `pellSend(...)`:
 <button onclick="pellSend('variant-2')">Variant 2</button>
 ```
 
-Clicks land in the inbox and surface on the user's next turn (the plugin's UserPromptSubmit hook). For near-real-time reaction, the user can run `/pell:visualize watch`.
+With watch mode on (step 4), clicks react in near-real-time. They also always surface on the user's next turn via the plugin's UserPromptSubmit hook, so nothing is lost even if the watcher isn't running.
 
 ## Boundaries
 
 - One global pad — a new write overwrites the last.
 - Loopback only; the content you write is trusted and rendered as-is.
-- Don't poll the inbox with a recurring agent or timer — that wastes tokens. Watching is a shell `tail -F`, owned by `/pell:visualize watch`.
+- Don't poll the inbox with a recurring agent or timer — that wastes tokens. Watching is a shell `tail -F` streamed via Monitor; zero cost while idle, one watcher per session. The user can stop it with `/pell:visualize stop-watch`.

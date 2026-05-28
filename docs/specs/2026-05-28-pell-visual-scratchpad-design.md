@@ -23,10 +23,10 @@ The feature is layered. The output direction always works; the input direction h
 |-|-|-|
 | Tier | Direction | Mechanism |
 | **Output** | Claude → browser | Write `scratch.html`; server SSE-pushes; page renders. Always on. |
-| **Passive inbox** (default) | browser → Claude | Click → `POST /event` → append `inbox.jsonl`. A `UserPromptSubmit` hook surfaces unconsumed events on Claude's next typed turn. Zero background cost. |
-| **Watch mode** (opt-in) | browser → Claude | Claude launches a **shell** watcher (`tail -F` on `inbox.jsonl` via the Monitor tool). Shell blocks for free; each real event notifies Claude → one bounded turn → re-arm. Zero token cost while idle. |
+| **Passive inbox** (always on) | browser → Claude | Click → `POST /event` → append `inbox.jsonl`. A `UserPromptSubmit` hook surfaces unconsumed events on Claude's next typed turn. Zero background cost. Always active (plugin-shipped hook) and is the fallback whenever the watcher isn't running. |
+| **Watch mode** (default) | browser → Claude | Claude launches a **shell** watcher (`tail -F` on `inbox.jsonl` via the Monitor tool). Shell blocks for free; each real event notifies Claude → one bounded turn → re-arm. Zero token cost while idle. Started automatically on any `/pell:visualize` open/draw and on proactive skill draws; opt out per-invocation with `no-watch`; at most one watcher per session. |
 
-**Token discipline (non-negotiable):** the input watcher is plain shell, never a recurring LLM agent, `loop`, or cron timer. Claude is invoked only when a real event lands. The watcher blocks indefinitely — **no short timeouts that cause periodic empty wake-ups**. Passive tier spawns no background process at all.
+**Token discipline (non-negotiable):** the input watcher is plain shell, never a recurring LLM agent, `loop`, or cron timer. Claude is invoked only when a real event lands. The watcher blocks indefinitely — **no short timeouts that cause periodic empty wake-ups**. Default-on does not change the cost profile: a session runs at most one watcher, which costs nothing until a click arrives. The passive tier spawns no background process at all.
 
 ## 2. Components
 
@@ -97,12 +97,15 @@ Freeform-first per Pell convention. Recognized forms:
 
 |-|-|
 | Invocation | Action |
-| `/pell:visualize` | Ensure server up; print the URL. |
-| `/pell:visualize "<description>"` | Ensure up; Claude composes a fragment visualizing the description, writes `scratch.html`; print the URL. |
-| `/pell:visualize watch` | Ensure up; launch the shell watcher (Tier 3). |
+| `/pell:visualize` | Ensure server up; print the URL; start watch mode. |
+| `/pell:visualize "<description>"` | Ensure up; Claude composes a fragment visualizing the description, writes `scratch.html`; print the URL; start watch mode. |
+| `/pell:visualize no-watch` | As above (open/draw) but do **not** auto-start the watcher this invocation. |
+| `/pell:visualize watch` | Ensure up; (re)arm the watcher explicitly. Watch is on by default — only needed to restart after `stop-watch`. |
 | `/pell:visualize stop-watch` | Stop the watcher (leave server running). |
 | `/pell:visualize stop` | Stop the watcher and kill the server via `server.pid`. |
-| `/pell:visualize clear` | Blank `scratch.html`. |
+| `/pell:visualize clear` | Blank `scratch.html` (does not start the watcher). |
+
+Watch mode (Tier 3) starts automatically after open/draw unless `no-watch` is passed, and only if a watcher isn't already running this session.
 
 Anything else in `$ARGUMENTS` is freeform context for the fragment Claude composes.
 
@@ -114,7 +117,8 @@ Anything else in `$ARGUMENTS` is freeform context for the fragment Claude compos
 1. Ensure the server is running (start `server.py` in the background from the skill's bundled path if not).
 2. Write the HTML/Markdown fragment to `scratch.html`.
 3. Mention the URL once per session.
-4. Documents the HTML-vs-Markdown auto-detect convention (§4) and the `pellSend` interaction convention — so when Claude wants input, it renders interactive elements rather than asking in text.
+4. Start watch mode (default) if a watcher isn't already running this session — same zero-token shell watcher as the command's Tier 3. The proactive skill arms watch by default so clicks react live; the always-on passive hook is the fallback.
+5. Documents the HTML-vs-Markdown auto-detect convention (§4) and the `pellSend` interaction convention — so when Claude wants input, it renders interactive elements rather than asking in text.
 
 ## 7. Asset path resolution
 
@@ -155,6 +159,6 @@ The server serves `viewer.html` / `marked.min.js` from its own directory and wat
 - **Multiple / per-project pads** — one global pad only. Multi-pad routing is a future concern.
 - **Auto-opening the browser** — we print the URL; the user opens it.
 - **Authentication / network exposure** — loopback only, by design.
-- **Instant reaction to a click while Claude is fully idle** — clicks surface on the next turn (passive) or via the opt-in watcher (best-effort immediacy pending §10.3). Not a guaranteed real-time wake.
+- **Instant reaction to a click while Claude is fully idle** — clicks surface on the next turn (passive hook) or, with the default watcher running, as near-real-time Monitor events (confirmed working in smoke testing). The watcher requires an open session; it is not a wake-from-cold mechanism.
 - **A component framework or persistent canvas history** — the pad shows the latest fragment; Claude authors raw HTML/Markdown. No widget library, no scrollback.
 - **Recurring LLM polling of any kind** — explicitly forbidden for cost reasons (§1).

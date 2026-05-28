@@ -302,22 +302,23 @@ Composes the full pre-implementation workflow in one command: fetches the Jira t
 
 **When `superpowers` is missing:** falls back to a lightweight inline substitute (3 questions, writes a starter spec) so the user still leaves the command with a useful artifact. Install `superpowers@claude-plugins-official` for the full design + plan workflow.
 
-### `/pell:visualize [concept | watch | stop-watch | stop | clear]`
+### `/pell:visualize [concept | no-watch | watch | stop-watch | stop | clear]`
 
 Opens a live browser "second screen" Claude can draw to. A zero-dependency local server (Python stdlib, `127.0.0.1` only) serves a page that live-renders a file Claude writes to — diagrams, SVG, tables, before/after comparisons — over Server-Sent Events.
 
 ```
-/pell:visualize                        # start server, print URL
+/pell:visualize                        # start server, print URL, begin watching
 /pell:visualize "auth flow"            # start server and render a fragment for that concept
-/pell:visualize watch                  # react to page clicks in near-real-time via a shell watcher
+/pell:visualize no-watch               # open/draw without arming the click watcher
+/pell:visualize watch                  # re-arm the watcher (only needed after stop-watch)
 /pell:visualize stop-watch             # stop the watcher, keep the server
 /pell:visualize stop                   # shut down server
 /pell:visualize clear                  # blank the pad
 ```
 
-**Bidirectional:** pages can call `pellSend(payload)` (e.g. on a button click) to POST events to an inbox. A bundled `UserPromptSubmit` hook surfaces those events to Claude on its next turn — so Claude can render clickable options and read your choice back without a text prompt.
+**Bidirectional, live by default:** pages can call `pellSend(payload)` (e.g. on a button click) to POST events to an inbox. Watch mode is on by default — a zero-token shell watcher (`tail -F` via the Monitor tool, one per session) makes Claude react to clicks in near-real-time; pass `no-watch` to opt out. Either way a bundled `UserPromptSubmit` hook surfaces clicks to Claude on its next turn, so nothing is lost. Claude can render clickable options and read your choice back without a text prompt.
 
-**Auto-invoked:** the `visual-scratchpad` skill fires proactively when Claude is about to explain something inherently visual (architecture diagrams, data flows, comparison tables). Requires `python3`; degrades gracefully to a terminal explanation if absent.
+**Auto-invoked:** the `visual-scratchpad` skill fires proactively when Claude is about to explain something inherently visual (architecture diagrams, data flows, comparison tables), and also arms watch mode by default. Requires `python3`; degrades gracefully to a terminal explanation if absent.
 
 **Side effects:** starts a local process on `127.0.0.1`. `stop` kills it. No network exposure; no files written outside the repo's scratch path.
 
