@@ -101,6 +101,7 @@ RRS-1041 — Customer cannot complete checkout on Safari
 What do you want to do?
   c = claim (assign to you)
   s = start work (claim + /pell:start-work)
+  d = design (claim + /pell:from-ticket — branch + brainstorm + plan)
   v = view (no action, just print full description)
   n = next (return to the list)
   q = quit
@@ -117,6 +118,8 @@ Behavior per choice:
 
 - **`s` (start work)** — first claim (same as `c`, with the same y/n gate unless pre-authorized), then invoke `/pell:start-work RRS-1041` with any leftover freeform context from Step 1 appended. Start-work handles its own prompts (branch, transition).
 
+- **`d` (design)** — first claim (same as `c`, with the same y/n gate unless pre-authorized), then invoke `/pell:from-ticket RRS-1041` with any leftover freeform context from Step 1 appended. from-ticket creates the branch via start-work and then runs the brainstorm → plan workflow (notify-don't-force if superpowers is absent).
+
 - **`v` (view)** — call `mcp__plugin_atlassian_atlassian__getJiraIssue` with `cloudId`, `issueIdOrKey: "RRS-1041"`, `fields: ["summary", "description", "status", "issuetype", "priority", "reporter", "created", "labels"]`, `responseContentFormat: "markdown"`. Print: summary, status, type, reporter, labels, description (truncated to 1500 chars if longer with `…[truncated]`). Then return to the action menu for the same ticket.
 
 - **`n` (next)** — return to Step 5 list prompt (don't re-render the list — keep numbering).
@@ -128,7 +131,7 @@ Behavior per choice:
 ## Operator notes
 
 - **Read-only by default.** Every Jira write (assignment) is gated on a y/n unless the user pre-authorized in Step 1.
-- **Never** transition tickets from this command. Transitions are `/pell:start-work`'s job (via `s` choice) or `/pell:finish-work`'s job.
+- **Never** transition tickets from this command. Transitions are `/pell:start-work`'s job (via the `s` or `d` choice — `d` routes through start-work inside from-ticket) or `/pell:finish-work`'s job.
 - **Never** modify priority, labels, or any other field. Triage here means *claim or skip* — re-prioritization is a Jira-UI activity.
 - If the user picks `s` for a ticket and `/pell:start-work` already has cached transitions for the project, start-work's normal flow applies — don't re-prompt for transition discovery here.
 - If the user invokes from outside a git repo, `c` and `v` still work; `s` will fail in start-work's pre-flight (which is fine).

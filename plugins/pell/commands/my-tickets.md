@@ -87,13 +87,14 @@ Below the list, render exactly one of:
 
 The `searchJiraIssuesUsingJql` MCP returns `isLast`/`nextPageToken` but no total count. Don't promise a total you can't deliver.
 
-## Step 5 — Offer to chain into start-work
+## Step 5 — Offer to chain into start-work or from-ticket
 
 After the list, ask:
 
-> Start work on one of these? Enter a number, or `n` to skip.
+> Start work on one of these? Enter a number for a branch (`/pell:start-work`), or `<number> plan` to also brainstorm + plan (`/pell:from-ticket`). `n` to skip.
 
-- **A number that maps to a listed ticket** → invoke `/pell:start-work <KEY>` for that ticket. Pass through any remaining freeform context the user may have included originally (e.g. if they typed `/pell:my-tickets RRS assign to me`, when they pick a number that pre-authorization carries through). Hand off to start-work's normal flow — the user still confirms the branch name and any per-action Jira prompts there.
+- **A bare number that maps to a listed ticket** → invoke `/pell:start-work <KEY>` for that ticket. Pass through any remaining freeform context the user may have included originally (e.g. if they typed `/pell:my-tickets RRS assign to me`, when they pick a number that pre-authorization carries through). Hand off to start-work's normal flow — the user still confirms the branch name and any per-action Jira prompts there.
+- **A number followed by `plan` or `design`** (e.g. `2 plan`) → invoke `/pell:from-ticket <KEY>` for that ticket instead, forwarding the same leftover freeform context. from-ticket creates the branch (via start-work) and then runs the brainstorm → plan workflow.
 - **`n` (or empty/Enter)** → exit cleanly. No side effects.
 - **An out-of-range number** → "That's not on the list — pick `1` through `<N>`, or `n` to skip." Re-prompt once. After a second miss, exit cleanly.
 
