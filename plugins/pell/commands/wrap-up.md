@@ -37,3 +37,57 @@ Then invoke `/pell:local-review <forwarded args>` via the Skill tool.
 - If `local-review` reports "No changes to review." → treat Stage A as complete; proceed to Stage B (which will also see a clean tree and skip).
 - If `local-review` exits non-zero (rare; usually means a reviewer-agent crash that local-review couldn't gracefully degrade) → surface the error and exit. Do NOT proceed to Stage B or C. The user's working tree is unchanged.
 - If `local-review` applies fixes and the user declines further review-action prompts, that's normal flow — Stage A completes when local-review returns control.
+
+## Step 3 — Stage B: Commit gate
+
+This is the only piece of orchestration `wrap-up` does itself.
+
+### 3.1 Detect dirty tree
+
+Run `git status --porcelain`. If the output is empty → skip the rest of Stage B and proceed to Stage C.
+
+### 3.2 Show what's pending
+
+Print the result of `git status --short` so the user can see what's about to be committed (or what they're declining).
+
+### 3.3 Resolve the commit message
+
+- If `commit message: <text>` was in `$ARGUMENTS` → use `<text>` verbatim
+- Otherwise, default to `apply review fixes`
+
+### 3.4 Decide on commit action
+
+- **If `auto-commit` was in `$ARGUMENTS`:** commit directly without prompting (skip to 3.6).
+- **Otherwise:** prompt y/n (3.5).
+
+### 3.5 y/n prompt (when not auto-committing)
+
+Print exactly:
+
+```
+Working tree has uncommitted changes (shown above).
+Commit them before opening the PR?
+  Default message: "<resolved message from 3.3>"
+  (y to commit with default, message: "<new text>" to override, n to exit)
+```
+
+- `y` (or empty/Enter) → commit with the resolved message
+- `message: "<new text>"` → use `<new text>` as the commit message and commit
+- `n` → exit cleanly with: `Working tree must be clean before /pell:finish-work — commit or stash, then re-run.`
+
+### 3.6 Stage the commit
+
+- If `add all` / `include untracked` was in `$ARGUMENTS` → run `git add -A`
+- Otherwise → run `git add -u` (only tracked modifications)
+
+### 3.7 Detect empty staging
+
+Run `git diff --cached --quiet`. If it returns exit 0 (no staged changes — typically because the dirty tree was only untracked files and `add -u` skipped them), exit with:
+
+> Nothing staged for commit — the dirty tree contains only untracked files. Pass `add all` to include them, or stash/commit manually. Re-run when the tree is clean.
+
+### 3.8 Commit
+
+Run `git commit -m "<resolved message>"`. On failure, surface the git error verbatim and exit. Do NOT proceed to Stage C — the PR would be opened from the wrong tip.
+
+On success, print: `✓ Committed working-tree changes: "<resolved message>"`
