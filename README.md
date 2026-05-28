@@ -302,6 +302,25 @@ Composes the full pre-implementation workflow in one command: fetches the Jira t
 
 **When `superpowers` is missing:** falls back to a lightweight inline substitute (3 questions, writes a starter spec) so the user still leaves the command with a useful artifact. Install `superpowers@claude-plugins-official` for the full design + plan workflow.
 
+### `/pell:visualize [concept | watch | stop-watch | stop | clear]`
+
+Opens a live browser "second screen" Claude can draw to. A zero-dependency local server (Python stdlib, `127.0.0.1` only) serves a page that live-renders a file Claude writes to — diagrams, SVG, tables, before/after comparisons — over Server-Sent Events.
+
+```
+/pell:visualize                        # start server, print URL
+/pell:visualize "auth flow"            # start server and render a fragment for that concept
+/pell:visualize watch                  # react to page clicks in near-real-time via a shell watcher
+/pell:visualize stop-watch             # stop the watcher, keep the server
+/pell:visualize stop                   # shut down server
+/pell:visualize clear                  # blank the pad
+```
+
+**Bidirectional:** pages can call `pellSend(payload)` (e.g. on a button click) to POST events to an inbox. A bundled `UserPromptSubmit` hook surfaces those events to Claude on its next turn — so Claude can render clickable options and read your choice back without a text prompt.
+
+**Auto-invoked:** the `visual-scratchpad` skill fires proactively when Claude is about to explain something inherently visual (architecture diagrams, data flows, comparison tables). Requires `python3`; degrades gracefully to a terminal explanation if absent.
+
+**Side effects:** starts a local process on `127.0.0.1`. `stop` kills it. No network exposure; no files written outside the repo's scratch path.
+
 ### `/pell:related [KEY]`
 
 Show the connection graph for a Jira ticket — linked issues (blocks, is blocked by, relates to, duplicates), parent/subtasks, external links (PR URLs, docs), and any Bitbucket PRs in the current repo whose title or branch references the key. Auto-detects the key from the current branch if you don't pass one. Strictly read-only.
