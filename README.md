@@ -32,7 +32,7 @@ Most commands need at least one of these two Atlassian MCP servers connected to 
 
 | Server | Auth | Required for |
 |-|-|-|
-| `atlassian-bitbucket` | API token (Basic auth) | Any PR-mode review (`/pell:correctness-review`, `/pell:quality-review`, `/pell:security-review` against a PR), `/pell:three-pass-review`, future Bitbucket-aware commands |
+| `atlassian-bitbucket` | API token (Basic auth) | Any PR-mode review (`/pell:correctness-review`, `/pell:quality-review`, `/pell:security-review` against a PR), `/pell:three-pass-review`, `/pell:address-review`, future Bitbucket-aware commands |
 | `plugin:atlassian:atlassian` | OAuth | Jira ticket context in `/pell:three-pass-review`, future Jira-ops commands |
 
 ### Setting up the Atlassian MCPs
@@ -151,6 +151,35 @@ Composite — runs the correctness, quality, and security reviewers in parallel 
 8. Asks which severity threshold (if any) to post as inline comments: `blockers-only`, `major+`, `minor+` (default), `all`, `select`, or `no`
 
 **Output:** markdown report + optional Bitbucket inline comments.
+
+### `/pell:address-review <PR>`
+
+The receiving end of `/pell:three-pass-review`. Pulls the review comments back off one of your Bitbucket PRs so you can triage and respond to each. Lists inline + general comments grouped by file, then walks each through apply-a-fix / reply / skip — reusing `/pell:local-review`'s fix-application discipline. Never commits, never pushes, never resolves threads.
+
+**Usage:**
+
+```
+/pell:address-review 1042
+/pell:address-review vrs_default#1042
+/pell:address-review https://bitbucket.org/pellsoftware/vrs_default/pull-requests/1042
+/pell:address-review 1042 unresolved             # only open threads
+/pell:address-review 1042 since last push        # only comments newer than your last push
+/pell:address-review 1042 from Dana              # only a given reviewer's comments
+/pell:address-review 1042 --dry-run              # just list the comments, no triage
+/pell:address-review 1042 use bitbucket          # fetch surrounding code via MCP for fixes
+```
+
+**Behavior:**
+
+1. Resolves the PR identifier + context source
+2. Fetches PR metadata + all comment pages from Bitbucket
+3. Drops deleted/draft comments; groups the rest by file (inline) plus a General bucket. Default scope is **all comments**, narrowable client-side (`unresolved`, `since last push`, `from <name>`)
+4. Per-comment triage — you drive `fix` / `reply` / `skip` (or a bulk verb like `all fix`)
+5. Applies only concrete, mechanical fixes to the working tree (never weakens tests, never guesses); drafts thread replies for confirmation before posting
+
+**Output:** grouped comment list + optional working-tree edits + optional inline replies. A reply does **not** resolve the thread — the Bitbucket API has no resolve action, so that stays a manual UI step.
+
+**Side-effects:** fixes touch the working tree only (never commits/pushes — that's `/pell:finish-work`); replies post only on per-comment confirmation. Authorship isn't enforced (no Bitbucket current-user identity).
 
 ### `/pell:my-tickets`
 

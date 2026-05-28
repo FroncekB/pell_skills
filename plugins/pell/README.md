@@ -24,6 +24,12 @@ Pell Software's Claude Code toolkit. One plugin, many skills. Install once, get 
 
 Both composites can add a test-coverage pass — pass `with tests` to enable it (off by default).
 
+The receiving end of review:
+
+| Command | What it does |
+|-|-|
+| `/pell:address-review <PR>` | Pull review comments back off your PR and triage each — apply mechanical fix in-place / reply on the thread / skip. Never commits, pushes, or resolves threads. |
+
 ### Repo-wide audits (read-only)
 
 | Command | What it does |
