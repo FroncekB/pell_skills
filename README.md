@@ -242,6 +242,22 @@ Close out a branch by opening a Bitbucket PR and (only on explicit consent) tran
 
 **Side-effects:** PR creation always confirmed; push, Jira transition, and comment are opt-in (per-action `y` or inline pre-auth). Never merges, approves, or closes anything.
 
+### `/pell:wrap-up [freeform context]`
+
+Closes out a branch in one command: runs `/pell:local-review` on the working tree, offers to commit any review fixes (or pre-existing uncommitted work), then dispatches `/pell:finish-work` to push, open the PR, and transition Jira. Thin orchestrator — all side-effect prompts come from the dispatched stages, except the commit gate which `/pell:wrap-up` owns.
+
+```
+/pell:wrap-up
+/pell:wrap-up apply minor+                              # auto-apply review fixes at minor+ severity
+/pell:wrap-up skip review, push it                     # already reviewed; push + open PR
+/pell:wrap-up apply major+, into develop, comment with PR link
+/pell:wrap-up auto-commit, commit message: "fix per review"
+```
+
+**Side effects:** all delegated to the dispatched stages, with one exception: the commit gate between review and finish-work is gated on a y/n prompt (or pre-auth via `auto-commit`). `wrap-up` itself never mutates Jira, pushes, opens PRs, or modifies the working tree beyond the staged commit.
+
+**Skip flags:** `skip review` / `already reviewed` / `no review` skips Stage A.
+
 ### `/pell:start-work <KEY>`
 
 Fetch a Jira ticket, create a properly-named local branch (`<KEY>-<sentence-case-description>`), and optionally assign / transition the ticket. Read-only against Jira by default — side-effects only fire when you pre-authorize inline or answer `y` to a named per-action prompt.
