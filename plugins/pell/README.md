@@ -30,6 +30,12 @@ The receiving end of review:
 |-|-|
 | `/pell:address-review <PR>` | Pull review comments back off your PR and triage each — apply mechanical fix in-place / reply on the thread / skip. Never commits, pushes, or resolves threads. |
 
+Finding PRs to review:
+
+| Command | What it does |
+|-|-|
+| `/pell:review-queue [repo …]` | List open PRs where you're a requested reviewer (one repo or the whole workspace), then chain into a review on the one you pick. Read-only. |
+
 ### Repo-wide audits (read-only)
 
 | Command | What it does |
@@ -90,7 +96,14 @@ Each dimension uses its own scale; reviewers surface everything (no pre-filterin
 
 ## Prerequisites
 
+**MCP servers:**
+
 - **Bitbucket MCP** (`atlassian-bitbucket`, API-token auth) — any PR-mode review, `three-pass-review`, `finish-work`, `related`.
 - **Jira MCP** (`plugin:atlassian:atlassian`, OAuth) — all Jira-ops commands and Jira context in `three-pass-review`.
 
 See the [marketplace root README](../../README.md) for the dual-connection setup.
+
+**Optional plugin dependencies** (notify-don't-force — the command/skill skips or substitutes inline when absent):
+
+- **superpowers** — `/pell:from-ticket` dispatches `superpowers:brainstorming` → `writing-plans` for the design/plan stage. Without it, from-ticket runs a lightweight inline design pass instead.
+- **frontend-design** — `frontend-router` routes UI work to it. Without it, the skill notifies and steps aside.
