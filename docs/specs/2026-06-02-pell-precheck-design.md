@@ -78,10 +78,15 @@ Each signal is gathered independently. Any failure degrades to a `_<signal> fail
 
 Two passes, results merged and deduped, with `self_key` removed:
 
-- **Semantic (primary):** `mcp__plugin_atlassian_atlassian__search` with `query` = the distinctive terms extracted from `query_text` (drop stopwords; keep domain nouns, feature names, symbols). This is Rovo search — the MCP guidance is to prefer it for content discovery. Filter results to **Jira issues** (discard Confluence pages). When a target project resolved and `workspace` was not passed, keep only issues in that project.
+- **Semantic (primary):** `mcp__plugin_atlassian_atlassian__search` with `query` = the distinctive terms extracted from `query_text` (drop stopwords; keep domain nouns, feature names, symbols). This is Rovo search — the MCP guidance is to prefer it for content discovery. Filter results to **Jira issues** (discard Confluence pages). When a target project resolved and `workspace` was not passed, keep only issues in that project. (Rovo `search` derives `cloudId` from the access token — it takes no `cloudId` parameter.)
 - **Precision (scoping/recency):** `mcp__plugin_atlassian_atlassian__searchJiraIssuesUsingJql` with:
   - `cloudId`
-  - `jql`: `<project clause> AND (summary ~ "<terms>" OR text ~ "<terms>") ORDER BY created DESC`, where `<project clause>` is `project = "<KEY>"` when scoped, omitted when `workspace`. Append ` AND statusCategory != Done` only if `open only` was set.
+  - `jql`: build the WHERE clause by joining the parts that apply with ` AND ` (omit any that don't), then append ` ORDER BY created DESC`:
+    - `project = "<KEY>"` — only when scoped (omit when `workspace`)
+    - `(summary ~ "<terms>" OR text ~ "<terms>")` — always
+    - `statusCategory != Done` — only when `open only` was set
+
+    Composing the clause from parts (rather than appending after `ORDER BY`) keeps the JQL valid for every flag combination — e.g. `workspace` + `open only` yields `statusCategory != Done AND (summary ~ "<terms>" OR text ~ "<terms>") ORDER BY created DESC`.
   - `fields`: `["summary", "status", "issuetype", "created"]`
   - `maxResults`: 30
 
@@ -101,9 +106,9 @@ Skip if `skip git` or not in a repo. Run `git log --oneline --grep="<term>" -i` 
 
 ## 7. Synthesize and render
 
-Classify each Jira candidate as `likely-dupe`, `related`, or `unrelated` (drop `unrelated` from the report) with a one-line rationale. Overall verdict:
+Classify each Jira candidate as `likely-dupe`, `related`, or `unrelated` (drop `unrelated` from the report) with a one-line rationale. Verdicts are ordered — evaluate top-down and emit the first that matches, so **LIKELY DUPLICATE** wins whenever any of its conditions hold (even if in-flight work also exists):
 
-- **LIKELY DUPLICATE** — a `likely-dupe` Jira ticket, or repo evidence the feature already exists.
+- **LIKELY DUPLICATE** — a `likely-dupe` Jira ticket exists, or the feature is already shipped (repo implementation found in 6b, or a merged commit found in 6d).
 - **POSSIBLY ADDRESSED** — only `related` tickets, partial repo hits, or in-flight work that overlaps.
 - **APPEARS NOVEL** — nothing material across all signals.
 
@@ -138,10 +143,10 @@ When the Jira pass ran unscoped (no project resolved), add under the Jira sectio
 
 ## 8. Side effects (existing-key path only)
 
-Offered only when `self_key` is present (free text has no write target) and there is at least one `likely-dupe` Jira match. For each such match, in order:
+Offered only when `self_key` is present (free text has no write target) and there is at least one `likely-dupe` Jira match.
 
-- **Link:** prompt `Link <self_key> as a duplicate of <match_key>? (y/n)`. On `y`: call `mcp__plugin_atlassian_atlassian__getIssueLinkTypes` to resolve the Duplicate link type's name and direction, then `mcp__plugin_atlassian_atlassian__createIssueLink` so that `self_key` *duplicates* the older `match_key` (map to `inwardIssue`/`outwardIssue` per the resolved direction). Print `Linked ✓`.
-- **Comment:** prompt `Comment on <self_key> noting the suspected duplicate / existing implementation? (y/n)`. On `y`: call `mcp__plugin_atlassian_atlassian__addCommentToJiraIssue` with `contentFormat: "markdown"` and a body listing the matched tickets / PRs / implementation with links. Print `Commented ✓`.
+- **Link — once per `likely-dupe` match, in order.** Prompt `Link <self_key> as a duplicate of <match_key>? (y/n)`. On `y`: call `mcp__plugin_atlassian_atlassian__getIssueLinkTypes` to resolve the Duplicate link type's name, then `mcp__plugin_atlassian_atlassian__createIssueLink` with `inwardIssue: <self_key>` (the acting/duplicating issue) and `outwardIssue: <match_key>` (the older, duplicated issue), so the stored link reads "`<self_key>` duplicates `<match_key>`". This follows the `createIssueLink` convention where the acting issue is the `inwardIssue` (its own example: "A is blocked by B" → `inwardIssue: B`, `outwardIssue: A`); if a site's `getIssueLinkTypes` direction descriptions imply the opposite mapping, follow those so the human-readable direction is preserved. Print `Linked ✓`.
+- **Comment — once, after the link prompts.** If there was at least one `likely-dupe` match, prompt `Comment on <self_key> noting the suspected duplicate(s) / existing implementation? (y/n)`. On `y`: call `mcp__plugin_atlassian_atlassian__addCommentToJiraIssue` with `contentFormat: "markdown"` and a body listing the matched tickets / PRs / implementation with links. Print `Commented ✓`.
 
 Each write is independent and individually gated. No pre-authorization shortcut in v1.
 
