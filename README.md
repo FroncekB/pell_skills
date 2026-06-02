@@ -32,8 +32,8 @@ Most commands need at least one of these two Atlassian MCP servers connected to 
 
 | Server | Auth | Required for |
 |-|-|-|
-| `atlassian-bitbucket` | API token (Basic auth) | Any PR-mode review (`/pell:correctness-review`, `/pell:quality-review`, `/pell:security-review` against a PR), `/pell:three-pass-review`, `/pell:address-review`, future Bitbucket-aware commands |
-| `plugin:atlassian:atlassian` | OAuth | Jira ticket context in `/pell:three-pass-review`, future Jira-ops commands |
+| `atlassian-bitbucket` | API token (Basic auth) | Any PR-mode review (`/pell:correctness-review`, `/pell:quality-review`, `/pell:security-review` against a PR), `/pell:three-pass-review`, `/pell:address-review`, `/pell:review-queue`, future Bitbucket-aware commands |
+| `plugin:atlassian:atlassian` | OAuth | Jira ticket context in `/pell:three-pass-review`, your identity for `/pell:review-queue`, future Jira-ops commands |
 
 ### Setting up the Atlassian MCPs
 
@@ -180,6 +180,31 @@ The receiving end of `/pell:three-pass-review`. Pulls the review comments back o
 **Output:** grouped comment list + optional working-tree edits + optional inline replies. A reply does **not** resolve the thread — the Bitbucket API has no resolve action, so that stays a manual UI step.
 
 **Side-effects:** fixes touch the working tree only (never commits/pushes — that's `/pell:finish-work`); replies post only on per-comment confirmation. Authorship isn't enforced (no Bitbucket current-user identity).
+
+### `/pell:review-queue [repo …]`
+
+Find the open Bitbucket PRs where you're a requested reviewer, then jump straight into reviewing one — the reviewer-role mirror of `/pell:my-tickets` (list, then chain). Pass one or more repos to scan just those; pass nothing to scan the whole workspace. Read-only: picking a PR hands off to a review command.
+
+**Usage:**
+
+```
+/pell:review-queue                          # scan the whole pellsoftware workspace
+/pell:review-queue atlasviewapp             # just one repo (fast)
+/pell:review-queue atlasviewapp rrs-web     # a couple of repos
+/pell:review-queue unapproved               # hide PRs you've already approved
+/pell:review-queue newest first             # flip the default oldest-first ordering
+/pell:review-queue --reset                  # re-resolve your cached Atlassian account id
+```
+
+**Behavior:**
+
+1. Resolves your identity via `atlassianUserInfo` (account id cached in `pell-config.json`)
+2. Resolves the repo set — your args, or every repo in the workspace
+3. Queries each repo server-side for OPEN PRs where you're a reviewer (`q=reviewers.account_id`, parallel batches)
+4. Renders a numbered list grouped by repo, oldest-waiting first; drafts marked `[draft]`
+5. Reply with a number to chain into `/pell:three-pass-review` (or `<n> correctness|quality|security|test` for a lighter single-dimension pass)
+
+**Output:** numbered PR list. **Side-effects:** read-only except the chained review you pick (plus the account-id cache write). Needs both the Bitbucket MCP and the Atlassian OAuth connection (for identity).
 
 ### `/pell:my-tickets`
 
@@ -376,6 +401,24 @@ Show the connection graph for a Jira ticket — linked issues (blocks, is blocke
 **Output:** sectioned report — ticket header, parent/subtasks, linked issues (with their statuses), external links, Bitbucket PRs, and a one-line connection-density summary. Useful before starting work, or as quick context when reviewing a PR.
 
 **Side-effects:** none. No writes, no transitions, no comments.
+
+### `/pell:precheck [KEY | idea]`
+
+Before you commit effort to a ticket, check whether the work already exists — as a similar Jira ticket (open or Done), as code already in the repo, as an in-flight PR/branch, or as a recently-merged commit. Accepts an existing ticket key (grooming a backlog item) or free text (an idea you're about to file). Renders a verdict — **LIKELY DUPLICATE / POSSIBLY ADDRESSED / APPEARS NOVEL** — with the supporting evidence. Read-only by default.
+
+**Usage:**
+
+```
+/pell:precheck RRS-1041                       # check an existing ticket against everything
+/pell:precheck add CSV export to admin        # check a proposed idea before filing it
+/pell:precheck RRS-1041 workspace             # widen Jira search beyond the ticket's project
+/pell:precheck add CSV export skip bitbucket  # drop the in-flight-PR signal
+/pell:precheck RRS-1041 open only             # exclude Done tickets from Jira matches
+```
+
+**Output:** sectioned report — verdict, similar Jira tickets (tagged `likely-dupe` / `related`), repo implementation hits, in-flight PRs/branches, and recently-merged commits.
+
+**Side-effects:** none by default. Only on the existing-key path, when a `likely-dupe` is found, it offers (each `(y/n)`-gated): a "duplicates" issue link from the ticket to the older one, and a comment noting the suspected duplicate. Never resolves, closes, transitions, or edits fields.
 
 ### `/pell:local-review`
 

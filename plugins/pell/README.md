@@ -50,6 +50,7 @@ Finding PRs to review:
 | `/pell:my-tickets` | List open Jira tickets assigned to you; chain into start-work. |
 | `/pell:triage <KEY>` | List unclaimed tickets in a project; claim / start / view per ticket. |
 | `/pell:related [KEY]` | Show a ticket's connection graph (links, subtasks, PRs). Read-only. |
+| `/pell:precheck [KEY \| idea]` | Check if work is already filed / built / in-flight — similar tickets, repo impl, open PRs, merged commits. Gated link/comment. Read-only by default. |
 | `/pell:start-work <KEY>` | Fetch a ticket, create a branch, optionally assign / transition. |
 | `/pell:finish-work` | Open a Bitbucket PR; optionally transition Jira + comment the PR link. |
 
