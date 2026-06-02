@@ -81,7 +81,144 @@ If something fails, see the troubleshooting note in `docs/specs/2026-05-27-pell-
 
 ---
 
-## Commands reference
+## Commands
+
+Eighteen commands, grouped by where they fall in a ticket's lifecycle — pick up work, review it, audit broadly, ship it.
+
+| Stage | Commands |
+|-|-|
+| **Starting work** | [`my-tickets`](#pellmy-tickets) · [`triage`](#pelltriage-key) · [`related`](#pellrelated-key) · [`precheck`](#pellprecheck-key--idea) · [`start-work`](#pellstart-work-key) · [`from-ticket`](#pellfrom-ticket-jira-key-freeform-context) |
+| **Reviewing code** | [`correctness-review`](#pellcorrectness-review) · [`quality-review`](#pellquality-review) · [`security-review`](#pellsecurity-review) · [`test-review`](#pelltest-review) · [`local-review`](#pelllocal-review) · [`three-pass-review`](#pellthree-pass-review-pr) · [`address-review`](#pelladdress-review-pr) · [`review-queue`](#pellreview-queue-repo-) |
+| **Auditing a whole repo** | [`repo-review`](#pellrepo-review) · [`repo-security-review`](#pellrepo-security-review) |
+| **Finishing up** | [`finish-work`](#pellfinish-work) · [`wrap-up`](#pellwrap-up-freeform-context) |
+| **Visual scratchpad** | [`visualize`](#pellvisualize-concept--no-watch--watch--stop-watch--stop--clear) |
+
+Everything is **read-only by default** — every side effect is gated on a `(y/n)` prompt that names exactly what will change. See [Design principles](#design-principles) for the full policy.
+
+---
+
+## Starting work
+
+### `/pell:my-tickets`
+
+List the open Jira tickets assigned to you. Optional freeform filters by project key or status. After rendering, offers to chain straight into `/pell:start-work` for any ticket you pick.
+
+**Usage:**
+
+```
+/pell:my-tickets                                # all open assigned to you
+/pell:my-tickets RRS                            # filter to project RRS
+/pell:my-tickets in progress                    # filter by status
+/pell:my-tickets blocked
+/pell:my-tickets RRS in progress                # combine project + status
+```
+
+**Output:** numbered list grouped by status (In Progress → In Review → To Do → others), each line showing key, type, priority, summary, and relative updated time. Reply with a number to start work on that ticket — invokes `/pell:start-work <KEY>` directly. Reply `n` to skip.
+
+**Side-effects:** read-only against Jira (no transitions, no assignments). The transparent `cloud_id` cache write to `pell-config.json` is the only file change.
+
+### `/pell:triage <KEY>`
+
+List the **unclaimed** Jira tickets in a project (the work nobody owns yet), grouped by priority. Per-ticket prompt to claim it (assign to you), start work on it, view its full description, or skip. Read-only unless you say `y` per ticket — sister of `/pell:my-tickets`, but for the team pool instead of your queue.
+
+**Usage:**
+
+```
+/pell:triage RRS                                # unclaimed RRS tickets, grouped by priority
+/pell:triage RRS high                           # filter to High/Highest priority
+/pell:triage RRS today                          # only tickets created in last 24h
+/pell:triage RRS all                            # include already-assigned (the full backlog)
+/pell:triage RRS assign to me                   # pre-authorize the claim prompt
+```
+
+**Per-ticket actions:** `c` = claim, `s` = claim + start-work, `v` = view full description, `n` = next, `q` = quit. Claiming requires `y` confirmation unless `assign to me` was pre-authorized.
+
+**Side-effects:** assignment writes only on per-ticket `y`. Never transitions or modifies any other field.
+
+### `/pell:related [KEY]`
+
+Show the connection graph for a Jira ticket — linked issues (blocks, is blocked by, relates to, duplicates), parent/subtasks, external links (PR URLs, docs), and any Bitbucket PRs in the current repo whose title or branch references the key. Auto-detects the key from the current branch if you don't pass one. Strictly read-only.
+
+**Usage:**
+
+```
+/pell:related RRS-1020                          # explicit key
+/pell:related                                   # auto-detect from current branch
+/pell:related RRS-1020 skip bitbucket           # Jira-only context
+/pell:related RRS-1020 open only                # filter Bitbucket PRs to OPEN state
+```
+
+**Output:** sectioned report — ticket header, parent/subtasks, linked issues (with their statuses), external links, Bitbucket PRs, and a one-line connection-density summary. Useful before starting work, or as quick context when reviewing a PR.
+
+**Side-effects:** none. No writes, no transitions, no comments.
+
+### `/pell:precheck [KEY | idea]`
+
+Before you commit effort to a ticket, check whether the work already exists — as a similar Jira ticket (open or Done), as code already in the repo, as an in-flight PR/branch, or as a recently-merged commit. Accepts an existing ticket key (grooming a backlog item) or free text (an idea you're about to file). Renders a verdict — **LIKELY DUPLICATE / POSSIBLY ADDRESSED / APPEARS NOVEL** — with the supporting evidence. Read-only by default.
+
+**Usage:**
+
+```
+/pell:precheck RRS-1041                       # check an existing ticket against everything
+/pell:precheck add CSV export to admin        # check a proposed idea before filing it
+/pell:precheck RRS-1041 workspace             # widen Jira search beyond the ticket's project
+/pell:precheck add CSV export skip bitbucket  # drop the in-flight-PR signal
+/pell:precheck RRS-1041 open only             # exclude Done tickets from Jira matches
+```
+
+**Output:** sectioned report — verdict, similar Jira tickets (tagged `likely-dupe` / `related`), repo implementation hits, in-flight PRs/branches, and recently-merged commits.
+
+**Side-effects:** none by default. Only on the existing-key path, when a `likely-dupe` is found, it offers (each `(y/n)`-gated): a "duplicates" issue link from the ticket to the older one, and a comment noting the suspected duplicate. Never resolves, closes, transitions, or edits fields.
+
+### `/pell:start-work <KEY>`
+
+Fetch a Jira ticket, create a properly-named local branch (`<KEY>-<sentence-case-description>`), and optionally assign / transition the ticket. Read-only against Jira by default — side-effects only fire when you pre-authorize inline or answer `y` to a named per-action prompt.
+
+**Usage:**
+
+```
+/pell:start-work RRS-1020
+/pell:start-work RRS-1020 call it Fixing-cart-bug          # override the derived description
+/pell:start-work RRS-1020 assign to me                     # pre-authorize assignment
+/pell:start-work RRS-1020 yeah move it to in-progress      # pre-authorize transition
+/pell:start-work RRS-1020 assign to me and move to in-progress
+/pell:start-work RRS-1020 don't touch jira                 # branch only, no Jira side-effects
+/pell:start-work RRS-1020 --reset                          # re-prompt cached transition for this project
+```
+
+**Behavior:**
+
+1. Parses `<KEY>` and any inline pre-authorizations from `$ARGUMENTS`
+2. Fetches the ticket via the Atlassian Jira MCP (cloud_id cached transparently on first use)
+3. Pre-flight: aborts if not in a git repo or the working tree is dirty; offers to switch to an existing branch for the same key
+4. Derives a sentence-case-with-hyphens description from the Jira summary; asks you to accept, override, or cancel
+5. `git checkout -b <KEY>-<description>` from your current branch (no base switching)
+6. Optionally assigns and transitions the ticket — each as its own `y/n` prompt with the specific status name, or pre-authorized inline
+7. Reports what changed
+
+**Side-effects:** branch creation requires confirmation; Jira changes are strictly opt-in. Never commits, pushes, or opens a PR.
+
+### `/pell:from-ticket <JIRA-KEY> [freeform context]`
+
+Composes the full pre-implementation workflow in one command: fetches the Jira ticket and its connections, creates a branch via `/pell:start-work`, then hands off to `superpowers:brainstorming` → `superpowers:writing-plans` for the design spec and implementation plan.
+
+```
+/pell:from-ticket RRS-1020
+/pell:from-ticket RRS-1020 assign to me, move it to In Progress
+/pell:from-ticket RRS-1020 skip start-work, design only
+/pell:from-ticket RRS-1020 plan only         # resume from existing spec
+/pell:from-ticket RRS-1020 --reset           # delete artifacts and start over
+```
+
+**Side effects:** delegated to the dispatched stages. `from-ticket` itself does not mutate Jira, commit, push, or open PRs. `--reset` deletes prior `docs/superpowers/specs/<KEY>-*.md` and `plans/<KEY>-*.md` files after one consolidated confirmation.
+
+**When `superpowers` is missing:** falls back to a lightweight inline substitute (3 questions, writes a starter spec) so the user still leaves the command with a useful artifact. Install `superpowers@claude-plugins-official` for the full design + plan workflow.
+
+---
+
+## Reviewing code
+
+The single-dimension reviewers (`correctness`, `quality`, `security`, `test`) share one usage shape and run against either local changes or a Bitbucket PR. The composites (`local-review`, `three-pass-review`) run several at once.
 
 ### `/pell:correctness-review`
 
@@ -123,6 +260,31 @@ Single-dimension review for test adequacy. Judges the *tests*, not the productio
 **Usage:** same shape as `/pell:correctness-review`.
 
 **Output:** markdown report grouped by severity (`major` / `minor` / `nit` — no blocker tier; a missing test isn't a production blocker). Read-only.
+
+### `/pell:local-review`
+
+Composite — runs the correctness, quality, and security reviewers against local uncommitted changes (add `with tests` for a fourth test-coverage pass). Each reviewer reads `CLAUDE.md` and convention files to ground findings in the repo's actual style. Offers to apply suggested fixes in-place.
+
+**Usage:**
+
+```
+/pell:local-review                          # all uncommitted (staged + unstaged) — the default
+/pell:local-review --staged                 # staged only
+/pell:local-review --uncommitted            # unstaged only
+/pell:local-review --range main..HEAD       # changes between two refs
+/pell:local-review src/components/          # restrict to a path
+/pell:local-review with tests               # add the optional test-coverage pass
+/pell:local-review focus on the new auth module
+```
+
+**Behavior:**
+
+1. Resolves the diff scope from `$ARGUMENTS`
+2. Dispatches the reviewer agents in parallel — correctness, quality, security, and (opt-in via `with tests`) test-coverage — each discovers CLAUDE.md and conventions on its own
+3. Renders a unified report grouped by dimension and severity
+4. Asks which severity threshold to apply as fixes: same selection menu as `/pell:three-pass-review`
+
+**Output:** markdown report + optional in-place file edits. Never commits.
 
 ### `/pell:three-pass-review <PR>`
 
@@ -206,41 +368,9 @@ Find the open Bitbucket PRs where you're a requested reviewer, then jump straigh
 
 **Output:** numbered PR list. **Side-effects:** read-only except the chained review you pick (plus the account-id cache write). Needs both the Bitbucket MCP and the Atlassian OAuth connection (for identity).
 
-### `/pell:my-tickets`
+---
 
-List the open Jira tickets assigned to you. Optional freeform filters by project key or status. After rendering, offers to chain straight into `/pell:start-work` for any ticket you pick.
-
-**Usage:**
-
-```
-/pell:my-tickets                                # all open assigned to you
-/pell:my-tickets RRS                            # filter to project RRS
-/pell:my-tickets in progress                    # filter by status
-/pell:my-tickets blocked
-/pell:my-tickets RRS in progress                # combine project + status
-```
-
-**Output:** numbered list grouped by status (In Progress → In Review → To Do → others), each line showing key, type, priority, summary, and relative updated time. Reply with a number to start work on that ticket — invokes `/pell:start-work <KEY>` directly. Reply `n` to skip.
-
-**Side-effects:** read-only against Jira (no transitions, no assignments). The transparent `cloud_id` cache write to `pell-config.json` is the only file change.
-
-### `/pell:triage <KEY>`
-
-List the **unclaimed** Jira tickets in a project (the work nobody owns yet), grouped by priority. Per-ticket prompt to claim it (assign to you), start work on it, view its full description, or skip. Read-only unless you say `y` per ticket — sister of `/pell:my-tickets`, but for the team pool instead of your queue.
-
-**Usage:**
-
-```
-/pell:triage RRS                                # unclaimed RRS tickets, grouped by priority
-/pell:triage RRS high                           # filter to High/Highest priority
-/pell:triage RRS today                          # only tickets created in last 24h
-/pell:triage RRS all                            # include already-assigned (the full backlog)
-/pell:triage RRS assign to me                   # pre-authorize the claim prompt
-```
-
-**Per-ticket actions:** `c` = claim, `s` = claim + start-work, `v` = view full description, `n` = next, `q` = quit. Claiming requires `y` confirmation unless `assign to me` was pre-authorized.
-
-**Side-effects:** assignment writes only on per-ticket `y`. Never transitions or modifies any other field.
+## Auditing a whole repo
 
 ### `/pell:repo-review`
 
@@ -275,6 +405,10 @@ Whole-repo security audit. Same orchestration shape as `/pell:repo-review` but d
 **Output policy:** findings include the **literal matched value** for sensitive-data hits (you chose this trade-off during design). Treat the output as sensitive — don't paste it into chat or PR comments without consideration.
 
 **Side-effects:** none — read-only.
+
+---
+
+## Finishing up
 
 ### `/pell:finish-work`
 
@@ -321,49 +455,9 @@ Closes out a branch in one command: runs `/pell:local-review` on the working tre
 
 **Skip flags:** `skip review` / `already reviewed` / `no review` skips Stage A.
 
-### `/pell:start-work <KEY>`
+---
 
-Fetch a Jira ticket, create a properly-named local branch (`<KEY>-<sentence-case-description>`), and optionally assign / transition the ticket. Read-only against Jira by default — side-effects only fire when you pre-authorize inline or answer `y` to a named per-action prompt.
-
-**Usage:**
-
-```
-/pell:start-work RRS-1020
-/pell:start-work RRS-1020 call it Fixing-cart-bug          # override the derived description
-/pell:start-work RRS-1020 assign to me                     # pre-authorize assignment
-/pell:start-work RRS-1020 yeah move it to in-progress      # pre-authorize transition
-/pell:start-work RRS-1020 assign to me and move to in-progress
-/pell:start-work RRS-1020 don't touch jira                 # branch only, no Jira side-effects
-/pell:start-work RRS-1020 --reset                          # re-prompt cached transition for this project
-```
-
-**Behavior:**
-
-1. Parses `<KEY>` and any inline pre-authorizations from `$ARGUMENTS`
-2. Fetches the ticket via the Atlassian Jira MCP (cloud_id cached transparently on first use)
-3. Pre-flight: aborts if not in a git repo or the working tree is dirty; offers to switch to an existing branch for the same key
-4. Derives a sentence-case-with-hyphens description from the Jira summary; asks you to accept, override, or cancel
-5. `git checkout -b <KEY>-<description>` from your current branch (no base switching)
-6. Optionally assigns and transitions the ticket — each as its own `y/n` prompt with the specific status name, or pre-authorized inline
-7. Reports what changed
-
-**Side-effects:** branch creation requires confirmation; Jira changes are strictly opt-in. Never commits, pushes, or opens a PR.
-
-### `/pell:from-ticket <JIRA-KEY> [freeform context]`
-
-Composes the full pre-implementation workflow in one command: fetches the Jira ticket and its connections, creates a branch via `/pell:start-work`, then hands off to `superpowers:brainstorming` → `superpowers:writing-plans` for the design spec and implementation plan.
-
-```
-/pell:from-ticket RRS-1020
-/pell:from-ticket RRS-1020 assign to me, move it to In Progress
-/pell:from-ticket RRS-1020 skip start-work, design only
-/pell:from-ticket RRS-1020 plan only         # resume from existing spec
-/pell:from-ticket RRS-1020 --reset           # delete artifacts and start over
-```
-
-**Side effects:** delegated to the dispatched stages. `from-ticket` itself does not mutate Jira, commit, push, or open PRs. `--reset` deletes prior `docs/superpowers/specs/<KEY>-*.md` and `plans/<KEY>-*.md` files after one consolidated confirmation.
-
-**When `superpowers` is missing:** falls back to a lightweight inline substitute (3 questions, writes a starter spec) so the user still leaves the command with a useful artifact. Install `superpowers@claude-plugins-official` for the full design + plan workflow.
+## Visual scratchpad
 
 ### `/pell:visualize [concept | no-watch | watch | stop-watch | stop | clear]`
 
@@ -384,66 +478,6 @@ Opens a live browser "second screen" Claude can draw to. A zero-dependency local
 **Auto-invoked:** the `visual-scratchpad` skill fires proactively when Claude is about to explain something inherently visual (architecture diagrams, data flows, comparison tables), and also arms watch mode by default. Requires `python3`; degrades gracefully to a terminal explanation if absent.
 
 **Side effects:** starts a local process on `127.0.0.1`. `stop` kills it. No network exposure; no files written outside the repo's scratch path.
-
-### `/pell:related [KEY]`
-
-Show the connection graph for a Jira ticket — linked issues (blocks, is blocked by, relates to, duplicates), parent/subtasks, external links (PR URLs, docs), and any Bitbucket PRs in the current repo whose title or branch references the key. Auto-detects the key from the current branch if you don't pass one. Strictly read-only.
-
-**Usage:**
-
-```
-/pell:related RRS-1020                          # explicit key
-/pell:related                                   # auto-detect from current branch
-/pell:related RRS-1020 skip bitbucket           # Jira-only context
-/pell:related RRS-1020 open only                # filter Bitbucket PRs to OPEN state
-```
-
-**Output:** sectioned report — ticket header, parent/subtasks, linked issues (with their statuses), external links, Bitbucket PRs, and a one-line connection-density summary. Useful before starting work, or as quick context when reviewing a PR.
-
-**Side-effects:** none. No writes, no transitions, no comments.
-
-### `/pell:precheck [KEY | idea]`
-
-Before you commit effort to a ticket, check whether the work already exists — as a similar Jira ticket (open or Done), as code already in the repo, as an in-flight PR/branch, or as a recently-merged commit. Accepts an existing ticket key (grooming a backlog item) or free text (an idea you're about to file). Renders a verdict — **LIKELY DUPLICATE / POSSIBLY ADDRESSED / APPEARS NOVEL** — with the supporting evidence. Read-only by default.
-
-**Usage:**
-
-```
-/pell:precheck RRS-1041                       # check an existing ticket against everything
-/pell:precheck add CSV export to admin        # check a proposed idea before filing it
-/pell:precheck RRS-1041 workspace             # widen Jira search beyond the ticket's project
-/pell:precheck add CSV export skip bitbucket  # drop the in-flight-PR signal
-/pell:precheck RRS-1041 open only             # exclude Done tickets from Jira matches
-```
-
-**Output:** sectioned report — verdict, similar Jira tickets (tagged `likely-dupe` / `related`), repo implementation hits, in-flight PRs/branches, and recently-merged commits.
-
-**Side-effects:** none by default. Only on the existing-key path, when a `likely-dupe` is found, it offers (each `(y/n)`-gated): a "duplicates" issue link from the ticket to the older one, and a comment noting the suspected duplicate. Never resolves, closes, transitions, or edits fields.
-
-### `/pell:local-review`
-
-Composite — runs the correctness, quality, and security reviewers against local uncommitted changes (add `with tests` for a fourth test-coverage pass). Each reviewer reads `CLAUDE.md` and convention files to ground findings in the repo's actual style. Offers to apply suggested fixes in-place.
-
-**Usage:**
-
-```
-/pell:local-review                          # all uncommitted (staged + unstaged) — the default
-/pell:local-review --staged                 # staged only
-/pell:local-review --uncommitted            # unstaged only
-/pell:local-review --range main..HEAD       # changes between two refs
-/pell:local-review src/components/          # restrict to a path
-/pell:local-review with tests               # add the optional test-coverage pass
-/pell:local-review focus on the new auth module
-```
-
-**Behavior:**
-
-1. Resolves the diff scope from `$ARGUMENTS`
-2. Dispatches the reviewer agents in parallel — correctness, quality, security, and (opt-in via `with tests`) test-coverage — each discovers CLAUDE.md and conventions on its own
-3. Renders a unified report grouped by dimension and severity
-4. Asks which severity threshold to apply as fixes: same selection menu as `/pell:three-pass-review`
-
-**Output:** markdown report + optional in-place file edits. Never commits.
 
 ---
 
@@ -467,7 +501,7 @@ The skill is deliberately quiet about pure bug fixes, refactors, tests, and non-
 
 ## Composable building blocks (sub-agents)
 
-The three reviewers are also exposed as composable agents — any current or future command in the `pell` plugin can dispatch them:
+The reviewers are also exposed as composable agents — any current or future command in the `pell` plugin can dispatch them:
 
 | Agent | `subagent_type` | Returns |
 |-|-|-|
@@ -478,17 +512,7 @@ The three reviewers are also exposed as composable agents — any current or fut
 | Repo quality reviewer | `repo-quality-reviewer` | Same shape, with optional `also_in` for cross-file findings within a chunk |
 | Repo security reviewer | `repo-security-reviewer` | Same shape |
 
-This is the foundation of Bucket 3 (workflow composers) — future commands like `pell:wrap-up` will dispatch these without re-implementing review logic.
-
----
-
-## Coming soon
-
-Per the roadmap in [`docs/specs/2026-05-27-pell-skills-architecture.md`](docs/specs/2026-05-27-pell-skills-architecture.md):
-
-- **Jira workflow ops:** `triage`, `related` — adaptive to per-project Jira transition workflows
-- **House-style guidance:** `claude-md-init` (scaffold a project-specific CLAUDE.md from a Pell template)
-- **Workflow composers:** `from-ticket` (Jira → branch → brainstorm → plan → TDD), `wrap-up` (review → open PR → comment → close ticket)
+This is the foundation of the workflow composers: commands like `/pell:wrap-up` dispatch these without re-implementing review logic.
 
 ---
 
