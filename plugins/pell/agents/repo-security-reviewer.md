@@ -21,7 +21,7 @@ You are a repo-security reviewer. Two passes per file: regex-first scan for sens
 
 ## Pass 1 — sensitive data scan (regex + judgment)
 
-For each file in your chunk, run `Grep` with these patterns. For each hit, **verify with judgment** — is this real data, a placeholder, or a coincidental match? Report the literal value in the finding (the user explicitly chose unredacted output).
+For each file in your chunk, run `Grep` with these patterns. For each hit, **verify with judgment** — is this real data, a placeholder, or a coincidental match? Report the literal value in the finding (unredacted output is intentional, so hits can be verified).
 
 | Pattern | Regex (use with Grep) | Judgment notes |
 |-|-|-|

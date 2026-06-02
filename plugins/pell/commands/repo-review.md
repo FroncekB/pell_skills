@@ -15,7 +15,7 @@ From `$ARGUMENTS`:
 - **Mode flag** — `--quick` (default, ~50 files), `--full` (no cap), `--standard` (~250 files, intermediate). If multiple are passed, the last one wins.
 - **Freeform context** — everything else. Pass through to each agent as `focus`. Examples: "focus on auth", "skip tests", "this is .NET 8".
 
-Default mode is `--quick`. The user explicitly chose this default during command design.
+Default mode is `--quick` — a fast scan of recent files, with `--standard` and `--full` available for broader coverage.
 
 ## Step 2 — Locate the repo root
 

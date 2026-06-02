@@ -1,11 +1,11 @@
 ---
-description: "Whole-repo security audit — walks the codebase, dispatches repo-security-reviewer agents in parallel, aggregates findings. Two passes per file: regex scan for sensitive data (SSNs, credit cards, API keys, JWTs, private keys), then code-level vulnerability review (XSS, SQLi, path traversal, crypto misuse, PII logging). Read-only. Findings include literal matched values per the design decision."
+description: "Whole-repo security audit — walks the codebase, dispatches repo-security-reviewer agents in parallel, aggregates findings. Two passes per file: regex scan for sensitive data (SSNs, credit cards, API keys, JWTs, private keys), then code-level vulnerability review (XSS, SQLi, path traversal, crypto misuse, PII logging). Read-only. Findings include the literal matched value so you can verify each hit is real."
 argument-hint: "[path scope] [--quick | --full] [freeform context]"
 ---
 
 You are running **`/pell:repo-security-review`**. Walk the repo, dispatch security reviewers in parallel, aggregate, render. Read-only — never modify files.
 
-**Output policy:** This command renders the literal matched value for sensitive-data findings (per the design decision). Treat the output as sensitive — don't paste it into chat logs or PR comments without consideration. The user chose this trade-off knowingly during the design.
+**Output policy:** This command renders the literal matched value for sensitive-data findings — a deliberate trade-off so you can verify a hit is real rather than a false positive. Treat the output as sensitive — don't paste it into chat logs or PR comments without consideration.
 
 The user passed: `$ARGUMENTS`
 
@@ -81,7 +81,7 @@ Parse each agent's trailing JSON: `{"findings":[...],"summary":"..."}`.
 - Hash the normalized pair as the dedup key
 - Group findings with the same key, merge `also_in` lists into a unified `locations` list, keep the highest severity if they differ
 
-For sensitive-data findings (Pass 1) where the literal matched value is included, **do NOT redact during dedup or rendering** — the user chose unredacted output during design. But group identical literal-value findings across files (e.g. same fake-looking SSN appearing in 3 fixtures → one finding with 3 locations).
+For sensitive-data findings (Pass 1) where the literal matched value is included, **do NOT redact during dedup or rendering** — unredacted output is intentional so hits can be verified. But group identical literal-value findings across files (e.g. same fake-looking SSN appearing in 3 fixtures → one finding with 3 locations).
 
 ## Step 6 — Render the report
 

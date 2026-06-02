@@ -402,7 +402,7 @@ Whole-repo security audit. Same orchestration shape as `/pell:repo-review` but d
 
 **Usage:** same shape as `/pell:repo-review` (path scope, `--quick`/`--standard`/`--full`, freeform).
 
-**Output policy:** findings include the **literal matched value** for sensitive-data hits (you chose this trade-off during design). Treat the output as sensitive — don't paste it into chat or PR comments without consideration.
+**Output policy:** findings include the **literal matched value** for sensitive-data hits — this is a deliberate trade-off so you can verify a hit is real rather than a false positive. Treat the output as sensitive — don't paste it into chat or PR comments without consideration.
 
 **Side-effects:** none — read-only.
 
