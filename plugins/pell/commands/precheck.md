@@ -80,3 +80,42 @@ Separately run `git branch -a` and keep branches whose names match the terms. If
 ### 6d — Merged: recent git history
 
 Skip if `skip git` was set or not in a repo. Run `git log --oneline --grep="<term>" -i` (one or a few representative terms; cap to ~15 lines) to find already-merged work. Record `<short-sha> <subject> (<relative date>)`.
+
+## Step 7 — Synthesize and render
+
+Classify each Jira candidate as `likely-dupe`, `related`, or `unrelated` (drop `unrelated`) with a one-line rationale. Set the overall verdict:
+
+Verdicts are ordered — evaluate top-down and emit the first that matches; **LIKELY DUPLICATE** wins if any of its conditions are met (even when in-flight work also exists).
+
+- **LIKELY DUPLICATE** — a `likely-dupe` Jira ticket exists, or the feature is already shipped (repo implementation found in 6b, or a merged commit found in 6d).
+- **POSSIBLY ADDRESSED** — only `related` tickets, partial repo hits, or overlapping in-flight work.
+- **APPEARS NOVEL** — nothing material across all signals.
+
+Render (text tags, no emoji — consistent with `related`/`triage`):
+
+```
+## Precheck — RRS-1041   (or: proposed — "add CSV export")
+
+**Verdict:** LIKELY DUPLICATE
+<one-line synthesis>
+
+### Similar Jira tickets
+- [likely-dupe] RRS-1012 — Add CSV export to admin dashboard [Done]  ·  near-identical summary, same component
+- [related]    RRS-880  — Admin data export overhaul [In Progress]  ·  overlapping area, broader scope
+_None found._
+
+### Repo implementation
+- src/export/csv.ts:42  exportToCsv()  — feature appears implemented
+_No matching implementation found._
+
+### In-flight work
+- PR #210  Add CSV export  OPEN  feat/csv-export · A. Dev
+- branch  RRS-880-export  (remote)
+_None._
+
+### Recently merged
+- abc1234  feat: add CSV export  (3w ago)
+_None._
+```
+
+Render `_None found._` / `_No matching implementation found._` / `_None._` under any section with no hits. When a signal was skipped by the user, render `_Skipped (<reason>)._` instead. When the Jira pass ran unscoped, append this below the ticket list (or below the `_None found._` line) in the Jira section: `_Searched all projects — no target project resolved._`
