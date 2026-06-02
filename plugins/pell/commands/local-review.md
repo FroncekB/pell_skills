@@ -56,7 +56,7 @@ Return findings as JSON per your output contract.
 
 ## Step 3 — Aggregate and render
 
-Same report shape as `/pell:three-pass-review`:
+Render this report:
 
 ```
 ## Local Review — <scope description>
@@ -82,7 +82,11 @@ Same report shape as `/pell:three-pass-review`:
 (Include the **Test Coverage** section only if the test pass was enabled via `with tests`.)
 
 ### Counts
-- (same as three-pass-review, including the Test Coverage line only if the test pass was enabled)
+- Correctness: <blocker> blocker, <major> major, <minor> minor, <nit> nits
+- Quality: <major> major, <minor> minor, <nit> nits
+- Security: <critical> critical, <high> high, <medium> medium, <low> low, <nit> nits
+- Test Coverage: <major> major, <minor> minor, <nit> nits   (include only if test pass enabled)
+- **Total:** <N findings>
 
 ### Verdict
 <one paragraph>

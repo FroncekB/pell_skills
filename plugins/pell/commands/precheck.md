@@ -127,9 +127,9 @@ Offer this **only** when `self_key` is present and there is at least one `likely
 **Link — once per `likely-dupe` match, in order.** For each match, prompt `Link <self_key> as a duplicate of <match_key>? (y/n)`. On `n`, move to the next match. On `y`:
 - Call `mcp__plugin_atlassian_atlassian__getIssueLinkTypes` with `cloudId` to resolve the duplicate link type's exact name (commonly `Duplicate` — outward `duplicates`, inward `is duplicated by`).
 - Call `mcp__plugin_atlassian_atlassian__createIssueLink` with `cloudId`, `type` = that name, `inwardIssue: <self_key>`, `outwardIssue: <match_key>` — so the stored link reads "`<self_key>` duplicates `<match_key>`". (Per the `createIssueLink` convention the *acting* issue is the `inwardIssue`; cf. its own example "A is blocked by B" → `inwardIssue: B`, `outwardIssue: A`. If this site's `getIssueLinkTypes` descriptions imply the opposite mapping, follow those so the human-readable direction is preserved.)
-- Print `Linked ✓`.
+- Print `Linked.`.
 
-**Comment — once, after the link prompts.** If there was at least one `likely-dupe` match, prompt `Comment on <self_key> noting the suspected duplicate(s) / existing implementation? (y/n)`. On `y`: call `mcp__plugin_atlassian_atlassian__addCommentToJiraIssue` with `cloudId`, `issueIdOrKey: self_key`, `contentFormat: "markdown"`, and a `commentBody` listing the matched tickets / PRs / implementation with links. Print `Commented ✓`.
+**Comment — once, after the link prompts.** If there was at least one `likely-dupe` match, prompt `Comment on <self_key> noting the suspected duplicate(s) / existing implementation? (y/n)`. On `y`: call `mcp__plugin_atlassian_atlassian__addCommentToJiraIssue` with `cloudId`, `issueIdOrKey: self_key`, `contentFormat: "markdown"`, and a `commentBody` listing the matched tickets / PRs / implementation with links. Print `Commented.`.
 
 Each write is independent and individually gated. There is no pre-authorization shortcut in v1.
 

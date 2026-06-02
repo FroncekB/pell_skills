@@ -1,6 +1,6 @@
 ---
 description: Whole-repo code-quality audit — walks the codebase, dispatches repo-quality-reviewer agents in parallel, aggregates findings. Looks for duplicated logic, dead code, convention drift, oversized files, tight coupling, ignored warnings. Read-only.
-argument-hint: "[path scope] [--quick | --full] [freeform context]"
+argument-hint: "[path scope] [--quick | --standard | --full] [freeform context]"
 ---
 
 You are running **`/pell:repo-review`**. Walk the repo, dispatch reviewer agents in parallel, aggregate, render. Read-only — never modify files.

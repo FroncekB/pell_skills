@@ -221,9 +221,9 @@ This step runs **only** when Step 5's presence check failed. Other failure modes
 **Final report after the write:**
 
 ```
-✓ Branch created (start-work output above)
-✓ Starter spec saved to docs/superpowers/specs/<KEY>-YYYY-MM-DD-design.md
-  ↳ Install superpowers for the full brainstorm + plan workflow.
+Branch created (start-work output above)
+Starter spec saved to docs/superpowers/specs/<KEY>-YYYY-MM-DD-design.md
+  Note: install superpowers for the full brainstorm + plan workflow.
 ```
 
 If the filesystem write fails, print the error verbatim and leave the user on the branch start-work created. Do not retry.

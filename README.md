@@ -77,13 +77,13 @@ claude mcp add-json atlassian-bitbucket '{
 
 **6. Verify both are connected** with `/mcp` — you should see `atlassian-bitbucket: ✓ Connected` and the Atlassian plugin's tools available.
 
-If something fails, see the troubleshooting note in `docs/specs/2026-05-27-pell-skills-architecture.md` §5 or check that the API token has all the scopes listed above.
+If something fails, re-check the setup steps above and confirm the API token has all the scopes listed.
 
 ---
 
 ## Commands
 
-Eighteen commands, grouped by where they fall in a ticket's lifecycle — pick up work, review it, audit broadly, ship it.
+Nineteen commands, grouped by where they fall in a ticket's lifecycle — pick up work, review it, audit broadly, ship it.
 
 | Stage | Commands |
 |-|-|

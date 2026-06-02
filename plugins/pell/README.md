@@ -82,7 +82,7 @@ Repo-based reviewers (dispatched by the repo audits):
 
 - `repo-quality-reviewer` · `repo-security-reviewer`
 
-All return structured JSON: `{findings: [{severity, file, line, finding, fix}], summary}`.
+All return structured JSON: `{findings: [{severity, file, line, finding, fix}], summary}`. The repo-based reviewers may add an optional `also_in` array on a finding to list other locations where the same issue recurs.
 
 ## Severity scales
 

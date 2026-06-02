@@ -242,9 +242,13 @@ pell_skills/
         │   ├── correctness-review.md
         │   ├── quality-review.md
         │   ├── security-review.md
+        │   ├── test-review.md
         │   # Review composites
         │   ├── three-pass-review.md         # PR + Jira context → optional inline comments
         │   ├── local-review.md              # working tree → optional in-place fixes
+        │   # PR review ops
+        │   ├── review-queue.md              # open PRs awaiting your review → chain into a review
+        │   ├── address-review.md            # triage inbound PR comments on your own PR
         │   # Repo-wide audits
         │   ├── repo-review.md
         │   ├── repo-security-review.md
@@ -252,6 +256,7 @@ pell_skills/
         │   ├── my-tickets.md
         │   ├── triage.md
         │   ├── related.md
+        │   ├── precheck.md                  # is this work already filed / in-flight / shipped?
         │   ├── start-work.md
         │   ├── finish-work.md
         │   # Bucket 3: composers
@@ -269,6 +274,7 @@ pell_skills/
             ├── correctness-reviewer.md
             ├── quality-reviewer.md
             ├── security-reviewer.md
+            ├── test-reviewer.md
             # Repo-based reviewer agents
             ├── repo-quality-reviewer.md
             └── repo-security-reviewer.md
@@ -315,6 +321,6 @@ All previously-open questions are now resolved:
 
 The conventions above are stable and the bulk of the roadmap shipped:
 
-- **Built:** all three review primitives + both composites; both repo-wide audits (`repo-review`, `repo-security-review`) with their `repo-*-reviewer` agents; Jira ops (`my-tickets`, `triage`, `related`, `start-work`, `finish-work`); composers (`from-ticket`, `wrap-up`); the `frontend-router` skill; and the `visual-scratchpad` skill + `/pell:visualize` command (a surface not anticipated in the original build order).
-- **Not yet built:** `claude-md-init` (§10.6) and the optional `pell-everything` meta-plugin (§9).
-- **Remaining gaps + the next wave of work** (doc reconciliation, a test-coverage review dimension, `address-review`, `review-queue`, and second-tier composers) are tracked in [`2026-05-28-pell-toolkit-improvements-plan.md`](2026-05-28-pell-toolkit-improvements-plan.md).
+- **Built:** all four review primitives (`correctness`, `quality`, `security`, `test`) + both composites; the PR review ops (`review-queue`, `address-review`); both repo-wide audits (`repo-review`, `repo-security-review`) with their `repo-*-reviewer` agents; Jira ops (`my-tickets`, `triage`, `related`, `precheck`, `start-work`, `finish-work`); composers (`from-ticket`, `wrap-up`); the `frontend-router` skill; and the `visual-scratchpad` skill + `/pell:visualize` command (a surface not anticipated in the original build order).
+- **Not yet built:** `claude-md-init` (§10.6), second-tier composers (e.g. standup, release-notes), and the optional `pell-everything` meta-plugin (§9).
+- **Open work** is tracked in [`2026-05-28-pell-toolkit-improvements-plan.md`](2026-05-28-pell-toolkit-improvements-plan.md).

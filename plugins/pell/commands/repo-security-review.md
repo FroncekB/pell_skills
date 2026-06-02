@@ -1,6 +1,6 @@
 ---
 description: "Whole-repo security audit — walks the codebase, dispatches repo-security-reviewer agents in parallel, aggregates findings. Two passes per file: regex scan for sensitive data (SSNs, credit cards, API keys, JWTs, private keys), then code-level vulnerability review (XSS, SQLi, path traversal, crypto misuse, PII logging). Read-only. Findings include the literal matched value so you can verify each hit is real."
-argument-hint: "[path scope] [--quick | --full] [freeform context]"
+argument-hint: "[path scope] [--quick | --standard | --full] [freeform context]"
 ---
 
 You are running **`/pell:repo-security-review`**. Walk the repo, dispatch security reviewers in parallel, aggregate, render. Read-only — never modify files.
@@ -27,7 +27,7 @@ Capture as `repo_root`.
 
 ## Step 3 — Build the file list
 
-Same algorithm as `/pell:repo-review`:
+Build a recency-weighted list, filter against the deny-list, and cap by mode:
 
 **Quick mode:** `git log --pretty=format: --name-only -200 | sort -u | head -100`, filter, cap at 50.
 
@@ -53,7 +53,7 @@ If the resulting list is empty, exit with: "No files matched after filtering. Tr
 
 ## Step 4 — Chunk and dispatch
 
-Same chunking strategy as `/pell:repo-review`: group by extension, target ~25 files per agent, dispatch up to N parallel agents based on mode.
+Group files by extension, target ~25 files per agent, and set the agent count by mode: quick (≤50 files) → 2 agents; standard (≤250) → up to 10 agents; full (no cap) → up to 12 agents with the file count divided evenly (warn the user about scan duration if more than 300 files would land in one chunk).
 
 **Dispatch** — in a **single assistant message**, make N parallel `Agent` tool calls with `subagent_type="repo-security-reviewer"`. Each gets:
 
@@ -92,7 +92,7 @@ For sensitive-data findings (Pass 1) where the literal matched value is included
 **Mode:** <quick | standard | full>
 **Files scanned:** <N>   **Agents:** <M>   **Findings (after dedup):** <K>
 
-⚠ This report contains literal sensitive values for any Pass-1 findings. Handle accordingly.
+Note: this report contains literal sensitive values for any Pass-1 findings. Handle accordingly.
 
 ### Critical
 - `file:line` — finding (with exploit path or literal value). **Fix:** ...

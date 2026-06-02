@@ -1,5 +1,5 @@
 ---
-description: Open and drive the live visual scratchpad — a browser tab that renders whatever Claude writes to it, with click-back events Claude reacts to live by default. Starts a zero-dependency local server on first use.
+description: Open and drive the live visual scratchpad — a browser tab that renders whatever Claude writes to it, with click-back events Claude reacts to live by default. Starts a no-install local server (Python stdlib only) on first use.
 argument-hint: '"<what to visualize>" | no-watch | watch | stop-watch | stop | clear'
 ---
 

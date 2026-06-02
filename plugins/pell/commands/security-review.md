@@ -22,6 +22,8 @@ For PR mode, parse `workspaceId` (default `pellsoftware`), `repoId`, `prId`. If 
 - Default: `local` — assume the user's working directory is a checkout of the target repo
 - If `$ARGUMENTS` contains phrases like `use bitbucket`, `use mcp`, `use remote`, `fetch via bitbucket`, `not LFS`, or `not local` → use `bitbucket`
 
+Honor any other freeform context.
+
 ## Step 2 — Gather inputs
 
 **PR mode:** in parallel, call:

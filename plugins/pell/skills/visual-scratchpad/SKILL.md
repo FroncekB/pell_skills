@@ -12,7 +12,7 @@ Render the concept to a live browser pad instead of (or alongside) explaining it
 1. **Ensure the server is up.** Check `~/.claude/pell-visual/server.pid`; if it names no live process, start the bundled server in the background (Bash tool, `run_in_background`):
 
    ```bash
-   python3 "${CLAUDE_SKILL_DIR}/server.py" >/dev/null 2>&1
+   python3 "${CLAUDE_PLUGIN_ROOT}/skills/visual-scratchpad/server.py" >/dev/null 2>&1
    ```
 
    Then read `~/.claude/pell-visual/server.port` for the bound port. If `python3` is unavailable, skip the canvas and explain in the terminal — never block the task.

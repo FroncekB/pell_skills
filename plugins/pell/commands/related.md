@@ -11,7 +11,7 @@ The user passed: `$ARGUMENTS`
 
 From `$ARGUMENTS`, look for a ticket key (regex `\b[A-Z][A-Z0-9]+-\d+\b`). If found, use it.
 
-Otherwise, try to auto-detect from the current branch: run `git branch --show-current` and match the same regex against the result. Pell branches are `<KEY>-<number>-<description>`, so the key prefix is the first match.
+Otherwise, try to auto-detect from the current branch: run `git branch --show-current` and match the same regex against the result. Pell branches are `<KEY>-<description>` (where `<KEY>` is the full issue key, e.g. `RRS-1020-fix-cart`), so the key is the leading match.
 
 If still no key, exit with: "I need a ticket key. Try `/pell:related RRS-1020`, or run this from a branch named like `RRS-1020-...`."
 

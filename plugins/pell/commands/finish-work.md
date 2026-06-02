@@ -66,7 +66,7 @@ Resolve the branch name; remember it as `<base>`.
 
 ## Step 5 — Pre-flight (push state + existing PR)
 
-Run `git rev-parse --abbrev-ref HEAD` to get the current branch name (`<branch>`).
+Run `git branch --show-current` to get the current branch name (`<branch>`).
 
 **Pushed?**
 
@@ -183,7 +183,7 @@ If pre-authorized, run without prompting. Otherwise ask:
 
 On `y`, call `mcp__plugin_atlassian_atlassian__transitionJiraIssue` with `cloudId`, `issueIdOrKey: <KEY>`, `transition: {id: <chosen id>}`.
 
-On failure, print: "⚠ Failed to transition — `<error>`." Continue to Step 7b. Do NOT roll back the PR.
+On failure, print: "Failed to transition — `<error>`." Continue to Step 7b. Do NOT roll back the PR.
 
 On `n`, continue to Step 7b silently.
 
@@ -203,7 +203,7 @@ On `y`, call `mcp__plugin_atlassian_atlassian__addCommentToJiraIssue` with:
 - `commentBody`: `PR opened: <PR URL>`
 - `contentFormat`: `"markdown"`
 
-On failure, print: "⚠ Failed to comment — `<error>`." Continue to Step 8.
+On failure, print: "Failed to comment — `<error>`." Continue to Step 8.
 
 On `n`, continue silently.
 
@@ -212,10 +212,10 @@ On `n`, continue silently.
 Print this report. Omit lines that don't apply:
 
 ```
-✓ Pushed <branch> to origin
-✓ Opened PR #<id>: <PR URL>
-✓ Moved <KEY> to "<new status>"
-✓ Commented on <KEY> with PR link
+Pushed <branch> to origin
+Opened PR #<id>: <PR URL>
+Moved <KEY> to "<new status>"
+Commented on <KEY> with PR link
 
 Ticket: <KEY> — <summary>
 PR: <PR URL>

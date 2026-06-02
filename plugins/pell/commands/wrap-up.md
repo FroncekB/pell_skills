@@ -90,7 +90,7 @@ Run `git diff --cached --quiet`. If it returns exit 0 (no staged changes — typ
 
 Run `git commit -m "<resolved message>"`. On failure, surface the git error verbatim and exit. Do NOT proceed to Stage C — the PR would be opened from the wrong tip.
 
-On success, print: `✓ Committed working-tree changes: "<resolved message>"`
+On success, print: `Committed working-tree changes: "<resolved message>"`
 
 ## Step 4 — Stage C: Dispatch `/pell:finish-work`
 
@@ -129,7 +129,7 @@ Then invoke `/pell:finish-work <forwarded args>` via the Skill tool. (`<forwarde
 
 - Before Stage A: `Running /pell:local-review...` (omit when `skip review`)
 - Before Stage B (only when the tree is dirty): `Working tree has uncommitted changes:` followed by `git status --short` output
-- After Stage B commits: `✓ Committed working-tree changes: "<message>"`
+- After Stage B commits: `Committed working-tree changes: "<message>"`
 - Before Stage C: `Running /pell:finish-work...`
 
 No final synthesis report. finish-work's Step 8 is the last word.

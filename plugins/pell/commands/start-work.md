@@ -135,7 +135,7 @@ On `y`, call `mcp__plugin_atlassian_atlassian__editJiraIssue` with:
 - `issueIdOrKey`: `<KEY>`
 - `fields`: `{"assignee": {"accountId": "<current user accountId>"}}`
 
-On failure, print a single line: "⚠ Failed to assign — `<error message>`." and continue to Step 5b. Do NOT roll back the branch.
+On failure, print a single line: "Failed to assign — `<error message>`." and continue to Step 5b. Do NOT roll back the branch.
 
 On `n`, continue to Step 5b silently.
 
@@ -185,7 +185,7 @@ On `y`, call `mcp__plugin_atlassian_atlassian__transitionJiraIssue` with:
 - `issueIdOrKey`: `<KEY>`
 - `transition`: the `{id}` object from the candidate (you must pass the ID, not the name)
 
-On failure, print a single line: "⚠ Failed to transition — `<error message>`." and continue to Step 6. Do NOT roll back the branch or the assignment.
+On failure, print a single line: "Failed to transition — `<error message>`." and continue to Step 6. Do NOT roll back the branch or the assignment.
 
 On `n`, continue to Step 6 silently.
 
@@ -194,9 +194,9 @@ On `n`, continue to Step 6 silently.
 Print this report. Replace bracketed placeholders with the actual values; omit lines that don't apply (e.g. skip the "Assigned" line if assignment was skipped or declined).
 
 ```
-✓ On branch `<new branch>` (created from `<base branch from `git rev-parse --abbrev-ref HEAD@{1}` if available, else "current branch">`)
-✓ Assigned <KEY> to you
-✓ Moved <KEY> to "<new status>"
+On branch `<new branch>` (created from `<base branch from `git rev-parse --abbrev-ref HEAD@{1}` if available, else "current branch">`)
+Assigned <KEY> to you
+Moved <KEY> to "<new status>"
 
 Ticket: <KEY> — <summary>
 Type: <issuetype.name>   Status: <new status, or original if no transition happened>

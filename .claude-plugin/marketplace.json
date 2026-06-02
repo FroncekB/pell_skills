@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "pell",
-      "description": "Pell Software's Claude Code toolkit: PR/local code reviewers (correctness, quality, security), and Jira workflow ops to come. One plugin, many skills.",
+      "description": "Pell Software's Claude Code toolkit: PR/local code reviewers (correctness, quality, security, test), repo-wide audits, Jira workflow ops (triage, start/finish work, precheck), ticket-to-PR composers, and a live visual scratchpad. One plugin, many skills.",
       "source": "./plugins/pell",
       "category": "productivity"
     }

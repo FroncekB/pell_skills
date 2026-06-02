@@ -8,6 +8,8 @@ import json
 import os
 import sys
 
+# State layout is a contract shared with server.py (DEFAULT_STATE / inbox.jsonl).
+# If you change the directory or the inbox filename, change it in both files.
 STATE = os.path.expanduser("~/.claude/pell-visual")
 INBOX = os.path.join(STATE, "inbox.jsonl")
 OFFSET = os.path.join(STATE, "inbox.offset")

@@ -112,7 +112,7 @@ Behavior per choice:
 - **`c` (claim)** — confirm unless `assign to me` was pre-authorized in Step 1:
   > Assign RRS-1041 to you? (y/n)
 
-  On `y`: call `mcp__plugin_atlassian_atlassian__atlassianUserInfo` to get your `accountId`, then `mcp__plugin_atlassian_atlassian__editJiraIssue` with `cloudId`, `issueIdOrKey: "RRS-1041"`, `fields: { assignee: { accountId: "<your-id>" } }`. Print `Assigned ✓`. Return to the list.
+  On `y`: call `mcp__plugin_atlassian_atlassian__atlassianUserInfo` to get your `accountId`, then `mcp__plugin_atlassian_atlassian__editJiraIssue` with `cloudId`, `issueIdOrKey: "RRS-1041"`, `fields: { assignee: { accountId: "<your-id>" } }`. Print `Assigned.`. Return to the list.
 
   Cache nothing — assignment is per-ticket.
 

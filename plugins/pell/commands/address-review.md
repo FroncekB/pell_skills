@@ -61,7 +61,7 @@ If there are no comments: print `No comments on PR #<prId>.` and stop.
 ### `src/path/File.cs`
 **[1]** L42 · @<author>  [resolved]
 > comment body…
-  ↳ @<replier>: prior reply body…          (existing replies shown for context)
+  - @<replier>: prior reply body…          (existing replies shown for context)
 
 **[2]** L88 · @<author>
 > comment body…

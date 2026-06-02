@@ -1,19 +1,26 @@
 #!/usr/bin/env python3
-"""Zero-dependency local server for the pell visual scratchpad.
+"""Local server for the pell visual scratchpad (Python stdlib only — no pip installs).
 
 Serves the viewer page, live-pushes the watched content file over SSE, and
 accepts browser->Claude events via POST /event. Binds 127.0.0.1 only.
+
+Bundles a vendored marked.min.js (third-party, served at /marked.min.js) for
+client-side Markdown rendering — see marked.min.js for upstream provenance.
+
+The state layout under --state-dir (default ~/.claude/pell-visual) is a contract
+shared with inbox_check.py: scratch.html holds the rendered content, inbox.jsonl
+holds browser->Claude events. Keep the two files in sync if either path changes.
 """
 import argparse
 import json
 import os
-import socket
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ASSETS_DIR = os.path.dirname(os.path.abspath(__file__))
 DEFAULT_STATE = os.path.expanduser("~/.claude/pell-visual")
+MAX_EVENT_BYTES = 1 << 20  # cap on POST /event bodies — loopback-only, but bounded
 
 
 def sse_encode(text):
@@ -30,14 +37,18 @@ def read_text(path):
         return ""
 
 
-def pick_port(preferred, span=10):
+def make_server(preferred, span=10):
+    """Bind a ThreadingHTTPServer on the first free port in the span.
+
+    Constructs the server directly instead of probing a port and rebinding
+    later, so there is no TOCTOU window where another process can claim the
+    port between the check and the bind.
+    """
     for port in range(preferred, preferred + span):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            try:
-                s.bind(("127.0.0.1", port))
-                return port
-            except OSError:
-                continue
+        try:
+            return ThreadingHTTPServer(("127.0.0.1", port), Handler)
+        except OSError:
+            continue
     raise SystemExit("No free port in %d-%d" % (preferred, preferred + span - 1))
 
 
@@ -110,6 +121,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
             return
         length = int(self.headers.get("Content-Length", 0))
+        if length < 0 or length > MAX_EVENT_BYTES:
+            self.send_error(413)
+            return
         raw = self.rfile.read(length).decode("utf-8") if length else ""
         try:
             payload = json.loads(raw)
@@ -137,11 +151,11 @@ def main():
         with open(content_path, "w", encoding="utf-8") as f:
             f.write("")
 
-    port = pick_port(args.port)
     Handler.content_path = content_path
     Handler.inbox_path = inbox_path
 
-    httpd = ThreadingHTTPServer(("127.0.0.1", port), Handler)
+    httpd = make_server(args.port)
+    port = httpd.server_address[1]
     with open(pid_path, "w") as f:
         f.write(str(os.getpid()))
     with open(port_path, "w") as f:

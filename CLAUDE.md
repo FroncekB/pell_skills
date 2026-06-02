@@ -25,7 +25,7 @@ pell_skills/
 2. **Frontmatter is required:**
    ```yaml
    ---
-   description: One sentence on what the command does
+   description: One to three sentences on what the command does
    argument-hint: <expected positional shape>
    ---
    ```
@@ -65,9 +65,11 @@ pell_skills/
 
 ## Context source convention (reviewer agents)
 
+This section is the **maintainer's reference** for the context-source override. Note: the plugin ships as `plugins/pell/` only — this `CLAUDE.md` is **not** installed, so command and agent bodies **cannot** reference it at runtime (a bare "see CLAUDE.md" in a shipped body would resolve to the *user's own* project file). Shipped bodies must restate the trigger phrases and `bitbucketRepoContent` call shape inline and be kept in sync with the canonical wording below.
+
 Reviewers read surrounding code from one of two sources:
 - **`local` (default)** — `Read`/`Grep`/`Glob` against `<repo_root>` (the user's working dir, assumed to be a checkout of the target repo).
-- **`bitbucket` (override)** — `mcp__atlassian-bitbucket__bitbucketRepoContent` against the PR's source branch.
+- **`bitbucket` (override)** — `mcp__atlassian-bitbucket__bitbucketRepoContent` against the PR's source branch. Canonical call shape: `action="files.get"`, `workspaceId=<workspace>`, `repoId=<repo>`, `referenceOrSha=<branch>`, `path=<file>`.
 
 Override is triggered by freeform `$ARGUMENTS` phrases: `use bitbucket`, `use mcp`, `use remote`, `fetch via bitbucket`, `not LFS`, `not local`.
 
@@ -96,8 +98,12 @@ Then invoke the affected command.
 
 ## Style preferences
 
-- Keep command bodies under ~150 lines. If a command grows, factor logic into a sub-agent
+- Keep single-purpose command bodies under ~150 lines; if one grows past that from *duplicated* logic, factor it into a sub-agent. Multi-step composite orchestrators (e.g. `from-ticket`, `finish-work`, `wrap-up`) legitimately run longer — their length is sequential steps, not bloat, so don't force an extraction that adds indirection
+- Descriptions (command/agent frontmatter): one to three sentences. Lead with the action; add a sentence or two only when it sharpens routing
 - Severity vocabulary: correctness uses `blocker/major/minor/nit`; quality uses `major/minor/nit`; security uses `critical/high/medium/low/nit`
+- **Output is plain text — no emoji or glyphs.** Status and report lines use text markers (`Linked.`, `Failed:`, `[resolved]`, `_None._`), never `✓`/`⚠`/`↳`
+- **Read the current branch with `git branch --show-current`** — not `git rev-parse --abbrev-ref HEAD`
+- **Pell branch shape is `<KEY>-<description>`** where `<KEY>` is the full Jira issue key (e.g. `RRS-1020-fix-cart`, key `RRS-1020`); the leading key is matched by the regex `[A-Z][A-Z0-9]+-\d+`. Use "KEY = full issue key" consistently — don't split the project prefix and number into separate `<KEY>-<number>` placeholders
 - When unsure about how to structure something, mirror an existing command. Don't invent new patterns without updating the architecture spec first
 - This repo is read by humans and Claude alike. Prefer clarity over cleverness in command bodies — they're prompts, not code
 

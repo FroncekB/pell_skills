@@ -43,7 +43,7 @@ Then invoke the `frontend-design:frontend-design` skill via the Skill tool and f
 
 **If it's NOT available:**
 
-Tell the user (notify, don't block — this is per the Pell architecture spec §4):
+Tell the user (notify, don't block — never force an external plugin install):
 
 > Heads up: this UI work would benefit from the `frontend-design` plugin, which isn't installed. You can install it with:
 >
