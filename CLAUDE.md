@@ -112,4 +112,4 @@ Then invoke the affected command.
 - `atlassian-bitbucket` (API token, see repo README) — PR data, diffs, file content, inline comments
 - `plugin:atlassian:atlassian` (OAuth) — Jira issue lookup, transitions
 
-Both must coexist via the dual-endpoint workaround described in the user's `~/.claude/projects/.../memory/atlassian-mcp-setup.md`.
+Both must coexist via the dual-connection workaround (both on the `mcp.atlassian.com/v1/mcp/authv2` endpoint, distinguished by a throwaway query param on the Bitbucket entry so Claude Code doesn't collapse them onto one session) — see the README setup section and the user's `~/.claude/projects/.../memory/atlassian-mcp-setup.md`.

@@ -37,7 +37,7 @@ Most commands need at least one of these two Atlassian MCP servers connected to 
 
 ### Setting up the Atlassian MCPs
 
-The Atlassian Rovo MCP server exposes different tools depending on the auth method, and Claude Code dedups MCP server connections by URL. This means you need **two parallel connections** to the same backing server, at distinct endpoints. Here's the full setup:
+The Atlassian Rovo MCP server exposes different tools depending on the auth method (OAuth -> Jira/Confluence; API token -> Bitbucket), and Claude Code keys MCP connections by their URL string — two entries with an identical URL collapse onto one session, so the second connection's tools never surface. This means you need **two parallel connections** to the same backing server on URL strings that *differ*. The OAuth plugin connects on `https://mcp.atlassian.com/v1/mcp/authv2`; you register the Bitbucket connection on that same working endpoint plus a throwaway query param (`?c=bb`) so the string is distinct. Here's the full setup:
 
 **1. Install the Atlassian OAuth plugin** (for Jira/Confluence):
 
@@ -61,23 +61,25 @@ It auto-prompts for OAuth on first use. Sign in with your Pell Atlassian account
 echo -n "your.email@pellsoftware.com:YOUR_API_TOKEN" | base64
 ```
 
-**4. Register the Bitbucket connection at the `authv2` endpoint** (this is the key step — using a distinct URL from the OAuth connection so they don't dedup):
+**4. Register the Bitbucket connection on the `authv2` endpoint with a distinguishing query param** (this is the key step — the OAuth plugin already uses `…/v1/mcp/authv2`, so registering Bitbucket on the bare URL collapses it onto the OAuth session and surfaces zero Bitbucket tools. The `?c=bb` suffix routes identically at Atlassian but reads as a distinct server to Claude Code. Do **not** use the bare `…/v1/mcp` path — it no longer serves Bitbucket tools):
 
 ```bash
 claude mcp add-json atlassian-bitbucket '{
   "type": "http",
-  "url": "https://mcp.atlassian.com/v1/mcp/authv2",
+  "url": "https://mcp.atlassian.com/v1/mcp/authv2?c=bb",
   "headers": {
     "Authorization": "Basic <YOUR_BASE64_STRING>"
   }
 }'
 ```
 
-**5. Restart Claude Code** so both MCPs come up.
+**5. Restart Claude Code** so both MCPs come up. This step is required, not optional — Claude Code snapshots its tool registry at session start, so the Bitbucket tools won't appear until you restart even though `/mcp` may already show the server as connected.
 
 **6. Verify both are connected** with `/mcp` — you should see `atlassian-bitbucket: ✓ Connected` and the Atlassian plugin's tools available.
 
-If something fails, re-check the setup steps above and confirm the API token has all the scopes listed.
+**Troubleshooting:**
+- *Connected but no Bitbucket tools* — you skipped the restart (step 5); the registry only refreshes at session start. If a restart doesn't fix it, the URL likely collided with the OAuth connection: confirm the `?c=bb` suffix is present and that it differs from the OAuth plugin's URL.
+- *403 errors* — the API token is missing a scope; re-check the list in step 2.
 
 ---
 
