@@ -85,10 +85,11 @@ claude mcp add-json atlassian-bitbucket '{
 
 ## Commands
 
-Nineteen commands, grouped by where they fall in a ticket's lifecycle — pick up work, review it, audit broadly, ship it.
+Twenty commands. `/pell:coordinate` drives an entire large build; the rest are grouped by where they fall in a ticket's lifecycle — pick up work, review it, audit broadly, ship it.
 
 | Stage | Commands |
 |-|-|
+| **Driving a large build** | [`coordinate`](#pellcoordinate-what-youre-building) |
 | **Starting work** | [`my-tickets`](#pellmy-tickets) · [`triage`](#pelltriage-key) · [`related`](#pellrelated-key) · [`precheck`](#pellprecheck-key--idea) · [`start-work`](#pellstart-work-key) · [`from-ticket`](#pellfrom-ticket-jira-key-freeform-context) |
 | **Reviewing code** | [`correctness-review`](#pellcorrectness-review) · [`quality-review`](#pellquality-review) · [`security-review`](#pellsecurity-review) · [`test-review`](#pelltest-review) · [`local-review`](#pelllocal-review) · [`three-pass-review`](#pellthree-pass-review-pr) · [`address-review`](#pelladdress-review-pr) · [`review-queue`](#pellreview-queue-repo-) |
 | **Auditing a whole repo** | [`repo-review`](#pellrepo-review) · [`repo-security-review`](#pellrepo-security-review) |
@@ -96,6 +97,37 @@ Nineteen commands, grouped by where they fall in a ticket's lifecycle — pick u
 | **Visual scratchpad** | [`visualize`](#pellvisualize-concept--no-watch--watch--stop-watch--stop--clear) |
 
 Everything is **read-only by default** — every side effect is gated on a `(y/n)` prompt that names exactly what will change. See [Design principles](#design-principles) for the full policy.
+
+---
+
+## Driving a large build
+
+### `/pell:coordinate <what you're building>`
+
+Drive a major product build or large system evolution end-to-end. Puts the main session in the *coordinator* stance — you hold judgment, continuity, and authorship of the plan while subagents do the research, implementation, and review. Runs the six-phase workflow below and persists the design to disk so a fresh session can resume. For a single ticket or a bounded change, use `/pell:from-ticket` instead — this is for multi-track efforts where continuity across a long (or resumed) session is the hard part.
+
+**Usage:**
+
+```
+/pell:coordinate rebuild billing on the new pricing engine
+/pell:coordinate migrate reporting to the event pipeline RRS-1200   # optional Jira key = read-only seed
+/pell:coordinate --resume                                           # pick up an in-flight effort from its docs
+/pell:coordinate --dry-run redesign auth                            # preview the phase plan, no side effects
+/pell:coordinate --reset                                            # clear an effort's persisted docs
+```
+
+**The six phases** (a setup phase first frames the effort, confirms the on-disk design directory, and handles `--resume`):
+
+1. **Explore & frame** — clarify scope, unknowns, constraints, and the quality bar (inline, or via `superpowers:brainstorming`)
+2. **Research & compare** — parallel research subagents on the key decision points; you synthesize the trade-offs
+3. **Plan the system** — you author `design.md` (one author for coherence — this step is never delegated)
+4. **Stress-test the plan** — adversarial review subagents refute the design before any code is written
+5. **Execute in parallel** — split into sequential/parallel tracks, with worktree isolation for concurrent file-mutating work
+6. **Review, refine, repeat** — review each output against the plan via `/pell:local-review` or `/pell:three-pass-review`, direct fixes, and loop
+
+**Persistence & resume:** each effort keeps `design.md`, `decisions.md`, and `tracks.md` under `docs/specs/<date>-<slug>/`. `--resume` recovers by reading those docs, not the chat history — so a fresh coordinator session picks up where the last one left off.
+
+**Side-effects:** every phase gates its side effects (directory creation, file writes, subagent dispatch, review runs) on a `(y/n)` that names exactly what runs; `--dry-run` previews the whole plan with none. Never mutates Jira (a passed key is read-only seed), and never commits, pushes, or opens PRs — those stay in `/pell:start-work`, `/pell:finish-work`, and `/pell:wrap-up`. Notify-never-force for `superpowers` and sibling pell tools.
 
 ---
 
