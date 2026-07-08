@@ -87,6 +87,8 @@ After editing anything under `plugins/pell/`:
 claude plugin validate ./plugins/pell
 ```
 
+**Bump the version in `plugins/pell/.claude-plugin/plugin.json`** in the same change — minor for a new command/agent/skill, patch for a fix. The installed plugin cache is keyed by version (`~/.claude/plugins/cache/pell-skills/pell/<version>/`); if the version doesn't change, `/plugin marketplace update` + `/reload-plugins` will **not** rebuild the cache, so installed users keep loading the old copy and never see your change. A change that adds a command but not a version bump looks merged but ships to nobody.
+
 To test the change locally:
 
 ```
