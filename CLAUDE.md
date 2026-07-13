@@ -49,6 +49,17 @@ pell_skills/
 4. **Output JSON, not prose.** Orchestrators parse the trailing JSON object. Use the shape `{"findings": [...], "summary": "..."}`.
 5. **Surface everything** with severity tags. Never pre-filter — the orchestrator decides what's actionable.
 
+> **Exception — `conductor-*` agents.** The five `conductor-*` worker agents
+> (`conductor-implementer`, `conductor-scout`, `conductor-correctness-reviewer`,
+> `conductor-integration-gap-auditor`, `conductor-design-steward`) intentionally
+> break rules 3 and 4: read-only roles carry an explicit
+> `tools: Read, Grep, Glob, Bash` line, and all five emit ranked prose reports
+> ("final message IS the report") rather than JSON. They are a faithful port of
+> an upstream design (conductor) where the coordinating skill reads
+> reasoning-rich prose and where read-only enforcement is a real safety property.
+> Do not "fix" them into the JSON/omit-tools shape. See
+> `docs/specs/2026-07-13-conductor-port-design.md`.
+
 ## Conventions when adding a skill
 
 1. **Directory = name:** `skills/foo/SKILL.md` becomes the auto-invoked skill `foo`.
