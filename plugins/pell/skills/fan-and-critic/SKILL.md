@@ -79,7 +79,7 @@ Output contract:
 First task: review <artifact>, write the first batch, reply one line, then wait.
 ```
 
-Mirror it for the fan: find what genuinely lands and why, plus one concrete “double down here” per feature. Keep the same one-line reply and separate-file contract.
+Mirror it for the fan: find what genuinely lands and why, plus one concrete "double down here" per feature. Keep the same one-line reply and separate-file contract.
 
 ## Common Mistakes
 
