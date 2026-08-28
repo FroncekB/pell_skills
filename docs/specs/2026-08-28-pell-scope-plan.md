@@ -755,6 +755,10 @@ Run `/pell:scope <PROJECT> refresh sow <a Confluence URL>`. Expected: rebuild, t
 
 Run `/pell:from-ticket <thin KEY>`. Expected: `Checking where <KEY> fits in the project...`, the scope report, then the `Continue into design anyway? (y/n)` prompt. Answer `n`; expected exit message pointing to `/pell:scope <KEY>`. Run `/pell:from-ticket <KEY> skip scope`; expected: no scope output, straight to existing-artifact detection.
 
+- [ ] **Step 8b: from-ticket first run**
+
+In a repo with no `docs/pell/sow-<P>.md`, run `/pell:from-ticket <KEY>`. Expected: scope builds and offers the cache write; answer `y`; the cache-commit gate prompt appears naming the file and branch; answer `y`; `/pell:start-work` proceeds past its clean-tree check. Repeat answering `n` at the gate; expected: "Continuing as skip start-work" and no branch created.
+
 - [ ] **Step 9: Record results**
 
 Note any deviation from expected in a short list. Fix prompt wording inline where the deviation is a prompt bug; re-run the affected step; commit with `fix(scope): ...`. If a deviation traces back to an MCP schema mismatch, that is a Task 1 miss — fix the prompt and re-verify the schema before committing.

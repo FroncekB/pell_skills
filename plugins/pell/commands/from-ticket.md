@@ -1,5 +1,5 @@
 ---
-description: Compose ticket-to-implementation in one command. Fetches a Jira ticket, dispatches /pell:start-work to create a branch, then hands off to superpowers:brainstorming → writing-plans for the design and plan. When superpowers isn't installed, runs a lightweight inline substitute that produces a starter spec.
+description: Compose ticket-to-implementation in one command. Fetches a Jira ticket, runs the /pell:scope readiness check, dispatches /pell:start-work to create a branch, then hands off to superpowers:brainstorming → writing-plans for the design and plan. When superpowers isn't installed, runs a lightweight inline substitute that produces a starter spec.
 argument-hint: "<JIRA-KEY> [skip start-work | skip scope | design only | plan only | start-work pre-auths | --reset] [freeform]"
 ---
 
@@ -66,7 +66,7 @@ After the fetch, print one line: `Loaded <KEY> — <summary> (status: <status>, 
 
 ## Step 2.5 — Readiness check via `/pell:scope`
 
-Skip this step when `skip scope` / `no scope check` was in `$ARGUMENTS`.
+Skip this step when `skip scope` / `no scope check` was in `$ARGUMENTS`, and skip it when `plan only` / `skip brainstorm` / `skip design` was passed — a resume-from-spec run has no design conversation to feed and must not be asked `Continue into design anyway?`.
 
 Print one line: `Checking where <KEY> fits in the project...`
 
@@ -79,6 +79,15 @@ Read the `Verdict:` line from its output:
 - `Ready` → continue.
 
 Capture the `### Where it fits` and `### Readiness` blocks verbatim as `project_context` for Step 5's seed. If `/pell:scope` itself fails (MCP error, no cache and the build failed), print `Scope check unavailable: <error> — continuing without project context.`, set `project_context` to that line, and continue. The readiness check never blocks `from-ticket` on its own errors.
+
+**Cache commit gate.** `/pell:scope` may have just written `docs/pell/sow-<projectKey>.md`, and `/pell:start-work`'s pre-flight refuses a dirty tree. Unless Step 4 is already being skipped, run `git status --porcelain -- docs/pell/sow-<projectKey>.md`. If it lists the file (new or modified), prompt:
+
+> `/pell:scope` saved `docs/pell/sow-<projectKey>.md`. `/pell:start-work` needs a clean tree. Commit that one file on `<current branch>` now? (y/n)
+
+- `y` → `git add docs/pell/sow-<projectKey>.md` and `git commit -m "docs(pell): add synthesized SOW for <projectKey>"`. Print `Committed docs/pell/sow-<projectKey>.md on <current branch>.` This is the only commit `from-ticket` ever makes, and it touches exactly that one file.
+- `n` → print `Continuing as "skip start-work". Commit or stash the file, then run /pell:start-work <KEY> yourself.` and treat `skip start-work` as set for Step 4.
+
+If the porcelain output lists other files as well, do not commit anything: print `Working tree has other uncommitted changes; /pell:start-work will refuse. Continuing as "skip start-work".` and treat `skip start-work` as set.
 
 ## Step 3 — Existing-artifact detection
 
@@ -254,7 +263,7 @@ If the filesystem write fails, print the error verbatim and leave the user on th
 ## Operator notes
 
 - **Never** mutate Jira from this command directly. All Jira side-effects route through `/pell:start-work`'s gates.
-- **Never** commit, push, or open a PR. Out of scope.
+- **Never** push or open a PR. The only commit `from-ticket` makes is the Step 2.5 cache-commit gate — one named file, `(y/n)`-gated — so `/pell:start-work`'s clean-tree check can pass.
 - **Never** auto-pick artifacts. When multiple specs or plans exist for a key, always ask the user which to use.
 - **No rollback ever.** If `start-work` creates a branch and brainstorming subsequently errors, the branch stays. The user's working tree is the source of truth; `from-ticket` doesn't undo work.
 - The seed sent to brainstorming is a one-shot context dump. If brainstorming asks for follow-up details mid-conversation, the user can re-run `/pell:related <KEY>` separately for that.

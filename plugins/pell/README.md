@@ -87,7 +87,7 @@ Project scoper (dispatched by `/pell:scope` when the SOW cache is missing or sta
 
 - `sow-builder` — returns `{sow_markdown, sources, stats, summary}` rather than findings; it produces a document, not a review.
 
-All return structured JSON: `{findings: [{severity, file, line, finding, fix}], summary}`. The repo-based reviewers may add an optional `also_in` array on a finding to list other locations where the same issue recurs.
+The reviewers return structured JSON: `{findings: [{severity, file, line, finding, fix}], summary}`. The repo-based reviewers may add an optional `also_in` array on a finding to list other locations where the same issue recurs.
 
 ## Severity scales
 

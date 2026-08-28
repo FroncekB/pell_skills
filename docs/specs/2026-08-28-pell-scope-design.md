@@ -90,13 +90,14 @@ Read `~/.claude/pell-config.json` (treat missing as `{}`). If `jira.cloud_id` is
 
 **Location:** `docs/pell/sow-<PROJECT>.md` relative to `git rev-parse --show-toplevel`. Keyed by Jira project because one repo can span several projects. If not in a git repo, fall back to the current working directory and say so.
 
-**Load:** read the file if it exists; parse `generated_at` and `sow_sources` from its YAML frontmatter.
+**Load:** read the file if it exists; parse `generated_at`, `sow_sources`, `project_name`, and `truncated` from its YAML frontmatter. `project_name` falls back to the project key when absent.
 
 **Rebuild triggers** (any one):
 - file missing
 - `refresh` modifier
 - `generated_at` older than 14 days
 - frontmatter unparseable (treat as missing; mention it)
+- a `sow <url>` pin whose URL is not already in the cached `sow_sources` (a pinned URL must never be silently dropped)
 
 **Rebuild:** dispatch `sow-builder` (Section 9) with `cloudId`, `project_key`, `sow_sources` (cached plus any newly pinned URL), and `deep` if set. On return, show the stats line (`<n> issues, <e> epics, <u> unparented, <s> scope docs`) and prompt:
 
@@ -106,7 +107,7 @@ On `y`, write the file (create `docs/pell/` if needed). On `n` or `--dry-run`, k
 
 **Fresh cache — drift line:** when the cache is used as-is, run one cheap JQL to report how stale it is:
 
-- `mcp__plugin_atlassian_atlassian__searchJiraIssuesUsingJql` with `cloudId`, `jql: project = "<PROJECT>" AND updated >= "<generated_at as yyyy-MM-dd HH:mm>"`, `fields: ["key"]`, `maxResults: 100`.
+- `mcp__plugin_atlassian_atlassian__searchJiraIssuesUsingJql` with `cloudId`, `jql: project = "<PROJECT>" AND updated >= "<generated_at as yyyy-MM-dd>"`, `fields: ["key"]`, `maxResults: 100`. Day precision is deliberate: `generated_at` is UTC and JQL reads date literals in the user's Jira time zone, so this over-counts changes made earlier on the generation day rather than missing changes across that offset. The drift line is a signal, not a ledger.
 - Render: `SOW cache is 3 days old; 12 tickets changed since. Say "refresh" to rebuild.` If the result fills a page, say `100+ tickets changed`. If the call fails, render `SOW cache is 3 days old; drift check failed: <error>.` and continue.
 
 Incremental patching of the synthesized document is deliberately not attempted — re-synthesizing one epic's scope statement from a partial delta is unreliable from a prompt. Full rebuilds are cheap enough at the 14-day cadence, and the drift line lets the developer decide.
@@ -123,22 +124,26 @@ Always fetched live, even when the SOW is cached, so the assessed ticket is curr
 
 On 404 exit with: "`<ticket_key>` doesn't exist in Jira (or you don't have access)."
 
-Then `mcp__plugin_atlassian_atlassian__getJiraIssueRemoteIssueLinks` with `cloudId` and `issueIdOrKey`. Empty or 404 is fine.
+Then `mcp__plugin_atlassian_atlassian__getJiraIssueRemoteIssueLinks` with `cloudId` and `issueIdOrKey`. Empty or 404 is fine. Each returned link's title and url is captured as `ticket_links` and rendered on the `Ticket links:` line (Section 11).
 
 ## 7. Placement (ticket mode)
 
 Locate the ticket in the SOW:
 
-1. **Parented.** If `parent` is set and that key is an epic heading in the SOW, the ticket's *home epic* is that epic. Pull the epic's scope statement, its deliverables list (siblings), its done/total count, and its dependencies.
-2. **Parented to a non-epic** (a subtask of a story): find the parent story in the SOW's deliverables lists — the epic it sits under is the home epic. Note the story as the immediate parent. No extra Jira call is needed; if the story is not in the SOW (added since the cache was built), treat the ticket as unparented and say why.
-3. **Unparented.** Compare the ticket's summary + description against every epic's scope statement. If exactly one epic is a clear fit, report it as a *suggested* home epic (severity `major`, Section 8). If none fit, the ticket falls outside every scope statement (severity `blocker`).
-4. **Ticket is itself an epic.** Skip placement; treat its own SOW section as the context.
+1. **Parented to an epic.** If `parent` is set and that key is a `### <KEY> —` epic heading in the SOW, the ticket's *home epic* is that epic. Pull the epic's scope statement, its deliverables list (siblings), its done/total count, and its dependencies. `placement = assessed`.
+2. **Parented to a story.** If `parent` appears as a deliverable under some epic, that epic is the home epic and the story is the immediate parent. No extra Jira call is needed. `placement = assessed`.
+3. **Parent outside the cache.** `parent` is set but its key appears nowhere in the SOW — neither an epic heading nor a deliverable line → `placement = unassessed`, `placement_note = Parent <KEY> is not in the SOW cache — it may be newer than the cache. Say "refresh" to rebuild.` The ticket is not treated as unparented: a cache older than the ticket is a cache problem, not a ticket defect.
+4. **Project has no epics.** The SOW has no `### ` headings under `## Epics` → `placement = unassessed`, `placement_note = Project has no epics; placement not assessed.` Checked before outcome 5 — with no epics there is nothing to compare an unparented ticket against.
+5. **Unparented.** No `parent`, epics present → compare the ticket's summary + description against every epic's scope statement. If exactly one epic is a clear fit, report it as a *suggested* home epic (severity `major`, Section 8). If none fit, the ticket falls outside every scope statement (severity `blocker`). `placement = assessed`.
+6. **Ticket is itself an epic.** Skip placement; treat its own SOW section as the context. `placement` stays unset and the Placement rubric rows do not apply.
 
 Also collect from the SOW's cross-epic dependency section any edge that touches this ticket or its home epic.
 
 ## 8. Readiness rubric (ticket mode)
 
 Severity vocabulary mirrors correctness: `blocker / major / minor / nit`. Every finding names the evidence (quote the description fragment, or state what is absent) and one concrete question the reporter could answer to resolve it.
+
+The two Placement rows apply only when placement was assessed (Section 7 outcomes 1, 2, 5). When placement is unassessed, skip them — a stale cache or an epic-less project is not a defect in the ticket.
 
 | Check | Condition | Severity |
 |-|-|-|
@@ -170,7 +175,7 @@ Minor and nit findings are always rendered but never change the verdict or trigg
 
 **Traversal:**
 
-1. `mcp__plugin_atlassian_atlassian__searchJiraIssuesUsingJql` with `jql: project = "<PROJECT>" ORDER BY issuetype ASC, created ASC`, `fields: ["summary", "description", "status", "issuetype", "priority", "parent", "issuelinks", "labels", "components", "resolution", "updated"]`, `maxResults: 100`, following `nextPageToken` until exhausted or 10 pages (unless `deep`). If capped, record `truncated: true` and the count fetched.
+1. `mcp__plugin_atlassian_atlassian__searchJiraIssuesUsingJql` with `jql: project = "<PROJECT>" ORDER BY issuetype ASC, created ASC`, `fields: ["summary", "description", "status", "issuetype", "priority", "parent", "issuelinks", "labels", "components", "resolution", "updated"]`, `maxResults: 100`, following `nextPageToken` until exhausted or 10 pages (unless `deep`). If capped, record `truncated: true` and the count fetched. If a page after the first fails, stop walking, set `truncated: true`, add `walk stopped at page <n>: <error>` to the Stats section, and synthesize from what was fetched.
 2. Group issues: epics; children by `parent`; unparented non-epics; issues whose `resolution` or status category or labels indicate dropped work (`Won't Do`, `Cancelled`, `wontfix`, `deferred`, `out-of-scope`).
 3. **Scope-doc discovery.** Union of:
    - `sow_sources` passed in
@@ -190,7 +195,7 @@ Minor and nit findings are always rendered but never change the verdict or trigg
 }
 ```
 
-Any MCP failure inside the agent degrades that section (`_Scope-doc fetch failed: <error>_`) rather than aborting; the agent always returns a document.
+Any MCP failure inside the agent degrades that section (`_Scope-doc fetch failed: <error>_`) rather than aborting; the agent returns a document whenever the first JQL page succeeds. A first-page failure returns the failure JSON described in the output contract.
 
 ## 10. SOW document shape
 
@@ -261,6 +266,7 @@ Scope: <epic scope statement>
 Siblings: 2 To Do · 3 In Progress · 4 Done
 Dependencies: RRS-900 is blocked by RRS-850 (Payments) [In Progress]
 Scope docs: [Statement of Work](...)
+Ticket links: [PR 412 cart rounding](...)
 
 ### Readiness
 Verdict: Ready with questions
@@ -283,6 +289,8 @@ _None._
 SOW cache is 3 days old; 12 tickets changed since. Say "refresh" to rebuild.
 ```
 
+The `Epic:` line has four alternative forms when there is no home epic: `Unparented — suggested epic: <KEY> — <summary>`, `Unparented — fits no scope statement`, `This ticket is an epic`, and `<placement_note>` when placement is unassessed (Section 7 outcomes 3 and 4). `Ticket links:` renders the remote links captured in Section 6 and is omitted when there are none.
+
 **Project mode:**
 
 ```
@@ -304,6 +312,9 @@ SOW cache is 3 days old; 12 tickets changed since. Say "refresh" to rebuild.
 |-|-|-|
 | `docs/pell/sow-<PROJECT>.md` | on rebuild | `Write the synthesized SOW to <path>? (y/n)` |
 | Jira comment on the ticket | ticket mode, verdict is `Not ready` or `Ready with questions`, `skip comment` not set | show the full comment text, then `Post this comment on <KEY>? (y/n)` |
+| `git commit` of `docs/pell/sow-<PROJECT>.md` | `from-ticket` Step 2.5 only — `/pell:scope` just saved the cache and `start-work` is about to run | prompt names the file and the current branch; `(y/n)` |
+
+`/pell:scope` itself still never commits: it saves the cache and tells the developer to commit it with their normal workflow. The commit row belongs to `from-ticket`, which needs a clean tree for `/pell:start-work`.
 
 **Comment text.** Questions to the reporter, one per blocker/major finding, in the order rendered. No severities, no verdict, no lecture:
 
@@ -326,6 +337,9 @@ Add a step to `plugins/pell/commands/from-ticket.md` between its ticket fetch (S
 - If the verdict is `Not ready`: "This ticket has <n> blocker gap(s) — see above. Continue into design anyway? (y/n)". On `n`, exit with a pointer to run `/pell:scope <KEY>` to post the questions.
 - If the verdict is `Ready with questions`, continue without prompting; the findings are already on screen and feed the brainstorming step's context.
 - Carry the "Where it fits" block and the findings into the brainstorming seed (from-ticket Step 5) under a `## Project context` heading so the design session inherits the epic scope statement.
+- The step is skipped on `skip scope` / `no scope check`, and also on `plan only` / `skip brainstorm` / `skip design` — a resume-from-spec run has no design conversation to feed and must not be asked "Continue into design anyway?".
+- **Cache commit gate.** `/pell:scope` may have just written `docs/pell/sow-<PROJECT>.md`, and `/pell:start-work`'s pre-flight refuses a dirty tree. Unless Step 4 is already being skipped, Step 2.5 ends by running `git status --porcelain` on that one path. If it lists the file, prompt to commit exactly that file on the current branch `(y/n)`; on `y`, `git add` the one path and commit it as `docs(pell): add synthesized SOW for <PROJECT>`; on `n`, treat `skip start-work` as set and tell the user to commit or stash it themselves. If the porcelain output lists other files as well, commit nothing and treat `skip start-work` as set — `start-work` would refuse either way. This is the only commit `from-ticket` ever makes.
+- `from-ticket`'s frontmatter `description` names the readiness check, so the composed sequence (fetch → scope → start-work → design) is visible in the command list.
 
 `start-work` is not hooked. `from-ticket` dispatches `start-work`, so hooking both would run the check twice, and `start-work` should stay a fast branch-creation command.
 
@@ -336,6 +350,7 @@ Add a step to `plugins/pell/commands/from-ticket.md` between its ticket fetch (S
 - `searchJiraIssuesUsingJql` returns no total in its default issues mode (a `searchResultMode: "count"` exists but v1 does not use it); the traversal cap is expressed in pages, not issues, and the drift line reports `100+` when a page fills. Report the fetched count and `truncated` honestly.
 - The Rovo `search` tool takes no `cloudId` — it derives the site from the access token.
 - Confluence tool is `getConfluencePage` (`cloudId`, `pageId`, optional `contentFormat`); verified against the live schema 2026-08-28. `searchConfluenceUsingCql` and `getPagesInConfluenceSpace` also exist and are candidates for a more precise scope-doc discovery pass in a later version.
+- Drift JQL uses day precision because `generated_at` is UTC and JQL date literals are read in the user's Jira time zone; the count may include same-day changes made before generation.
 - The Atlassian MCP sometimes omits `reporter` even when requested; use the `or "unknown"` fallback.
 - When the epic count is large (30+), the project-mode table is still rendered in full — truncation hides the epics the developer is looking for.
 - If the ticket's project differs from the cached SOW's project (e.g. branch says `RRS-1020` but the user passed `FIEL-33`), the explicit argument wins and the FIEL cache is used or built.

@@ -24,7 +24,7 @@ Call `mcp__plugin_atlassian_atlassian__searchJiraIssuesUsingJql` with:
 - `fields`: `["summary", "description", "status", "issuetype", "priority", "parent", "issuelinks", "labels", "components", "resolution", "updated", "project"]`
 - `maxResults`: 100
 
-Follow `nextPageToken` until the response has none. Stop after 10 pages unless `deep` is `true`; when you stop early, set `truncated: true` in the stats and say so in the document's Stats section. Record `project_name` from the first issue's `project.name`.
+Follow `nextPageToken` until the response has none. Stop after 10 pages unless `deep` is `true`; when you stop early, set `truncated: true` in the stats and say so in the document's Stats section. If a page after the first fails, stop walking, set `truncated: true`, and add `walk stopped at page <n>: <error>` to the Stats section; synthesize from what you have. Record `project_name` from the first issue's `project.name`.
 
 If the very first call fails, return the failure JSON described under Output format — do not fabricate a document.
 

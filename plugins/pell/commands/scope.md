@@ -38,9 +38,9 @@ Read `~/.claude/pell-config.json` (treat missing as `{}`).
 
 **Locate.** Run `git rev-parse --show-toplevel`. `sow_path = <toplevel>/docs/pell/sow-<project_key>.md`. If the command fails (not a git repo), use `./docs/pell/sow-<project_key>.md` and print `Not in a git repo — using ./docs/pell/ for the SOW cache.`
 
-**Load.** If `sow_path` exists, read it and parse the YAML frontmatter for `generated_at` and `sow_sources`. If the frontmatter is missing or unparseable, print `SOW cache at <sow_path> has no readable frontmatter — rebuilding.` and treat the file as missing.
+**Load.** If `sow_path` exists, read it and parse the YAML frontmatter for `generated_at`, `sow_sources`, `project_name`, and `truncated`. If `project_name` is absent, fall back to `project_key`. If the frontmatter is missing or unparseable, print `SOW cache at <sow_path> has no readable frontmatter — rebuilding.` and treat the file as missing.
 
-**Decide.** Rebuild when any of: the file is missing; `refresh` is set; `generated_at` is more than 14 days before now. Otherwise use the cache.
+**Decide.** Rebuild when any of: the file is missing; `refresh` is set; `generated_at` is more than 14 days before now; `pinned_sow_url` is set and is not already listed in the cached `sow_sources` — a pinned URL must never be silently dropped. Otherwise use the cache.
 
 **Rebuild path.**
 1. Print `Building the SOW for <project_key> — walking every issue in the project (up to 10 pages of 100<; cap lifted by "deep" when set>).`
@@ -52,14 +52,14 @@ Read `~/.claude/pell-config.json` (treat missing as `{}`).
    deep: <true|false>
    verbose: <true|false>
    ```
-3. Parse the trailing JSON. If `sow_markdown` is empty, exit with `Could not build the SOW: <summary>.`
+3. Parse the trailing JSON. If `sow_markdown` is empty, exit with `Could not build the SOW: <summary>.` Set `project_name = stats.project_name`.
 4. Print the stats line: `<stats.issues> issues · <stats.epics> epics · <stats.unparented> unparented · <stats.scope_docs> scope doc(s)<; truncated at 10 pages — rerun with "deep" for the full project, when stats.truncated>`.
 5. Unless `dry_run`: prompt `Write the synthesized SOW to <sow_path>? (y/n)`. On `y`, create `docs/pell/` if needed and write `sow_markdown` to `sow_path`; print `Saved <sow_path>. Commit it with your normal workflow.` On `n`, print `Not saved — using the document for this run only.` When `dry_run`, print `--dry-run: SOW not written.`
 6. `sow_doc = sow_markdown`; `drift_line = ""` (a fresh build has no drift).
 
 **Cached path.**
 1. `sow_doc` = file contents.
-2. Run one drift query: `mcp__plugin_atlassian_atlassian__searchJiraIssuesUsingJql` with `cloudId`, `jql`: `project = "<project_key>" AND updated >= "<generated_at formatted yyyy-MM-dd HH:mm>"`, `fields: ["key"]`, `maxResults: 100`.
+2. Run one drift query: `mcp__plugin_atlassian_atlassian__searchJiraIssuesUsingJql` with `cloudId`, `jql`: `project = "<project_key>" AND updated >= "<generated_at formatted yyyy-MM-dd>"`, `fields: ["key"]`, `maxResults: 100`. Day precision is deliberate: `generated_at` is UTC and JQL reads date literals in the user's Jira time zone, so this over-counts changes made earlier on the generation day rather than missing changes across that offset. The drift line is a signal, not a ledger.
 3. `drift_line` = `SOW cache is <n> day(s) old; <count> ticket(s) changed since. Say "refresh" to rebuild.` Use `100+` for the count when the response has a `nextPageToken` or returns 100 results. If the query fails: `SOW cache is <n> day(s) old; drift check failed: <error>.` Never abort over drift.
 
 If `mode = project`, skip to Step 7.
@@ -76,7 +76,7 @@ Call `mcp__plugin_atlassian_atlassian__getJiraIssue` with:
 
 On 404 exit with: "`<ticket_key>` doesn't exist in Jira (or you don't have access)."
 
-Then call `mcp__plugin_atlassian_atlassian__getJiraIssueRemoteIssueLinks` with `cloudId` and `issueIdOrKey: ticket_key`. A 404 or empty response is fine.
+Then call `mcp__plugin_atlassian_atlassian__getJiraIssueRemoteIssueLinks` with `cloudId` and `issueIdOrKey: ticket_key`. A 404 or empty response is fine. Capture each returned link's title and url as `ticket_links` for Step 7.
 
 Use `assignee.displayName or "unassigned"` and `reporter.displayName or "unknown"` — the MCP sometimes omits `reporter`.
 
@@ -84,16 +84,20 @@ Use `assignee.displayName or "unassigned"` and `reporter.displayName or "unknown
 
 Work from `sow_doc`:
 
-1. **Parented to an epic.** `parent.key` matches a `### <KEY> —` heading under `## Epics` → that epic is the `home_epic`. Capture its scope statement, deliverables list (the siblings), `<done>/<total>` count, and Dependencies line.
-2. **Parented to a story.** `parent.key` appears as a deliverable under some epic → that epic is `home_epic`; record the story as `immediate_parent`. If the story is not in the SOW (created after the cache), treat the ticket as unparented and say `Parent <KEY> is not in the SOW cache — it may be newer than the cache.`
-3. **Unparented.** Compare the ticket's summary + description against every epic's scope statement. Exactly one clear fit → `suggested_epic = <KEY>` (a `major` finding in Step 6). No fit → the ticket falls outside every scope statement (a `blocker` finding).
-4. **The ticket is an epic.** Skip placement; its own section is the context.
+1. **Parented to an epic.** `parent.key` matches a `### <KEY> —` heading under `## Epics` → that epic is the `home_epic`. Capture its scope statement, deliverables list (the siblings), `<done>/<total>` count, and Dependencies line. `placement = assessed`.
+2. **Parented to a story.** `parent.key` appears as a deliverable under some epic → that epic is `home_epic`; record the story as `immediate_parent`. `placement = assessed`.
+3. **Parent outside the cache.** `parent` is set but its key appears nowhere in `sow_doc` — neither a `### <KEY> —` epic heading nor a deliverable line → `placement = unassessed`, `placement_note = Parent <KEY> is not in the SOW cache — it may be newer than the cache. Say "refresh" to rebuild.`
+4. **Project has no epics.** `sow_doc` has no `### ` headings under `## Epics` → `placement = unassessed`, `placement_note = Project has no epics; placement not assessed.` Check this before case 5 — with no epics there is nothing to compare an unparented ticket against.
+5. **Unparented.** No `parent`, epics present → compare the ticket's summary + description against every epic's scope statement. Exactly one clear fit → `suggested_epic = <KEY>` (a `major` finding in Step 6). No fit → the ticket falls outside every scope statement (a `blocker` finding). `placement = assessed`.
+6. **The ticket is an epic.** Skip placement; its own section is the context. `placement` stays unset and the Placement rubric rows do not apply.
 
 Also collect every line under `## Cross-epic dependencies` that names `ticket_key` or `home_epic`.
 
 ## Step 6 — Readiness rubric
 
 Apply every check. Each finding states the evidence (quote the fragment, or name what is absent) and one concrete question the reporter could answer to resolve it. Severity is `blocker / major / minor / nit`.
+
+The two Placement rows apply only when placement was assessed (Step 5 outcomes 1, 2, 5). When placement is unassessed, skip them — a stale cache or an epic-less project is not a defect in the ticket.
 
 | Check | Condition | Severity |
 |-|-|-|
@@ -123,12 +127,13 @@ Apply every check. Each finding states the evidence (quote the fragment, or name
 **Assignee:** <assignee>  ·  **Reporter:** <reporter>
 
 ### Where it fits
-Epic: <home_epic KEY — summary> [<status>] <done>/<total> done        (or: "Unparented — suggested epic: <KEY> — <summary>" / "Unparented — fits no scope statement" / "This ticket is an epic")
+Epic: <home_epic KEY — summary> [<status>] <done>/<total> done        (or: "Unparented — suggested epic: <KEY> — <summary>" / "Unparented — fits no scope statement" / "This ticket is an epic" / "<placement_note>" when placement is unassessed)
 Parent story: <immediate_parent KEY — summary> [<status>]              (omit when none)
 Scope: <home_epic scope statement>
 Siblings: <n> To Do · <n> In Progress · <n> Done                       (omit when unparented)
 Dependencies: <cross-epic lines touching this ticket or its epic, or _None._>
 Scope docs: [<title>](<url>) · ...                                     (from the SOW's Scope statements section, or _None._)
+Ticket links: [<title>](<url>) · ...                                       (from ticket_links; omit when none)
 
 ### Readiness
 Verdict: <Ready | Ready with questions | Not ready>
