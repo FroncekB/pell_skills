@@ -176,7 +176,7 @@ Minor and nit findings are always rendered but never change the verdict or trigg
    - `sow_sources` passed in
    - `mcp__plugin_atlassian_atlassian__getJiraIssueRemoteIssueLinks` on each epic; keep links whose URL is a Confluence page
    - `mcp__plugin_atlassian_atlassian__search` with `query: "<project name> statement of work OR scope OR SOW"`, keeping only Confluence results in the project's space or whose title mentions the project
-4. Fetch each discovered page via the Confluence page tool on the `plugin:atlassian:atlassian` MCP server. **The exact tool name and parameters must be verified via ToolSearch before the agent body is written** — the server is not authenticated in the design session and the toolkit has not called it before. Record each page's title, URL, and a 3–6 sentence summary of its scope/exclusions.
+4. Fetch each discovered page via `mcp__plugin_atlassian_atlassian__getConfluencePage` with `cloudId`, `pageId`, `contentFormat: "markdown"` (verified 2026-08-28). The tool takes no URL: `pageId` is the numeric segment after `/pages/` in a standard Confluence URL, or the code after `/wiki/x/` in a tiny link. A URL that fits neither shape is an unresolvable source — degrade it as a fetch failure rather than guess. Record each page's title, URL, and a 3–6 sentence summary of its scope/exclusions.
 5. **Synthesize** per epic: a 2–3 sentence scope statement from the epic description plus any scope-doc passage that names the epic; the deliverables list with status; epic-level dependencies from `issuelinks`; a "gaps noted" line when the epic has no description or its children's summaries contradict the scope statement.
 
 **Output (trailing JSON):**
@@ -316,7 +316,7 @@ Scope check before starting work on this ticket — a few questions:
 Posted from /pell:scope.
 ```
 
-Post via `mcp__plugin_atlassian_atlassian__addCommentToJiraIssue` with `cloudId`, `issueIdOrKey`, `commentBody`. Render `Commented.` or `Comment failed: <error>`. Never transition, edit fields, or link issues. `--dry-run` suppresses both writes and says so.
+Post via `mcp__plugin_atlassian_atlassian__addCommentToJiraIssue` with `cloudId`, `issueIdOrKey`, `contentFormat: "markdown"`, `commentBody`. (`contentFormat` verified present, enum `markdown | adf`; without it the server default is unstated and the numbered list may not render.) Render `Commented.` or `Comment failed: <error>`. Never transition, edit fields, or link issues. `--dry-run` suppresses both writes and says so.
 
 ## 13. `from-ticket` integration
 
@@ -333,9 +333,9 @@ Add a step to `plugins/pell/commands/from-ticket.md` between its ticket fetch (S
 
 - Never mutate Jira, Confluence, or Bitbucket except the gated comment. Never commit the cache file.
 - The bare-project-key regex will match ordinary capitalized words in freeform text (`SOW`, `TODO`). Strip the Section 1 modifiers before matching, and only fall through to the project-key regex when no issue key was found.
-- `searchJiraIssuesUsingJql` does not return a total count; the traversal cap is expressed in pages, not issues. Report the fetched count and `truncated` honestly.
+- `searchJiraIssuesUsingJql` returns no total in its default issues mode (a `searchResultMode: "count"` exists but v1 does not use it); the traversal cap is expressed in pages, not issues, and the drift line reports `100+` when a page fills. Report the fetched count and `truncated` honestly.
 - The Rovo `search` tool takes no `cloudId` — it derives the site from the access token.
-- Confluence tool name and parameter shape must be verified with ToolSearch against the authenticated `plugin:atlassian:atlassian` server before `sow-builder` is written. Do not extrapolate from the Jira tools.
+- Confluence tool is `getConfluencePage` (`cloudId`, `pageId`, optional `contentFormat`); verified against the live schema 2026-08-28. `searchConfluenceUsingCql` and `getPagesInConfluenceSpace` also exist and are candidates for a more precise scope-doc discovery pass in a later version.
 - The Atlassian MCP sometimes omits `reporter` even when requested; use the `or "unknown"` fallback.
 - When the epic count is large (30+), the project-mode table is still rendered in full — truncation hides the epics the developer is looking for.
 - If the ticket's project differs from the cached SOW's project (e.g. branch says `RRS-1020` but the user passed `FIEL-33`), the explicit argument wins and the FIEL cache is used or built.
