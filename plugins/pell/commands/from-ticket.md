@@ -80,14 +80,15 @@ Read the `Verdict:` line from its output:
 
 Capture the `### Where it fits` and `### Readiness` blocks verbatim as `project_context` for Step 5's seed. If `/pell:scope` itself fails (MCP error, no cache and the build failed), print `Scope check unavailable: <error> — continuing without project context.`, set `project_context` to that line, and continue. The readiness check never blocks `from-ticket` on its own errors.
 
-**Cache commit gate.** `/pell:scope` may have just written `docs/pell/sow-<projectKey>.md`, and `/pell:start-work`'s pre-flight refuses a dirty tree. Unless Step 4 is already being skipped, run `git status --porcelain -- docs/pell/sow-<projectKey>.md`. If it lists the file (new or modified), prompt:
+**Cache commit gate.** `/pell:scope` may have just written `docs/pell/sow-<projectKey>.md`, and `/pell:start-work`'s pre-flight refuses a dirty tree. Unless Step 4 is already being skipped, run `git status --porcelain` (unscoped — `/pell:start-work`'s own pre-flight is unscoped). Three cases:
+- The output is exactly one line and it names `docs/pell/sow-<projectKey>.md` → prompt:
 
 > `/pell:scope` saved `docs/pell/sow-<projectKey>.md`. `/pell:start-work` needs a clean tree. Commit that one file on `<current branch>` now? (y/n)
 
 - `y` → `git add docs/pell/sow-<projectKey>.md` and `git commit -m "docs(pell): add synthesized SOW for <projectKey>"`. Print `Committed docs/pell/sow-<projectKey>.md on <current branch>.` This is the only commit `from-ticket` ever makes, and it touches exactly that one file.
 - `n` → print `Continuing as "skip start-work". Commit or stash the file, then run /pell:start-work <KEY> yourself.` and treat `skip start-work` as set for Step 4.
-
-If the porcelain output lists other files as well, do not commit anything: print `Working tree has other uncommitted changes; /pell:start-work will refuse. Continuing as "skip start-work".` and treat `skip start-work` as set.
+- The output names `docs/pell/sow-<projectKey>.md` and other files too → do not commit anything. Print `Working tree has other uncommitted changes; /pell:start-work will refuse. Continuing as "skip start-work".` and treat `skip start-work` as set.
+- The output is empty, or does not mention `docs/pell/sow-<projectKey>.md` → the gate does not apply; continue.
 
 ## Step 3 — Existing-artifact detection
 

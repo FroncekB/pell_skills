@@ -129,8 +129,8 @@ The two Placement rows apply only when placement was assessed (Step 5 outcomes 1
 ### Where it fits
 Epic: <home_epic KEY — summary> [<status>] <done>/<total> done        (or: "Unparented — suggested epic: <KEY> — <summary>" / "Unparented — fits no scope statement" / "This ticket is an epic" / "<placement_note>" when placement is unassessed)
 Parent story: <immediate_parent KEY — summary> [<status>]              (omit when none)
-Scope: <home_epic scope statement>
-Siblings: <n> To Do · <n> In Progress · <n> Done                       (omit when unparented)
+Scope: <home_epic scope statement>                                     (omit when placement is unassessed or the ticket is an epic)
+Siblings: <n> To Do · <n> In Progress · <n> Done                       (omit when unparented, unassessed, or the ticket is an epic)
 Dependencies: <cross-epic lines touching this ticket or its epic, or _None._>
 Scope docs: [<title>](<url>) · ...                                     (from the SOW's Scope statements section, or _None._)
 Ticket links: [<title>](<url>) · ...                                       (from ticket_links; omit when none)
