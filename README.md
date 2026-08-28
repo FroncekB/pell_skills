@@ -85,12 +85,12 @@ claude mcp add-json atlassian-bitbucket '{
 
 ## Commands
 
-Twenty commands. `/pell:coordinate` drives an entire large build; the rest are grouped by where they fall in a ticket's lifecycle — pick up work, review it, audit broadly, ship it.
+Twenty-one commands. `/pell:coordinate` drives an entire large build; the rest are grouped by where they fall in a ticket's lifecycle — pick up work, review it, audit broadly, ship it.
 
 | Stage | Commands |
 |-|-|
 | **Driving a large build** | [`coordinate`](#pellcoordinate-what-youre-building) |
-| **Starting work** | [`my-tickets`](#pellmy-tickets) · [`triage`](#pelltriage-key) · [`related`](#pellrelated-key) · [`precheck`](#pellprecheck-key--idea) · [`start-work`](#pellstart-work-key) · [`from-ticket`](#pellfrom-ticket-jira-key-freeform-context) |
+| **Starting work** | [`my-tickets`](#pellmy-tickets) · [`triage`](#pelltriage-key) · [`related`](#pellrelated-key) · [`precheck`](#pellprecheck-key--idea) · [`scope`](#pellscope-key--project-key) · [`start-work`](#pellstart-work-key) · [`from-ticket`](#pellfrom-ticket-jira-key-freeform-context) |
 | **Reviewing code** | [`correctness-review`](#pellcorrectness-review) · [`quality-review`](#pellquality-review) · [`security-review`](#pellsecurity-review) · [`test-review`](#pelltest-review) · [`local-review`](#pelllocal-review) · [`three-pass-review`](#pellthree-pass-review-pr) · [`address-review`](#pelladdress-review-pr) · [`review-queue`](#pellreview-queue-repo-) |
 | **Auditing a whole repo** | [`repo-review`](#pellrepo-review) · [`repo-security-review`](#pellrepo-security-review) |
 | **Finishing up** | [`finish-work`](#pellfinish-work) · [`wrap-up`](#pellwrap-up-freeform-context) |
@@ -204,6 +204,26 @@ Before you commit effort to a ticket, check whether the work already exists — 
 
 **Side-effects:** none by default. Only on the existing-key path, when a `likely-dupe` is found, it offers (each `(y/n)`-gated): a "duplicates" issue link from the ticket to the older one, and a comment noting the suspected duplicate. Never resolves, closes, transitions, or edits fields.
 
+### `/pell:scope [KEY | PROJECT-KEY]`
+
+Before anyone starts a ticket, see where it fits in the whole project and whether it has enough information to begin. `scope` builds a synthesized **Statement of Work** for the Jira project — every epic's scope statement, deliverables, dependencies, and gaps, folding in any Confluence scope documents it finds — and caches it in the repo at `docs/pell/sow-<PROJECT>.md` so every developer and every Claude session shares one picture. Given a ticket, it places the ticket in that picture and runs a Definition-of-Ready rubric: description, acceptance criteria, epic fit, unlinked dependencies, sibling overlap, open questions. Verdict is **Ready / Ready with questions / Not ready**.
+
+**Usage:**
+
+```
+/pell:scope RRS-1020                          # place the ticket, run the readiness check
+/pell:scope RRS-1020 skip comment             # never offer the Jira comment
+/pell:scope RRS                               # project picture only — epic table, gaps, drift
+/pell:scope RRS refresh                       # rebuild the SOW cache now
+/pell:scope RRS sow https://.../wiki/...      # pin a Confluence page as an authoritative scope source
+/pell:scope RRS-1020 --dry-run                # no cache write, no comment offer
+/pell:scope                                   # ticket key from the current branch
+```
+
+**Output:** "Where it fits" (home epic, scope statement, sibling status counts, cross-epic dependencies, scope docs), then findings by severity (`blocker / major / minor / nit`) and a verdict. A drift line reports how many tickets changed since the cache was built; the cache rebuilds automatically after 14 days.
+
+**Side-effects:** writing the SOW cache file (`(y/n)`-gated; never committed for you) and, when the verdict isn't `Ready`, a comment on the ticket phrased as numbered questions to the reporter (`(y/n)`-gated, full text shown first). Never transitions, edits fields, or links issues. `/pell:from-ticket` runs this check automatically with the comment suppressed; pass `skip scope` to bypass.
+
 ### `/pell:start-work <KEY>`
 
 Fetch a Jira ticket, create a properly-named local branch (`<KEY>-<sentence-case-description>`), and optionally assign / transition the ticket. Read-only against Jira by default — side-effects only fire when you pre-authorize inline or answer `y` to a named per-action prompt.
@@ -234,13 +254,14 @@ Fetch a Jira ticket, create a properly-named local branch (`<KEY>-<sentence-case
 
 ### `/pell:from-ticket <JIRA-KEY> [freeform context]`
 
-Composes the full pre-implementation workflow in one command: fetches the Jira ticket and its connections, creates a branch via `/pell:start-work`, then hands off to `superpowers:brainstorming` → `superpowers:writing-plans` for the design spec and implementation plan.
+Composes the full pre-implementation workflow in one command: fetches the Jira ticket and its connections, runs the `/pell:scope` readiness check, creates a branch via `/pell:start-work`, then hands off to `superpowers:brainstorming` → `superpowers:writing-plans` for the design spec and implementation plan.
 
 ```
 /pell:from-ticket RRS-1020
 /pell:from-ticket RRS-1020 assign to me, move it to In Progress
 /pell:from-ticket RRS-1020 skip start-work, design only
 /pell:from-ticket RRS-1020 plan only         # resume from existing spec
+/pell:from-ticket RRS-1020 skip scope        # bypass the readiness check
 /pell:from-ticket RRS-1020 --reset           # delete artifacts and start over
 ```
 

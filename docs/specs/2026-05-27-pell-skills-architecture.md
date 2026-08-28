@@ -321,6 +321,6 @@ All previously-open questions are now resolved:
 
 The conventions above are stable and the bulk of the roadmap shipped:
 
-- **Built:** all four review primitives (`correctness`, `quality`, `security`, `test`) + both composites; the PR review ops (`review-queue`, `address-review`); both repo-wide audits (`repo-review`, `repo-security-review`) with their `repo-*-reviewer` agents; Jira ops (`my-tickets`, `triage`, `related`, `precheck`, `start-work`, `finish-work`); composers (`from-ticket`, `wrap-up`); the `frontend-router` skill; and the `visual-scratchpad` skill + `/pell:visualize` command (a surface not anticipated in the original build order).
+- **Built:** all four review primitives (`correctness`, `quality`, `security`, `test`) + both composites; the PR review ops (`review-queue`, `address-review`); both repo-wide audits (`repo-review`, `repo-security-review`) with their `repo-*-reviewer` agents; Jira ops (`my-tickets`, `triage`, `related`, `precheck`, `scope` + its `sow-builder` agent, `start-work`, `finish-work`); composers (`from-ticket`, `wrap-up`); the `frontend-router` skill; and the `visual-scratchpad` skill + `/pell:visualize` command (a surface not anticipated in the original build order).
 - **Not yet built:** `claude-md-init` (§10.6), second-tier composers (e.g. standup, release-notes), and the optional `pell-everything` meta-plugin (§9).
 - **Open work** is tracked in [`2026-05-28-pell-toolkit-improvements-plan.md`](2026-05-28-pell-toolkit-improvements-plan.md).
