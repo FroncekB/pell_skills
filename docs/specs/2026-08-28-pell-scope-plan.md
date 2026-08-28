@@ -25,7 +25,7 @@
 - Agent frontmatter: `name`, `description`, `model: inherit`; no `tools:` line; trailing JSON output.
 - Cache path: `docs/pell/sow-<PROJECT>.md` relative to `git rev-parse --show-toplevel`.
 - Staleness threshold: 14 days. Traversal cap: 10 pages of 100 (`deep` lifts it).
-- Bump `plugins/pell/.claude-plugin/plugin.json` from `0.12.0` to `0.13.0` (minor: new command + new agent) in the same change set. (The `conductor-port` branch independently bumps to `0.13.0`; whichever merges second resolves to `0.14.0`.)
+- Bump `plugins/pell/.claude-plugin/plugin.json` from `0.12.0` to `0.14.0` (minor: new command + new agent) in the same change set. `0.13.0` is skipped deliberately: the `conductor-port` branch already uses it and a `0.13.0` build is already in the local plugin cache, which is keyed by version — reusing the number would mean the reload never rebuilds.
 - Never commit, push, transition, edit fields, or link issues from these prompts.
 
 ---
@@ -634,7 +634,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 - [ ] **Step 1: Bump the version**
 
-In `plugins/pell/.claude-plugin/plugin.json` change `"version": "0.12.0"` to `"version": "0.13.0"`. Without this the installed cache never rebuilds and nobody sees the new command.
+In `plugins/pell/.claude-plugin/plugin.json` change `"version": "0.12.0"` to `"version": "0.14.0"`. Without this the installed cache never rebuilds and nobody sees the new command.
 
 - [ ] **Step 2: Plugin README**
 
@@ -708,7 +708,7 @@ Expected: both non-zero.
 
 ```bash
 git add plugins/pell/.claude-plugin/plugin.json plugins/pell/README.md README.md docs/specs/2026-05-27-pell-skills-architecture.md
-git commit -m "chore(pell): bump to 0.13.0 and document /pell:scope + sow-builder
+git commit -m "chore(pell): bump to 0.14.0 and document /pell:scope + sow-builder
 
 Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 ```
