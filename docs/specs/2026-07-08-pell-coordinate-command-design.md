@@ -1,6 +1,6 @@
 # /pell:coordinate — Coordinator-Led Delivery
 
-**Status:** Approved and implemented (`plugins/pell/commands/coordinate.md`)
+**Status:** SUPERSEDED (2026-07-13) — the `/pell:coordinate` command was removed and replaced by the conductor subsystem (a faithful port of Tom Neyland's `conductor` plugin: the `coordinate-agents` skill + `autonomous-build` family + `fan-and-critic` + `conductor-*` worker agents). See `docs/specs/2026-07-13-conductor-port-design.md`. This document is kept as history; the design it describes is no longer shipped.
 **Date:** 2026-07-08
 **Source:** Translation of the "Coordinator-Led AI Delivery" infographic into a Pell command.
 
