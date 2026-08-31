@@ -1,6 +1,6 @@
 ---
-description: Compose ticket-to-implementation in one command. Fetches a Jira ticket, dispatches /pell:start-work to create a branch, then hands off to superpowers:brainstorming → writing-plans for the design and plan. When superpowers isn't installed, runs a lightweight inline substitute that produces a starter spec.
-argument-hint: "<JIRA-KEY> [skip start-work | design only | plan only | start-work pre-auths | --reset] [freeform]"
+description: Compose ticket-to-implementation in one command. Fetches a Jira ticket, runs the /pell:scope readiness check, dispatches /pell:start-work to create a branch, then hands off to superpowers:brainstorming → writing-plans for the design and plan. When superpowers isn't installed, runs a lightweight inline substitute that produces a starter spec.
+argument-hint: "<JIRA-KEY> [skip start-work | skip scope | design only | plan only | start-work pre-auths | --reset] [freeform]"
 ---
 
 You are running **`/pell:from-ticket`**. Sequence three pieces of existing machinery — `/pell:start-work`, `superpowers:brainstorming`, `superpowers:writing-plans` — into one ticket-to-plan workflow. `from-ticket` itself does no design work; it parses args, gathers context, detects existing artifacts, and dispatches each stage with the right inputs.
@@ -14,6 +14,7 @@ Extract from `$ARGUMENTS` (all matches independent; freeform-first):
 - **Jira key** (required) — first match for `[A-Z][A-Z0-9]+-\d+`. If none, exit with: "I need a Jira key, e.g. `/pell:from-ticket RRS-1020`."
 - **Skip flags** (case-insensitive):
   - `skip start-work` / `branch ready` / `already on branch` → skip Stage 4
+  - `skip scope` / `no scope check` → skip Step 2.5 (the `/pell:scope` readiness check)
   - `design only` / `skip plan` / `no plan` → after Stage 5, instruct brainstorming not to chain into writing-plans
   - `plan only` / `skip brainstorm` / `skip design` → skip brainstorming; dispatch writing-plans directly. Requires an existing spec for `<KEY>`; otherwise error: "plan only requires an existing spec for `<KEY>`."
 - **Pre-auths forwarded verbatim to `/pell:start-work`** (do NOT reinterpret; capture the matched substrings to append to the start-work invocation):
@@ -62,6 +63,32 @@ Read `~/.claude/pell-config.json` (treat missing as `{}`).
 - Remote links (title + url + application.name)
 
 After the fetch, print one line: `Loaded <KEY> — <summary> (status: <status>, type: <type>).`
+
+## Step 2.5 — Readiness check via `/pell:scope`
+
+Skip this step when `skip scope` / `no scope check` was in `$ARGUMENTS`, and skip it when `plan only` / `skip brainstorm` / `skip design` was passed — a resume-from-spec run has no design conversation to feed and must not be asked `Continue into design anyway?`.
+
+Print one line: `Checking where <KEY> fits in the project...`
+
+Invoke `/pell:scope <KEY> skip comment` (append `--verbose` if the user passed it). The comment is suppressed here because `from-ticket` is about to start design work; the developer can run `/pell:scope <KEY>` on its own to post questions to the reporter. `scope` may prompt `(y/n)` to write its SOW cache — that prompt is its own and passes through.
+
+Read the `Verdict:` line from its output:
+
+- `Not ready` → prompt: "This ticket has <n> blocker gap(s) — see above. Continue into design anyway? (y/n)". On `n`, exit with: "Stopping. Run `/pell:scope <KEY>` to post the questions on the ticket, then re-run `/pell:from-ticket <KEY>` once it's answered." On `y`, continue.
+- `Ready with questions` → continue without prompting; the findings are on screen and feed the brainstorming seed.
+- `Ready` → continue.
+
+Capture the `### Where it fits` and `### Readiness` blocks verbatim as `project_context` for Step 5's seed. If `/pell:scope` itself fails (MCP error, no cache and the build failed), print `Scope check unavailable: <error> — continuing without project context.`, set `project_context` to that line, and continue. The readiness check never blocks `from-ticket` on its own errors.
+
+**Cache commit gate.** `/pell:scope` may have just written `docs/pell/sow-<projectKey>.md`, and `/pell:start-work`'s pre-flight refuses a dirty tree. Unless Step 4 is already being skipped, run `git status --porcelain` (unscoped — `/pell:start-work`'s own pre-flight is unscoped). Three cases:
+- The output is exactly one line and it names `docs/pell/sow-<projectKey>.md` → prompt:
+
+> `/pell:scope` saved `docs/pell/sow-<projectKey>.md`. `/pell:start-work` needs a clean tree. Commit that one file on `<current branch>` now? (y/n)
+
+- `y` → `git add docs/pell/sow-<projectKey>.md` and `git commit -m "docs(pell): add synthesized SOW for <projectKey>"`. Print `Committed docs/pell/sow-<projectKey>.md on <current branch>.` This is the only commit `from-ticket` ever makes, and it touches exactly that one file.
+- `n` → print `Continuing as "skip start-work". Commit or stash the file, then run /pell:start-work <KEY> yourself.` and treat `skip start-work` as set for Step 4.
+- The output names `docs/pell/sow-<projectKey>.md` and other files too → do not commit anything. Print `Working tree has other uncommitted changes; /pell:start-work will refuse. Continuing as "skip start-work".` and treat `skip start-work` as set.
+- The output is empty, or does not mention `docs/pell/sow-<projectKey>.md` → the gate does not apply; continue.
 
 ## Step 3 — Existing-artifact detection
 
@@ -157,6 +184,9 @@ Connections:
   - [<title>](<url>) — <application.name>
   - ...                                                  (omit section if no remote links)
 
+Project context (from /pell:scope; omit this section when Step 2.5 was skipped):
+<project_context — the "Where it fits" and "Readiness" blocks verbatim>
+
 Save the design spec to docs/superpowers/specs/<KEY>-YYYY-MM-DD-<topic>-design.md (topic slug chosen during brainstorming).
 
 When invoking writing-plans, instruct it to save the plan to docs/superpowers/plans/<KEY>-YYYY-MM-DD-<feature>.md.
@@ -204,6 +234,9 @@ This step runs **only** when Step 5's presence check failed. Other failure modes
 ## Connections
 <parent/subtasks/issuelinks/remote-links rendered as in Step 5's seed>
 
+## Project context
+<project_context, or "(scope check skipped)">
+
 ## Scope (user-stated)
 <answer to Q1>
 
@@ -231,12 +264,13 @@ If the filesystem write fails, print the error verbatim and leave the user on th
 ## Operator notes
 
 - **Never** mutate Jira from this command directly. All Jira side-effects route through `/pell:start-work`'s gates.
-- **Never** commit, push, or open a PR. Out of scope.
+- **Never** push or open a PR. The only commit `from-ticket` makes is the Step 2.5 cache-commit gate — one named file, `(y/n)`-gated — so `/pell:start-work`'s clean-tree check can pass.
 - **Never** auto-pick artifacts. When multiple specs or plans exist for a key, always ask the user which to use.
 - **No rollback ever.** If `start-work` creates a branch and brainstorming subsequently errors, the branch stays. The user's working tree is the source of truth; `from-ticket` doesn't undo work.
 - The seed sent to brainstorming is a one-shot context dump. If brainstorming asks for follow-up details mid-conversation, the user can re-run `/pell:related <KEY>` separately for that.
 - The inline substitute is reserved for the missing-plugin case. Other dispatch errors (e.g. brainstorming throws mid-run) surface verbatim — they're not what the substitute is for.
 - If `superpowers:writing-plans` exists but `superpowers:brainstorming` doesn't (or vice versa), treat them independently. The plan-only resume case in Step 5 needs only `writing-plans`; the normal path needs `brainstorming`.
+- The Step 2.5 readiness check is advisory. Only a `Not ready` verdict prompts; everything else flows into the brainstorming seed. `skip scope` bypasses it entirely.
 
 ## Out of scope
 

@@ -51,6 +51,7 @@ Finding PRs to review:
 | `/pell:triage <KEY>` | List unclaimed tickets in a project; claim / start / view per ticket. |
 | `/pell:related [KEY]` | Show a ticket's connection graph (links, subtasks, PRs). Read-only. |
 | `/pell:precheck [KEY \| idea]` | Check if work is already filed / built / in-flight — similar tickets, repo impl, open PRs, merged commits. Gated link/comment. Read-only by default. |
+| `/pell:scope [KEY \| PROJECT]` | Place a ticket in a synthesized project SOW (cached at `docs/pell/sow-<PROJECT>.md`) and run a Definition-of-Ready check. Gated "questions for the reporter" comment. Read-only by default. |
 | `/pell:start-work <KEY>` | Fetch a ticket, create a branch, optionally assign / transition. |
 | `/pell:finish-work` | Open a Bitbucket PR; optionally transition Jira + comment the PR link. |
 
@@ -82,7 +83,11 @@ Repo-based reviewers (dispatched by the repo audits):
 
 - `repo-quality-reviewer` · `repo-security-reviewer`
 
-All return structured JSON: `{findings: [{severity, file, line, finding, fix}], summary}`. The repo-based reviewers may add an optional `also_in` array on a finding to list other locations where the same issue recurs.
+Project scoper (dispatched by `/pell:scope` when the SOW cache is missing or stale):
+
+- `sow-builder` — returns `{sow_markdown, sources, stats, summary}` rather than findings; it produces a document, not a review.
+
+The reviewers return structured JSON: `{findings: [{severity, file, line, finding, fix}], summary}`. The repo-based reviewers may add an optional `also_in` array on a finding to list other locations where the same issue recurs.
 
 ## Severity scales
 
