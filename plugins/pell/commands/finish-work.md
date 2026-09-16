@@ -71,8 +71,9 @@ The PR's destination branch, in this order:
 
 1. If `into <branch>` was passed inline → use it (Step 1)
 2. Run `git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null` — strip the `refs/remotes/origin/` prefix. This is the repo's default branch (`develop` for most Pell repos, `main` for some).
-3. If step 2 fails or returns empty → read `pell-config.json:bitbucket.default_base_branch`
-4. If still empty → ask:
+3. If step 2 fails or returns empty → check `docs/pell/context.md`'s `## Repository` section for a `Default base branch` line (Step 4 loads it). It is repo-scoped, so use it if present — ahead of the machine-global cache below.
+4. If context.md didn't supply one → read `pell-config.json:bitbucket.default_base_branch`
+5. If still empty → ask:
 
    > I couldn't determine the base branch for this PR. What should I target? (e.g. `develop`, `main`)
 

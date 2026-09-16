@@ -105,7 +105,7 @@ Then invoke `/pell:finish-work <forwarded args>` via the Skill tool. (`<forwarde
 - `finish-work` has its own gates and exits cleanly on user cancellation (e.g. `n` at the PR-create prompt). When that happens, `wrap-up` does NOT retry — exit silently. The user can re-run when ready.
 - `finish-work` non-zero exit on a hard error (push failure, Bitbucket MCP unreachable, etc.) → `wrap-up` also exits, surfacing finish-work's error. No rollback of the Stage B commit — the user can amend, reset, or re-run wrap-up.
 
-`wrap-up` exits after dispatching Stage C. finish-work's Step 8 report is the final "all done" signal.
+`wrap-up` exits after dispatching Stage C. finish-work's Step 9 report is the final "all done" signal.
 
 ## Step 5 — Error handling summary
 
@@ -132,7 +132,7 @@ Then invoke `/pell:finish-work <forwarded args>` via the Skill tool. (`<forwarde
 - After Stage B commits: `Committed working-tree changes: "<message>"`
 - Before Stage C: `Running /pell:finish-work...`
 
-No final synthesis report. finish-work's Step 8 is the last word.
+No final synthesis report. finish-work's Step 9 is the last word.
 
 ## Operator notes
 

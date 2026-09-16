@@ -53,13 +53,13 @@ Never write to `context.md`. If a live call later contradicts it, use the live v
   On 404 exit with: "`<self_key>` doesn't exist in Jira (or you don't have access)." Set `query_text` to the summary + description.
 - **If free text:** `query_text` is the parsed free text from Step 1.
 
-**Target project** (scopes the Jira search unless `workspace` was passed): the `self_key`'s project prefix; else the key prefix from `git branch --show-current` (if that command fails or returns empty — detached HEAD or not a repo — treat it as no match and continue); else `pell-config.json:jira.default_project` if set. If none resolves and `workspace` was not passed, run the Jira pass unscoped and note this in the report.
+**Target project** (scopes the Jira search unless `workspace` was passed): the `self_key`'s project prefix; else the key prefix from `git branch --show-current` (if that command fails or returns empty — detached HEAD or not a repo — treat it as no match and continue); else the project key from `docs/pell/context.md`'s `## Jira — <KEY>` section (Step 3 loads it) when exactly one is recorded — repo-scoped, so it wins over the machine-global cache below; else `pell-config.json:jira.default_project` if set. If none resolves and `workspace` was not passed, run the Jira pass unscoped and note this in the report.
 
 ## Step 5 — Gather signals
 
 Each signal is gathered independently. Any failure degrades to a `_<signal> failed: <error>_` (or `_unavailable_`) line in that section of the report — it never aborts the command. Skip any signal the user suppressed in Step 1.
 
-### 4a — Jira: similar tickets
+### 5a — Jira: similar tickets
 
 Two passes, merged and deduped, with `self_key` removed:
 
@@ -76,11 +76,11 @@ Two passes, merged and deduped, with `self_key` removed:
 
 Merge both result sets by key, drop `self_key`, keep the union. When `open only` was set, also drop any Done issues returned by the Rovo pass (it has no status filter of its own), so the toggle applies uniformly.
 
-### 4b — Repo: existing implementation
+### 5b — Repo: existing implementation
 
 Skip if `skip repo` was set or `git rev-parse --show-toplevel` fails. Extract feature keywords from `query_text` (routes, function/symbol names, domain nouns). Use `Grep`/`Glob` to locate candidates, then `Read` the top hits to judge whether the functionality already exists. Record `file:line symbol` for each genuine hit. A keyword appearing in an unrelated context is not evidence — use judgment.
 
-### 4c — In-flight: open PRs and branches
+### 5c — In-flight: open PRs and branches
 
 Skip if `skip bitbucket` was set or `git rev-parse --show-toplevel` fails (not in a repo). Parse `git remote get-url origin` for a Bitbucket `<workspace>/<repo>` (expect `git@bitbucket.org:<workspace>/<repo>.git` or the https form). If origin isn't Bitbucket, note the detected host and skip the PR query. Otherwise call `mcp__atlassian-bitbucket__bitbucketPullRequest` with:
 - `action`: `list`
@@ -92,7 +92,7 @@ Skip if `skip bitbucket` was set or `git rev-parse --show-toplevel` fails (not i
 
 Separately run `git branch -a` and keep branches whose names match the terms. If the Bitbucket MCP is absent or errors, render `_Bitbucket unavailable_` and continue (notify-don't-force).
 
-### 4d — Merged: recent git history
+### 5d — Merged: recent git history
 
 Skip if `skip git` was set or not in a repo. Run `git log --oneline --grep="<term>" -i` (one or a few representative terms; cap to ~15 lines) to find already-merged work. Record `<short-sha> <subject> (<relative date>)`.
 
@@ -102,7 +102,7 @@ Classify each Jira candidate as `likely-dupe`, `related`, or `unrelated` (drop `
 
 Verdicts are ordered — evaluate top-down and emit the first that matches; **LIKELY DUPLICATE** wins if any of its conditions are met (even when in-flight work also exists).
 
-- **LIKELY DUPLICATE** — a `likely-dupe` Jira ticket exists, or the feature is already shipped (repo implementation found in 4b, or a merged commit found in 4d).
+- **LIKELY DUPLICATE** — a `likely-dupe` Jira ticket exists, or the feature is already shipped (repo implementation found in 5b, or a merged commit found in 5d).
 - **POSSIBLY ADDRESSED** — only `related` tickets, partial repo hits, or overlapping in-flight work.
 - **APPEARS NOVEL** — nothing material across all signals.
 

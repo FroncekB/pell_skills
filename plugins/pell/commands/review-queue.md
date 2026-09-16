@@ -11,7 +11,7 @@ The user passed: `$ARGUMENTS`
 
 From `$ARGUMENTS`, extract:
 
-- **Repo(s)** (optional) — one or more repo slugs (`atlasviewapp`) or Bitbucket repo URLs. Workspace defaults to `pellsoftware`; a URL or `workspace <slug>` overrides it. If none are given, scan the whole workspace (Step 4).
+- **Repo(s)** (optional) — one or more repo slugs (`atlasviewapp`) or Bitbucket repo URLs. Workspace resolves in order: a URL or `workspace <slug>` inline; else the Bitbucket workspace named in `docs/pell/context.md`'s `## Repository` section (Step 3 loads it — repo-scoped, so it wins over the hardcoded default below); else `pellsoftware`. If no repos are given, scan the whole workspace (Step 4).
 - **Filters** (optional freeform):
   - `unapproved` / `needs review` / `not approved` → drop PRs you've already approved (opt-in; costs a per-PR `get`, Step 5).
   - `from <name>` / `by <name>` → keep only PRs whose author display name contains `<name>` (client-side).
