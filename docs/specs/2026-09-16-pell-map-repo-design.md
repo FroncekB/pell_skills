@@ -512,9 +512,15 @@ against.
 
 ## 13. Failure behavior
 
+Two failure classes, and the distinction is the rule: a **per-source** failure
+degrades to a `## Gaps` entry and the walk continues; a **total** failure, where
+the walk produced nothing to interview or write, exits. Everything in the table
+below except the first two rows is per-source.
+
 | Condition | Behavior |
 |-|-|
-| Not a git repo | Exit with a clear message. The only fatal case. |
+| Not a git repo | Exit. Total: the command is repo-scoped by definition. |
+| `repo-mapper` returns absent or empty `coordinates` | Exit with `Could not map this repo: <summary>.` Total: there is nothing to interview about and writing an empty `context.md` would be worse than writing none. Mirrors `/pell:scope`'s `Could not build the SOW: <summary>.` |
 | No git remote | Ask for workspace/slug, or skip the Repository section |
 | No issue keys in 200 commits | Ask for the project key outright |
 | Atlassian MCP absent or unauthed | Skip Jira and Confluence, record in `## Gaps`, continue |
