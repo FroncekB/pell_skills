@@ -115,3 +115,199 @@ For each `gaps` item, in order:
 Record every answer — confirmed, corrected, dropped, or skipped — against its field as you go. This resolved set, together with `repo_root`, `context_path`, and the proven `coordinates`, is what the write steps that follow this interview consume.
 
 Under `--dry-run`, run this interview in full; only the eventual write is suppressed.
+
+## Step 5 — Write `context.md`
+
+Skip this step, and Steps 6 and 7, when `verify` is set — go to Step 8 instead.
+
+Prompt:
+
+> Write repo coordinates to `docs/pell/context.md`? (y/n)
+
+Under `--dry-run`, skip this prompt entirely: print `--dry-run: context.md not written.` and continue to Step 7. Step 6 has nothing to patch without a written file, so it is skipped too.
+
+On `n`: print `context.md not written.` and continue to Step 7, skipping Step 6 for the same reason — a declined write leaves nothing for the SOW build to patch.
+
+On `y`: create `docs/pell/` under `repo_root` if it does not exist, then write `context_path` in this shape (design spec Section 7). Frontmatter:
+
+```
+---
+schema: 1
+generated_at: <ISO-8601 UTC, e.g. 2026-09-16T14:22:00Z>
+generated_by: /pell:map-repo
+repo: <workspace>/<slug>
+---
+```
+
+Followed by `# Repo context — <slug>`, then the preamble paragraph — mandatory, copied exactly, never paraphrased:
+
+```
+Coordinates only. Nothing here is a source of truth — it tells you where the
+sources of truth live. Fetch live before relying on any content.
+```
+
+Then the body sections, in this order, built from the resolved coordinates and the interview's confirmed/corrected/dropped/skipped answers:
+
+- **`## Repository`** — Bitbucket workspace, repo slug, default base branch, branch shape (`<KEY>-<description>`, with a worked example when a key is known), CI system. Omit a line whose value is unknown rather than guessing.
+- **`## Atlassian site`** — site URL, cloudId.
+- **`## Jira — <KEY> (<name>)`** — one section per discovered project key, repeated in the same frequency-rank order Step 3 discovered them. Each holds: issue types, workflow (statuses joined by `->`), transition names exactly as the API returned them (`start`, `in_review`, `done` — write `unverified` for any role that could not be confirmed; never a fabricated name), components, active epics as `<KEY> (<summary>)`, and a `Synthesized SOW:` line. Before Step 6 runs, write that line as `Synthesized SOW: none — run /pell:scope <KEY>`; Step 6 patches it on a successful build.
+- **`## Confluence`** — space key, space id, and a `Page | id | Covers` table of canonical pages.
+- **`## Google Drive`** — one line per labelled folder: `<label>: <folder_id> (<name>)`.
+- **`## Gaps`** — one line per dropped `low_confidence` field and per `gaps` entry (answered or skipped), each stating how to resolve it. Render `_None._` when empty.
+
+Repo-level sections (`Repository`, `Atlassian site`, `Confluence`, `Google Drive`, `Gaps`) appear once regardless of how many projects were found; only `## Jira —` repeats. This file holds coordinates and confirmed values only — never a scope statement, epic body, or Confluence page body. That content lives in the SOW or on the source system, not here.
+
+Print `Wrote docs/pell/context.md` and continue to Step 6.
+
+## Step 6 — Build the SOW
+
+Skip this entire step, and go directly to Step 7, when any of: `verify` is set (see Step 8); Step 5 did not write `context.md` (declined, or `--dry-run`); or `skip_sow` is set — print `Skipping the SOW build.` first in that last case.
+
+`context.md` is already written at this point on every path that reaches this step. That ordering is load-bearing: a declined, failed, or slow SOW build must never cost the developer the coordinates already sitting on disk.
+
+For each Jira project key discovered in Step 3, in the same frequency-rank order:
+
+1. If `docs/pell/sow-<KEY>.md` exists, read its own YAML frontmatter for `generated_at`, and that date is less than 14 days old: print `SOW for <KEY> is current (built <date>) — skipping.` and continue to the next key. This age comes only from that file's own frontmatter — never re-derive or re-implement a clock here; the 14-day rule belongs to `/pell:scope` alone.
+2. Otherwise, unless `with_sow` is set, prompt naming the cost:
+
+   > Build the Statement of Work for `<KEY>`? This walks every issue in the project plus any linked Confluence scope docs — typically 1-3 minutes. (y/n)
+
+   `with_sow` answers this `y` for every key without prompting.
+3. On `y` (or `with_sow`): dispatch the Agent tool with `subagent_type="sow-builder"` — the existing agent, unmodified — with a prompt containing these labeled lines:
+
+   ```
+   cloudId: <coordinates.atlassian.cloud_id>
+   project_key: <KEY>
+   sow_sources: [<Confluence page URLs this walk already identified as candidate scope docs, or empty>]
+   deep: false
+   verbose: <verbose>
+   ```
+
+4. On success (non-empty `sow_markdown`): write `docs/pell/sow-<KEY>.md` with the returned document, print `Wrote docs/pell/sow-<KEY>.md (<stats.issues> issues · <stats.epics> epics · <stats.scope_docs> scope doc(s)).`, then patch **only** the `Synthesized SOW:` line for `<KEY>` in the `context.md` just written, to `Synthesized SOW: docs/pell/sow-<KEY>.md (built <today's date>)`. No separate gate covers this patch — it is covered by the `y` already given to the build itself.
+5. On `n`, or on failure or an empty result: leave the `context.md` line as `Synthesized SOW: none — run /pell:scope <KEY>`, and add a line under `## Gaps` — `SOW for <KEY> not built — run /pell:scope <KEY>.` on decline, or `SOW build for <KEY> failed: <summary> — run /pell:scope <KEY>.` on failure. This is a **per-source** failure: `context.md` stays intact exactly as written, and the walk continues to the next project key.
+
+Continue to Step 7 once every discovered key has been handled.
+
+## Step 7 — `CLAUDE.md` pointer
+
+Skip this step when `verify` is set — go to Step 8 instead.
+
+Locate `<repo_root>/CLAUDE.md`. Show the exact block and the target path before prompting — never prompt blind:
+
+```markdown
+<!-- pell:context-pointer -->
+## Repo context
+
+Project coordinates — Jira keys and exact transition names, Confluence space and
+canonical page ids, Drive folder ids, Bitbucket slug — are mapped in
+`docs/pell/context.md`. Read it before any Jira, Confluence, or Drive lookup for
+this repo. It holds pointers, not content: fetch live before relying on anything
+it names.
+```
+
+If `CLAUDE.md` exists, prompt:
+
+> Add the repo-context pointer block to `CLAUDE.md`? (y/n)
+
+On `y`: locate `<!-- pell:context-pointer -->` in the file.
+- If present, replace everything from that marker through the end of its section (up to the next `## ` heading at the same level, or end of file) with the block above.
+- If absent, append the block at the end of the file, preceded by a blank line.
+
+This makes re-running idempotent — the marker is what stops a second copy from stacking.
+
+If `CLAUDE.md` does not exist, ask a further, separate `(y/n)`:
+
+> `CLAUDE.md` doesn't exist in this repo. Create it containing only the pointer block above? (y/n)
+
+On `y` to either prompt: write the file as described. On `n` to either: print `CLAUDE.md not written.` and continue.
+
+Under `--dry-run`: skip both prompts, print `--dry-run: CLAUDE.md not written.`, and continue.
+
+This gate is always separate from the `context.md` gate and the SOW gates in Step 6 — never bundle it with either. Consent to write a cache file under `docs/pell/` is not consent to edit the repo's own instruction file.
+
+On a successful write, print exactly one of: `Added the pointer block to CLAUDE.md`, `Replaced the pointer block in CLAUDE.md`, or `Created CLAUDE.md with the pointer block.`
+
+Continue to Step 9.
+
+## Step 8 — `verify` mode
+
+Runs instead of Steps 3 through 7 when `verify` was parsed in Step 1. Steps 3 and 4 already skip themselves in that case (see Step 3) and Step 5 routes here too (see Step 5) — this step is what all of them were skipping ahead to. No full walk, no `repo-mapper` dispatch: only cheap, falsifiable checks (design spec Section 11).
+
+If `context_path` does not exist, print `No context.md found — nothing to verify. Run /pell:map-repo to build one.` and exit.
+
+Otherwise, using the `schema` / `generated_at` / `repo` frontmatter and the coordinate values already parsed from `context_path` in Step 2, re-check each of:
+
+| Check | Method |
+|-|-|
+| Bitbucket slug, base branch | `git remote -v`, `git symbolic-ref refs/remotes/origin/HEAD` |
+| Transition names | the transitions-for-issue call (direct, or via `discover`/`executeRead` per Section 5.0) on one sampled issue per recorded Jira project |
+| Confluence page ids | `getConfluencePage` by id — resolves or 404s |
+| Drive folder ids | `get_file_metadata` by id — resolves or 404s |
+| SOW freshness | stat `docs/pell/sow-<KEY>.md` per recorded project, read its own `generated_at` |
+
+The first four rows compare the live value against what `context.md` records; a mismatch, or a 404 against a recorded id, is drift. The SOW row **reports only** — `verify` never rebuilds a SOW, no matter its age. Rebuilding is the expensive operation this whole design moved out of the mid-task path; that stays with `/pell:scope`. Render it per recorded project as `sow-<KEY>.md is <n> days old. Run /pell:map-repo refresh, or "refresh" inside /pell:scope.` A project with no recorded SOW gets no row.
+
+If nothing drifted (the SOW row never counts as drift): print `No drift. context.md verified against 4 sources.` and exit without writing.
+
+If something drifted, render each finding as `<field>: <recorded> -> <actual>`, one per line, then prompt:
+
+> `context.md` has drifted on `<n>` field(s). Rewrite just those lines? (y/n)
+
+On `y`: rewrite **only** the drifted lines in place, preserving `## Gaps` and any hand-edits untouched, and bump `generated_at` to now. Print `Wrote docs/pell/context.md (<n> field(s) corrected).`
+
+On `n`: print `Not rewritten.`
+
+Under `--dry-run`: run every check above in full, render the drift (or its absence) exactly as above, skip the rewrite prompt, and print `--dry-run: context.md not written.` instead of writing.
+
+Exit after this step. `verify` never continues to Step 9 or to any of Steps 5 through 7.
+
+## Step 9 — Render
+
+Skipped entirely under `verify` — Step 8 renders its own outcome and exits.
+
+The **existing-file summary** — headed `context.md — mapped <n> days ago.`, the `Repository` / `Atlassian` / `Jira` / `Confluence` / `Drive` / `Gaps` field block, and the `Say "refresh" to rebuild, or "verify" to check it for drift.` closer — is already defined in Step 2. It reproduces design spec Section 14's field set exactly; reuse it verbatim from there and do not redefine it here.
+
+After a build in this run (Steps 3 through 7 ran, regardless of how many of their gates were accepted), render the **post-build summary**: the same field block Step 2 uses (`Repository`, `Atlassian`, `Jira`, `Confluence`, `Drive`, `Gaps` — identical shape and content rules, one repeated `Jira` row per discovered project when there is more than one), headed `Mapped <slug>.` instead of an age line, built from the coordinates and interview answers just gathered:
+
+```
+Mapped rrs-web.
+
+Repository   pellsoftware/rrs-web · base develop · Bitbucket Pipelines
+Atlassian    pellsoftware.atlassian.net
+Jira         RRS (Retail Rewards System) — 5 issue types, 3 components, 2 active epics
+             transitions: start "In Progress" · done "Done" · in_review unverified
+Confluence   RRSDEV — 3 canonical pages
+Drive        2 folders (requirements, design)
+Gaps         2 — see the file
+
+Wrote docs/pell/context.md
+Wrote docs/pell/sow-RRS.md (127 issues · 2 epics · 1 scope doc)
+Added the pointer block to CLAUDE.md
+
+Commit all three with your normal workflow.
+```
+
+Follow the field block with one `Wrote ...` / `Added ...` / `Replaced ...` / `Created ...` line per file this run actually touched, in the fixed order `context.md`, then each `sow-<KEY>.md` built this run, then the `CLAUDE.md` line — using the exact per-file lines already specified in Steps 5 through 7. Omit the line for any file not written this run (declined, `--dry-run`, or skipped).
+
+Close with `Commit all three with your normal workflow.` when all three kinds of file were written this run (`context.md`, at least one SOW, and `CLAUDE.md`); otherwise close with `Commit the file(s) written above with your normal workflow.` Never tell the developer to commit something that was not written.
+
+Under `--dry-run`, render this same summary from the interview answers so the developer sees the full preview, but every `Wrote` / `Added` line is replaced by what Steps 5 through 7 already printed (`--dry-run: ... not written.`), and the closing line is `--dry-run: nothing was written.`
+
+## Failure behavior
+
+Design spec Section 13 names two failure classes. A **per-source** failure degrades to a `## Gaps` entry and the walk continues; a **total** failure exits outright because there is nothing left to interview or write. Only the first two rows below are total — everything else is per-source and must never stop the command.
+
+| Condition | Behavior |
+|-|-|
+| Not in a git repository | Exit (Step 2). Total — this command is repo-scoped by definition. |
+| `repo-mapper` returns absent or empty `coordinates` | Exit with `Could not map this repo: <summary>.` (Step 3). Total — nothing to interview or write, and an empty `context.md` would be worse than none. |
+| No git remote | Ask for workspace/slug, or omit the `## Repository` line that needs it |
+| No issue keys in 200 commits or branch names | Ask for the project key outright, or record the gap |
+| Atlassian MCP absent or unauthenticated | Skip Jira and Confluence, record under `## Gaps`, continue |
+| Drive MCP absent | Skip Drive, record under `## Gaps`, continue |
+| Bitbucket MCP absent | Not needed — the `## Repository` section comes from local git |
+| A Jira project key resolves to nothing | Record under `## Gaps`, continue with the other keys |
+| SOW build fails or returns empty | `context.md` is already written and stays intact; record the failure under `## Gaps` (Step 6); continue to the next project |
+| Unknown `schema:` in an existing `context.md` | Print `context.md is schema <n>; this build writes schema 1 — rebuilding.` and treat the file as missing (Step 2) |
+
+MCP handling follows architecture spec Section 4: notify, never force. A developer without the Drive connector still gets a useful Jira, Confluence, and Bitbucket map.
