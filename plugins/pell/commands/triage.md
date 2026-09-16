@@ -26,10 +26,25 @@ If no project key is found, exit with: "I need a project key (e.g. `RRS`, `FIEL`
 
 Read `~/.claude/pell-config.json` (Read tool; treat missing as `{}`).
 
-- If `jira.cloud_id` is set, use it.
+- If `docs/pell/context.md` names a `cloudId` under its Atlassian site section (Step 3 loads it; repo-scoped, so it wins here), use it.
+- Otherwise, if `jira.cloud_id` is set, use it.
 - Otherwise call `mcp__plugin_atlassian_atlassian__getAccessibleAtlassianResources`, use the first result's `id`, and write it back atomically to `pell-config.json:jira.cloud_id`.
 
-## Step 3 — Build and run the JQL query
+## Step 3 — Load repo context
+
+Run `git rev-parse --show-toplevel`. If it succeeds, read `<toplevel>/docs/pell/context.md` (Read tool). A missing file, unreadable frontmatter, or a `schema:` value other than `1` all mean "no context" — continue without it and say nothing.
+
+When present, treat it as a **coordinate source only**. It holds pointers, not content: never treat its epic lists, page titles, or component names as current truth. Resolve any coordinate in this order:
+
+1. an explicit value in `$ARGUMENTS`
+2. `docs/pell/context.md`
+3. `~/.claude/pell-config.json`
+4. a live MCP lookup
+5. prompt the user
+
+Never write to `context.md`. If a live call later contradicts it, use the live value and print one line: `context.md is out of date on <field>. Run /pell:map-repo verify.`
+
+## Step 4 — Build and run the JQL query
 
 Base JQL: `project = "<KEY>" AND statusCategory != Done`
 
@@ -50,7 +65,7 @@ If the call fails with a JQL syntax error → exit with: "Jira rejected that fil
 
 If the MCP isn't connected → exit with: "Jira MCP isn't connected — see the README prerequisites."
 
-## Step 4 — Render the pool
+## Step 5 — Render the pool
 
 If 0 issues:
 
@@ -88,7 +103,7 @@ Below the list, render exactly one of:
 
 The `searchJiraIssuesUsingJql` MCP doesn't return a total count, only `isLast`/`nextPageToken`. Don't promise a total you can't deliver.
 
-## Step 5 — Per-ticket action prompt
+## Step 6 — Per-ticket action prompt
 
 Ask:
 
@@ -122,7 +137,7 @@ Behavior per choice:
 
 - **`v` (view)** — call `mcp__plugin_atlassian_atlassian__getJiraIssue` with `cloudId`, `issueIdOrKey: "RRS-1041"`, `fields: ["summary", "description", "status", "issuetype", "priority", "reporter", "created", "labels"]`, `responseContentFormat: "markdown"`. Print: summary, status, type, reporter, labels, description (truncated to 1500 chars if longer with `…[truncated]`). Then return to the action menu for the same ticket.
 
-- **`n` (next)** — return to Step 5 list prompt (don't re-render the list — keep numbering).
+- **`n` (next)** — return to Step 6 list prompt (don't re-render the list — keep numbering).
 
 - **`q` (quit)** — exit cleanly. No farewell, no summary.
 

@@ -11,9 +11,9 @@ The user passed: `$ARGUMENTS`
 
 From `$ARGUMENTS`, extract:
 
-- **Repo(s)** (optional) — one or more repo slugs (`atlasviewapp`) or Bitbucket repo URLs. Workspace defaults to `pellsoftware`; a URL or `workspace <slug>` overrides it. If none are given, scan the whole workspace (Step 3).
+- **Repo(s)** (optional) — one or more repo slugs (`atlasviewapp`) or Bitbucket repo URLs. Workspace defaults to `pellsoftware`; a URL or `workspace <slug>` overrides it. If none are given, scan the whole workspace (Step 4).
 - **Filters** (optional freeform):
-  - `unapproved` / `needs review` / `not approved` → drop PRs you've already approved (opt-in; costs a per-PR `get`, Step 4).
+  - `unapproved` / `needs review` / `not approved` → drop PRs you've already approved (opt-in; costs a per-PR `get`, Step 5).
   - `from <name>` / `by <name>` → keep only PRs whose author display name contains `<name>` (client-side).
   - `newest first` → sort newest-updated first (default is oldest-first).
   - `by age` → one flat oldest-first list, no repo grouping.
@@ -28,12 +28,26 @@ Read `~/.claude/pell-config.json` (treat missing as `{}`).
 
 If `atlassianUserInfo` fails: exit with "Couldn't resolve your Atlassian identity — the Atlassian OAuth MCP isn't responding. See the README prerequisites." (`account_id` is a public identifier, not a secret.)
 
-## Step 3 — Resolve the repo set
+## Step 3 — Load repo context
 
-- **Repos in args** → use exactly those. Validate each as you query (Step 4); on a 404/no-access, print `(skipping <repo> — not found or no access)` and continue with the rest.
+Run `git rev-parse --show-toplevel`. If it succeeds, read `<toplevel>/docs/pell/context.md` (Read tool). A missing file, unreadable frontmatter, or a `schema:` value other than `1` all mean "no context" — continue without it and say nothing.
+
+When present, treat it as a **coordinate source only**. It holds pointers, not content: never treat its epic lists, page titles, or component names as current truth. Resolve any coordinate in this order:
+
+1. an explicit value in `$ARGUMENTS`
+2. `docs/pell/context.md`
+3. `~/.claude/pell-config.json`
+4. a live MCP lookup
+5. prompt the user
+
+Never write to `context.md`. If a live call later contradicts it, use the live value and print one line: `context.md is out of date on <field>. Run /pell:map-repo verify.`
+
+## Step 4 — Resolve the repo set
+
+- **Repos in args** → use exactly those. Validate each as you query (Step 5); on a 404/no-access, print `(skipping <repo> — not found or no access)` and continue with the rest.
 - **No repos in args** → enumerate the workspace: `mcp__atlassian-bitbucket__bitbucketRepository` `action=list`, `workspaceId=<workspace>`, paginating until exhausted. Collect repo slugs and print `Scanning <N> repos in <workspace>…` so the user knows a no-arg run does more work.
 
-## Step 4 — Query each repo
+## Step 5 — Query each repo
 
 For each repo, call `mcp__atlassian-bitbucket__bitbucketPullRequest`:
 - `action=list`, `workspaceId`, `repoId=<slug>`
@@ -50,7 +64,7 @@ Aggregate `values`, tagging each PR with its repo. Capture per PR: `id`, `title`
 
 If nothing matches: print `No open PRs awaiting your review (scanned <N> repos).` and stop.
 
-## Step 5 — Render the list
+## Step 6 — Render the list
 
 Group by repo; within a repo, **oldest `updated_on` first** (the stalest PR needs you most). Order repos by the age of their oldest waiting PR (most-overdue repo first). Number sequentially across the whole list.
 
@@ -70,7 +84,7 @@ Format rules:
 - `(updated <relative time>)` — largest unit giving an integer ≥ 1 (`5h ago`, `3d ago`, `6w ago`, `2mo ago`)
 - `newest first` reverses the within-repo sort; `by age` produces a single flat oldest-first list with no repo headers
 
-## Step 6 — Offer to chain into a review
+## Step 7 — Offer to chain into a review
 
 After the list, ask:
 

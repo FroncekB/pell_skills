@@ -14,8 +14,8 @@ Extract from `$ARGUMENTS`:
 - **Jira key** (required) — first match for `[A-Z][A-Z0-9]+-\d+`. If none, exit with: "I need a Jira key, e.g. `/pell:start-work RRS-1020`. (Listing your assigned tickets will live in `/pell:my-tickets` once that's built.)"
 - **Branch description override** — phrases like `call it <slug>`, `name it <slug>`, `branch <slug>`. Capture the slug verbatim — preserve the casing and hyphenation the user typed.
 - **Jira pre-authorizations** (each independent) — `assign to me` / `assign me` / `move it to <status>` / `transition to <status>` / `move to <status>`.
-- **Jira decline** — `don't touch jira` / `skip jira` / `no jira changes`. Suppresses both side-effect prompts in Step 5.
-- **`--reset` flag** — clears the cached "start" transition for this project before Step 5b.
+- **Jira decline** — `don't touch jira` / `skip jira` / `no jira changes`. Suppresses both side-effect prompts in Step 6.
+- **`--reset` flag** — clears the cached "start" transition for this project before Step 6b.
 
 The rest of `$ARGUMENTS` is informational context (e.g. "this is urgent") — let it color tone but don't let it drive control flow.
 
@@ -27,7 +27,8 @@ Extract `projectKey` from the Jira key (everything before the `-`).
 
 Read `~/.claude/pell-config.json` (use the Read tool; if the file doesn't exist, treat it as empty config `{}`).
 
-- If `jira.cloud_id` is set in the config, use it
+- If `docs/pell/context.md` names a `cloudId` under its Atlassian site section (Step 3 loads it; repo-scoped, so it wins here), use it
+- Otherwise, if `jira.cloud_id` is set in the config, use it
 - Otherwise, call `mcp__plugin_atlassian_atlassian__getAccessibleAtlassianResources`. Use the first result's `id` as `cloudId`. Then atomically write it back:
   1. Re-read the config (or use the empty `{}` if it didn't exist)
   2. Set `jira.cloud_id = <cloudId>`
@@ -47,13 +48,27 @@ Capture these fields for later steps:
 - `issuetype.name` (string)
 - `status.name` (string)
 - `assignee.displayName` and `assignee.accountId` (may be null if unassigned)
-- `description` (markdown — keep the first ~5 lines for the Step 6 summary)
+- `description` (markdown — keep the first ~5 lines for the Step 7 summary)
 
 If the call fails with "not found" or 404 → exit with: "Couldn't find `<KEY>`. Check the key and your Jira MCP connection."
 
 If the MCP call fails for any other reason (connection, auth) → exit with: "Jira MCP isn't responding — see the README prerequisites and try `/mcp` to verify the connection."
 
-## Step 3 — Pre-flight checks
+## Step 3 — Load repo context
+
+Run `git rev-parse --show-toplevel`. If it succeeds, read `<toplevel>/docs/pell/context.md` (Read tool). A missing file, unreadable frontmatter, or a `schema:` value other than `1` all mean "no context" — continue without it and say nothing.
+
+When present, treat it as a **coordinate source only**. It holds pointers, not content: never treat its epic lists, page titles, or component names as current truth. Resolve any coordinate in this order:
+
+1. an explicit value in `$ARGUMENTS`
+2. `docs/pell/context.md`
+3. `~/.claude/pell-config.json`
+4. a live MCP lookup
+5. prompt the user
+
+Never write to `context.md`. If a live call later contradicts it, use the live value and print one line: `context.md is out of date on <field>. Run /pell:map-repo verify.`
+
+## Step 4 — Pre-flight checks
 
 Run the three blocking checks first; abort on first failure. Then surface the two non-blocking warnings.
 
@@ -67,10 +82,10 @@ Run the three blocking checks first; abort on first failure. Then surface the tw
 
    > A branch for `<KEY>` already exists: `<existing-branch>`. Switch to it instead of creating a new one? (y/n)
 
-   - `y` → run `git checkout <existing-branch>`, then skip to Step 5
-   - `n` → continue to Step 4 (the user accepts that they'll have two branches for this ticket)
+   - `y` → run `git checkout <existing-branch>`, then skip to Step 6
+   - `n` → continue to Step 5 (the user accepts that they'll have two branches for this ticket)
 
-**Resolve current user identity (for warnings + Step 5a):**
+**Resolve current user identity (for warnings + Step 6a):**
 
 Call `mcp__plugin_atlassian_atlassian__atlassianUserInfo`. Capture `accountId` and `displayName`. Hold this in session memory — do NOT write it to `pell-config.json`. Identity is not a preference and the file may be shared across projects.
 
@@ -79,7 +94,7 @@ Call `mcp__plugin_atlassian_atlassian__atlassianUserInfo`. Capture `accountId` a
 - If `assignee.accountId` is set and != current user's `accountId`, print: "Heads up: this ticket is assigned to `<assignee.displayName>`."
 - If `pell-config.json:jira.transitions[<projectKey>].start` is set AND `status.name` matches it (case-insensitive), print: "Ticket is already in `<status.name>`."
 
-## Step 4 — Confirm and create the branch
+## Step 5 — Confirm and create the branch
 
 **Derive the suggested description from the ticket summary:**
 
@@ -112,17 +127,17 @@ Otherwise, print:
 
 Run `git checkout -b <KEY>-<description>`. The base is wherever the user is now — don't switch to `develop` or `main` first.
 
-If `git checkout -b` fails (e.g. invalid branch name, branch already exists despite the Step 3 check having said otherwise), surface the git error verbatim and exit. Do NOT proceed to Step 5 — branch creation is the gating prerequisite for the Jira side-effects.
+If `git checkout -b` fails (e.g. invalid branch name, branch already exists despite the Step 4 check having said otherwise), surface the git error verbatim and exit. Do NOT proceed to Step 6 — branch creation is the gating prerequisite for the Jira side-effects.
 
-## Step 5 — Jira side-effects (opt-in, one at a time)
+## Step 6 — Jira side-effects (opt-in, one at a time)
 
 If the user typed `don't touch jira`, `skip jira`, or `no jira changes` in `$ARGUMENTS`, skip this entire step. Do NOT prompt for either action.
 
-Otherwise, run 5a and 5b in order. Each is independent — `n` on 5a does not skip 5b.
+Otherwise, run 6a and 6b in order. Each is independent — `n` on 6a does not skip 6b.
 
-### Step 5a — Assignment
+### Step 6a — Assignment
 
-Skip this sub-step entirely if `assignee.accountId` (from Step 2) equals the current user's `accountId` (from Step 3). The ticket is already yours.
+Skip this sub-step entirely if `assignee.accountId` (from Step 2) equals the current user's `accountId` (from Step 4). The ticket is already yours.
 
 If the user pre-authorized inline (`assign to me`, `assign me`) → call the assign MCP directly without prompting.
 
@@ -135,11 +150,11 @@ On `y`, call `mcp__plugin_atlassian_atlassian__editJiraIssue` with:
 - `issueIdOrKey`: `<KEY>`
 - `fields`: `{"assignee": {"accountId": "<current user accountId>"}}`
 
-On failure, print a single line: "Failed to assign — `<error message>`." and continue to Step 5b. Do NOT roll back the branch.
+On failure, print a single line: "Failed to assign — `<error message>`." and continue to Step 6b. Do NOT roll back the branch.
 
-On `n`, continue to Step 5b silently.
+On `n`, continue to Step 6b silently.
 
-### Step 5b — Status transition
+### Step 6b — Status transition
 
 **Discover the "start" transition for this project:**
 
@@ -147,7 +162,7 @@ If `$ARGUMENTS` contained `--reset`, clear `pell-config.json:jira.transitions[<p
 
 Look up `pell-config.json:jira.transitions[<projectKey>].start`:
 
-- **Cached and the ticket's current `status.name` matches it (case-insensitive)** → skip Step 5b entirely. Nothing to do; the ticket is already in the start status. Print one line: "Ticket already in `<status.name>` — skipping transition."
+- **Cached and the ticket's current `status.name` matches it (case-insensitive)** → skip Step 6b entirely. Nothing to do; the ticket is already in the start status. Print one line: "Ticket already in `<status.name>` — skipping transition."
 
 - **Cached but the ticket is NOT in that status** → use the cached transition name. Skip discovery.
 
@@ -185,11 +200,11 @@ On `y`, call `mcp__plugin_atlassian_atlassian__transitionJiraIssue` with:
 - `issueIdOrKey`: `<KEY>`
 - `transition`: the `{id}` object from the candidate (you must pass the ID, not the name)
 
-On failure, print a single line: "Failed to transition — `<error message>`." and continue to Step 6. Do NOT roll back the branch or the assignment.
+On failure, print a single line: "Failed to transition — `<error message>`." and continue to Step 7. Do NOT roll back the branch or the assignment.
 
-On `n`, continue to Step 6 silently.
+On `n`, continue to Step 7 silently.
 
-## Step 6 — Report
+## Step 7 — Report
 
 Print this report. Replace bracketed placeholders with the actual values; omit lines that don't apply (e.g. skip the "Assigned" line if assignment was skipped or declined).
 

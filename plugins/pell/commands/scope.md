@@ -31,10 +31,25 @@ An explicit key in `$ARGUMENTS` always wins over the branch-detected key.
 
 Read `~/.claude/pell-config.json` (treat missing as `{}`).
 
-- If `jira.cloud_id` is set, use it.
+- If `docs/pell/context.md` names a `cloudId` under its Atlassian site section (Step 3 loads it; repo-scoped, so it wins here), use it.
+- Otherwise, if `jira.cloud_id` is set, use it.
 - Otherwise call `mcp__plugin_atlassian_atlassian__getAccessibleAtlassianResources`, use the first result's `id`, write it back atomically to `pell-config.json:jira.cloud_id`.
 
-## Step 3 — Load or build the SOW cache
+## Step 3 — Load repo context
+
+Run `git rev-parse --show-toplevel`. If it succeeds, read `<toplevel>/docs/pell/context.md` (Read tool). A missing file, unreadable frontmatter, or a `schema:` value other than `1` all mean "no context" — continue without it and say nothing.
+
+When present, treat it as a **coordinate source only**. It holds pointers, not content: never treat its epic lists, page titles, or component names as current truth. Resolve any coordinate in this order:
+
+1. an explicit value in `$ARGUMENTS`
+2. `docs/pell/context.md`
+3. `~/.claude/pell-config.json`
+4. a live MCP lookup
+5. prompt the user
+
+Never write to `context.md`. If a live call later contradicts it, use the live value and print one line: `context.md is out of date on <field>. Run /pell:map-repo verify.`
+
+## Step 4 — Load or build the SOW cache
 
 **Locate.** Run `git rev-parse --show-toplevel`. `sow_path = <toplevel>/docs/pell/sow-<project_key>.md`. If the command fails (not a git repo), use `./docs/pell/sow-<project_key>.md` and print `Not in a git repo — using ./docs/pell/ for the SOW cache.`
 
@@ -43,6 +58,9 @@ Read `~/.claude/pell-config.json` (treat missing as `{}`).
 **Decide.** Rebuild when any of: the file is missing; `refresh` is set; `generated_at` is more than 14 days before now; `pinned_sow_url` is set and is not already listed in the cached `sow_sources` — a pinned URL must never be silently dropped. Otherwise use the cache.
 
 **Rebuild path.**
+
+If the SOW is missing entirely, mention once: `Tip: /pell:map-repo builds this at setup time, so a readiness check never has to wait for it.` Then continue with the build — never block on it.
+
 1. Print `Building the SOW for <project_key> — walking every issue in the project (up to 10 pages of 100<; cap lifted by "deep" when set>).`
 2. Dispatch the `sow-builder` agent via the Agent tool with `subagent_type="sow-builder"` and a prompt containing these labeled lines:
    ```
@@ -62,9 +80,9 @@ Read `~/.claude/pell-config.json` (treat missing as `{}`).
 2. Run one drift query: `mcp__plugin_atlassian_atlassian__searchJiraIssuesUsingJql` with `cloudId`, `jql`: `project = "<project_key>" AND updated >= "<generated_at formatted yyyy-MM-dd>"`, `fields: ["key"]`, `maxResults: 100`. Day precision is deliberate: `generated_at` is UTC and JQL reads date literals in the user's Jira time zone, so this over-counts changes made earlier on the generation day rather than missing changes across that offset. The drift line is a signal, not a ledger.
 3. `drift_line` = `SOW cache is <n> day(s) old; <count> ticket(s) changed since. Say "refresh" to rebuild.` Use `100+` for the count when the response has a `nextPageToken` or returns 100 results. If the query fails: `SOW cache is <n> day(s) old; drift check failed: <error>.` Never abort over drift.
 
-If `mode = project`, skip to Step 7.
+If `mode = project`, skip to Step 8.
 
-## Step 4 — Fetch the ticket (ticket mode)
+## Step 5 — Fetch the ticket (ticket mode)
 
 Always fetch live, even when the SOW came from cache, so the assessed ticket is current.
 
@@ -76,11 +94,11 @@ Call `mcp__plugin_atlassian_atlassian__getJiraIssue` with:
 
 On 404 exit with: "`<ticket_key>` doesn't exist in Jira (or you don't have access)."
 
-Then call `mcp__plugin_atlassian_atlassian__getJiraIssueRemoteIssueLinks` with `cloudId` and `issueIdOrKey: ticket_key`. A 404 or empty response is fine. Capture each returned link's title and url as `ticket_links` for Step 7.
+Then call `mcp__plugin_atlassian_atlassian__getJiraIssueRemoteIssueLinks` with `cloudId` and `issueIdOrKey: ticket_key`. A 404 or empty response is fine. Capture each returned link's title and url as `ticket_links` for Step 8.
 
 Use `assignee.displayName or "unassigned"` and `reporter.displayName or "unknown"` — the MCP sometimes omits `reporter`.
 
-## Step 5 — Place the ticket in the SOW
+## Step 6 — Place the ticket in the SOW
 
 Work from `sow_doc`:
 
@@ -88,16 +106,16 @@ Work from `sow_doc`:
 2. **Parented to a story.** `parent.key` appears as a deliverable under some epic → that epic is `home_epic`; record the story as `immediate_parent`. `placement = assessed`.
 3. **Parent outside the cache.** `parent` is set but its key appears nowhere in `sow_doc` — neither a `### <KEY> —` epic heading nor a deliverable line → `placement = unassessed`, `placement_note = Parent <KEY> is not in the SOW cache — it may be newer than the cache. Say "refresh" to rebuild.`
 4. **Project has no epics.** `sow_doc` has no `### ` headings under `## Epics` → `placement = unassessed`, `placement_note = Project has no epics; placement not assessed.` Check this before case 5 — with no epics there is nothing to compare an unparented ticket against.
-5. **Unparented.** No `parent`, epics present → compare the ticket's summary + description against every epic's scope statement. Exactly one clear fit → `suggested_epic = <KEY>` (a `major` finding in Step 6). No fit → the ticket falls outside every scope statement (a `blocker` finding). `placement = assessed`.
+5. **Unparented.** No `parent`, epics present → compare the ticket's summary + description against every epic's scope statement. Exactly one clear fit → `suggested_epic = <KEY>` (a `major` finding in Step 7). No fit → the ticket falls outside every scope statement (a `blocker` finding). `placement = assessed`.
 6. **The ticket is an epic.** Skip placement; its own section is the context. `placement` stays unset and the Placement rubric rows do not apply.
 
 Also collect every line under `## Cross-epic dependencies` that names `ticket_key` or `home_epic`.
 
-## Step 6 — Readiness rubric
+## Step 7 — Readiness rubric
 
 Apply every check. Each finding states the evidence (quote the fragment, or name what is absent) and one concrete question the reporter could answer to resolve it. Severity is `blocker / major / minor / nit`.
 
-The two Placement rows apply only when placement was assessed (Step 5 outcomes 1, 2, 5). When placement is unassessed, skip them — a stale cache or an epic-less project is not a defect in the ticket.
+The two Placement rows apply only when placement was assessed (Step 6 outcomes 1, 2, 5). When placement is unassessed, skip them — a stale cache or an epic-less project is not a defect in the ticket.
 
 | Check | Condition | Severity |
 |-|-|-|
@@ -116,7 +134,7 @@ The two Placement rows apply only when placement was assessed (Step 5 outcomes 1
 
 **Verdict:** `Not ready` if any blocker; else `Ready with questions` if any major; else `Ready`. Minor and nit findings render but never change the verdict or trigger the comment offer.
 
-## Step 7 — Render
+## Step 8 — Render
 
 **Ticket mode:**
 
@@ -171,7 +189,7 @@ Full document: <sow_path>
 
 Render every epic — never truncate the table. Plain text only; no emoji or glyphs.
 
-## Step 8 — Offer the comment (ticket mode)
+## Step 9 — Offer the comment (ticket mode)
 
 Skip this step when `mode = project`, when `skip_comment` is set, when `dry_run` is set (print `--dry-run: comment not offered.`), or when the verdict is `Ready`.
 
@@ -192,7 +210,7 @@ On `y`: call `mcp__plugin_atlassian_atlassian__addCommentToJiraIssue` with `clou
 
 On `n`: print `Not posted.`
 
-## Step 9 — Exit
+## Step 10 — Exit
 
 End the response. Do not transition the ticket, edit fields, link issues, or commit the cache file. If the user wants to act, they can run `/pell:from-ticket <ticket_key>` or `/pell:start-work <ticket_key>`.
 
