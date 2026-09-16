@@ -189,6 +189,17 @@ Resolve the target by matching `<status>` (case-insensitive) against the candida
 - Exactly one match → use it as the chosen transition, skip the per-action prompt below. Cache the match if not already cached.
 - Zero or multiple matches → fall back to the discovery flow above.
 
+**Expected spelling from `context.md`:**
+
+If Step 3 loaded a `context.md` and it carries a `## Jira — <projectKey>` section, read the `start:` name from that section's "Transition names, exactly as the API returns them" list. A recorded value of `unverified`, or no such section, means nothing was recorded — skip this block entirely and carry on unchanged.
+
+That recorded name is the expected **spelling** of the transition and nothing else. Config (or the discovery flow, or an inline `move it to <status>`) has already chosen *which* transition to use above, and this block never revisits that choice, never adds, removes, or answers a prompt, and never transitions anything itself. Use it in exactly two ways, both against the live `{id, name}` list this step fetches:
+
+1. **Matching.** When the chosen name does not match a live name exactly, match case-insensitively, and treat the recorded name as a second acceptable spelling of that same chosen transition — a cached `In Progress` and a recorded `IN PROGRESS` are one transition. The `id` you send always comes from the live entry you matched, never from `context.md`.
+2. **Drift.** If the recorded name matches no live name even case-insensitively, the live list wins — it is the only authority on what transitions exist right now. Do not send the recorded name and do not substitute it for the chosen one; print one line and continue: `context.md is out of date on jira.transitions.start. Run /pell:map-repo verify.`
+
+With no `context.md`, or nothing usable recorded in it, this step behaves exactly as it did before.
+
 **Apply the transition:**
 
 If the user pre-authorized inline, run the transition without prompting. Otherwise ask:

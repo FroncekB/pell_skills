@@ -157,7 +157,12 @@ Then the body sections, in this order, built from the resolved coordinates and t
 
 - **`## Repository`** — Bitbucket workspace, repo slug, default base branch, branch shape (`<KEY>-<description>`, with a worked example when a key is known), CI system. Omit a line whose value is unknown rather than guessing.
 - **`## Atlassian site`** — site URL, cloudId.
-- **`## Jira — <KEY> (<name>)`** — one section per discovered project key, repeated in the same frequency-rank order Step 3 discovered them. Each holds: issue types, workflow (statuses joined by `->`), transition names exactly as the API returned them (`start`, `in_review`, `done` — write `unverified` for any role that could not be confirmed; never a fabricated name), components, active epics as `<KEY> (<summary>)`, and a `Synthesized SOW:` line. Before Step 6 runs, write that line as `Synthesized SOW: none — run /pell:scope <KEY>`; Step 6 patches it on a successful build.
+- **`## Jira — <KEY> (<name>)`** — one section per discovered project key, repeated in the same frequency-rank order Step 3 discovered them. Each holds: issue types, workflow (statuses joined by `->`), transition names exactly as the API returned them (`start`, `in_review`, `done` — write `unverified` for any role that could not be confirmed; never a fabricated name), components, active epics as `<KEY> (<summary>)`, and a `Synthesized SOW:` line. Seed that line **now**, from that project's `sow_path` in `coordinates.jira[]` — the agent already looked on disk for you:
+
+  - **`sow_path` is non-null** — a SOW for this project already exists. Write `Synthesized SOW: <sow_path> (built <date>)`, where `<date>` is the date part of that project's `sow_generated_at`. When `sow_generated_at` is null, write `Synthesized SOW: <sow_path>` with no `(built ...)` parenthetical rather than inventing a date.
+  - **`sow_path` is null** — write `Synthesized SOW: none — run /pell:scope <KEY>`.
+
+  Never write the `none` wording over a path the agent actually found. Step 6 patches this line only when it *builds* a SOW, and it does not build one for a SOW that is already current — it prints "skipping" and moves on — so a `none` seeded here for an existing SOW is never corrected: it gets committed sitting next to the very file it denies, and `verify`'s SOW-freshness row keys off this recorded path, so that project silently never gets a freshness row again. Step 6 still patches the line on a successful build, exactly as described there.
 - **`## Confluence`** — space key, space id, and a `Page | id | Covers` table of canonical pages.
 - **`## Google Drive`** — one line per labelled folder: `<label>: <folder_id> (<name>)`.
 - **`## Gaps`** — one line per dropped `low_confidence` field and per `gaps` entry (answered or skipped), each stating how to resolve it. Render `_None._` when the section is empty at write time. `_None._` is a placeholder meaning "no gaps," not a heading line: anything appended to this section later (Step 6) **replaces** it rather than stacking beneath it, so `_None._` can never sit above a real gap line.
@@ -230,7 +235,7 @@ For each Jira project key discovered in Step 3, in the same frequency-rank order
      - Present and less than 14 days old: print `SOW for <KEY> is current (built <date>) — skipping.` and continue to the next key.
      - Absent, unparseable, or 14 days old or older: not current — fall through to the prompt below.
 
-   This age is read only from that file's own frontmatter — never re-derive or re-implement a clock here; the 14-day rule belongs to `/pell:scope` alone.
+   This age is read only from that file's own frontmatter — compare it against the same 14-day threshold `/pell:scope` uses; do not invent a second staleness rule.
 2. Unless `with_sow` is set, prompt naming the cost:
 
    > Build the Statement of Work for `<KEY>`? This walks every issue in the project plus any linked Confluence scope docs — typically 1-3 minutes. (y/n)
@@ -255,7 +260,7 @@ For each Jira project key discovered in Step 3, in the same frequency-rank order
    ```
 
 4. On success (non-empty `sow_markdown`): write `docs/pell/sow-<KEY>.md` with the returned document, print `Wrote docs/pell/sow-<KEY>.md (<stats.issues> issues · <stats.epics> epics · <stats.scope_docs> scope doc)`, then patch **only** the `Synthesized SOW:` line for `<KEY>` in the `context.md` just written, to `Synthesized SOW: docs/pell/sow-<KEY>.md (built <today's date>)`. No separate gate covers this patch — it is covered by the `y` already given to the build itself.
-5. On `n`, or on failure or an empty result: leave the `context.md` line as `Synthesized SOW: none — run /pell:scope <KEY>`, and add a line under `## Gaps` — `SOW for <KEY> not built — run /pell:scope <KEY>.` on decline, or `SOW build for <KEY> failed: <summary> — run /pell:scope <KEY>.` on failure. If `## Gaps` currently holds the `_None._` placeholder, **replace** that line with this one instead of appending beneath it; `_None._` asserts there are no gaps, so leaving it above a gap line contradicts the file's own section. Subsequent gap lines append normally, since the placeholder is gone after the first. This is a **per-source** failure: `context.md` stays intact exactly as written, and the walk continues to the next project key.
+5. On `n`, or on failure or an empty result: leave the `context.md` `Synthesized SOW:` line exactly as Step 5 seeded it — `none — run /pell:scope <KEY>` when no SOW exists, or the existing `<path> (built <date>)` when a stale one does. A declined or failed rebuild does not delete the SOW already on disk, so it must never erase the line pointing at it. Then add a line under `## Gaps` — `SOW for <KEY> not built — run /pell:scope <KEY>.` on decline, or `SOW build for <KEY> failed: <summary> — run /pell:scope <KEY>.` on failure. If `## Gaps` currently holds the `_None._` placeholder, **replace** that line with this one instead of appending beneath it; `_None._` asserts there are no gaps, so leaving it above a gap line contradicts the file's own section. Subsequent gap lines append normally, since the placeholder is gone after the first. This is a **per-source** failure: `context.md` stays intact exactly as written, and the walk continues to the next project key.
 
 Continue to Step 7 once every discovered key has been handled.
 
@@ -276,13 +281,21 @@ this repo. It holds pointers, not content: fetch live before relying on anything
 it names.
 ```
 
-If `CLAUDE.md` exists, prompt:
+If `CLAUDE.md` exists, locate `<!-- pell:context-pointer -->` in the file **before** prompting, and word the prompt for the operation that will actually run. Appending a block and overwriting one are not the same change, and a gate names exactly what it will do:
 
-> Add the repo-context pointer block to `CLAUDE.md`? (y/n)
+- **Marker present** — this is a replace, and anything the developer has written between the marker and the end of the block goes with it:
 
-On `y`: locate `<!-- pell:context-pointer -->` in the file.
-- If present, replace from that marker through the end of the block — that is, up to the next `## ` heading **after** the block's own `## Repo context` heading, or end of file if none follows — with the block above. The "after its own heading" qualifier is load-bearing: `## Repo context` is the very next line after the marker, so a naive "replace up to the next `## `" would match the block's own heading and replace only the marker line, leaving the stale body stranded under a duplicated heading. That is precisely the re-run failure this qualifier exists to catch — running the command twice must replace the block, never stack a second copy — so do not re-simplify this back to "the next `## `."
-- If absent, append the block at the end of the file, preceded by a blank line.
+  > Replace the repo-context pointer block in `CLAUDE.md`? Everything from the `<!-- pell:context-pointer -->` marker to the end of that block — up to the next `## ` heading after the block's own `## Repo context`, or end of file if none follows — is overwritten with the block above, including any text you have added under it. (y/n)
+
+- **Marker absent** — this only appends:
+
+  > Add the repo-context pointer block to the end of `CLAUDE.md`? (y/n)
+
+This stays a single gate. It is the wording that changes with the marker, not the number of prompts.
+
+On `y`:
+- If the marker is present, replace from that marker through the end of the block — that is, up to the next `## ` heading **after** the block's own `## Repo context` heading, or end of file if none follows — with the block above. The "after its own heading" qualifier is load-bearing: `## Repo context` is the very next line after the marker, so a naive "replace up to the next `## `" would match the block's own heading and replace only the marker line, leaving the stale body stranded under a duplicated heading. That is precisely the re-run failure this qualifier exists to catch — running the command twice must replace the block, never stack a second copy — so do not re-simplify this back to "the next `## `."
+- If the marker is absent, append the block at the end of the file, preceded by a blank line.
 
 This makes re-running idempotent — the marker plus the corrected replace-range is what stops a second copy from stacking.
 

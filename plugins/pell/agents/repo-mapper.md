@@ -146,7 +146,11 @@ Use the Drive file-search tool with a structured query filtered to folders — `
 
 ## Step 7 — Existing SOWs
 
-Glob `docs/pell/sow-*.md` under `repo_root`. For each project key, check whether a file in that set corresponds to it (by key in the filename); if one exists, read its frontmatter `generated_at` and record the file's path as `jira[].sow_path`. No match is a normal, expected state for a project that has never been scoped — leave `sow_path` null, not a gap.
+Glob `docs/pell/sow-*.md` under `repo_root`. For each project key, check whether a file in that set corresponds to it (by key in the filename); if one exists, record the file's path as `jira[].sow_path` and read its own frontmatter `generated_at` into `jira[].sow_generated_at`.
+
+Both fields are consumed, not just the path: the orchestrator writes the path **and** its build date onto that project's `Synthesized SOW:` line, so a path returned without its date costs that line its build date. If the file exists but its frontmatter is missing, unparseable, or carries no `generated_at`, record `sow_path` and leave `sow_generated_at` null — never substitute the file's mtime or today's date for a date the file does not carry.
+
+No match is a normal, expected state for a project that has never been scoped — leave both fields null, not a gap.
 
 ## Confidence channels
 
@@ -171,7 +175,8 @@ Return **only** a single JSON object on the last line of your response (after an
     "atlassian":  { "site": "pellsoftware.atlassian.net", "cloud_id": "..." },
     "jira":       [ { "key": "RRS", "name": "...", "issue_types": [], "statuses": [],
                       "transitions": { "start": "...", "in_review": null, "done": "..." },
-                      "components": [], "active_epics": [], "sow_path": "..." } ],
+                      "components": [], "active_epics": [], "sow_path": "...",
+                      "sow_generated_at": "..." } ],
     "confluence": { "space_key": "...", "space_id": "...",
                     "pages": [ { "title": "...", "id": "...", "covers": "..." } ] },
     "drive":      [ { "label": "requirements", "folder_id": "...", "name": "..." } ]
@@ -184,10 +189,11 @@ Return **only** a single JSON object on the last line of your response (after an
 }
 ```
 
-Two fields in that object have exact shapes the orchestrator depends on:
+Three fields in that object have exact shapes the orchestrator depends on:
 
 - **`atlassian.site` is a bare hostname** — no `https://`, no trailing slash (Step 2).
 - **`confluence.pages[].id` is the numeric Confluence page id** extracted per Step 5, or `null` when it genuinely could not be resolved — never a URL, a slug, or a guess. Every `null` id carries a matching `low_confidence` entry saying why.
+- **`jira[].sow_generated_at` is the `generated_at` value copied verbatim from that SOW file's own frontmatter** (Step 7), or `null` when there is no SOW for the key or its frontmatter yielded no date — never a derived, inferred, or current timestamp.
 
 The `jira[]` array is ordered by the frequency rank Step 1 established — most-referenced project key first. The orchestrator renders and prompts in that order, so do not re-sort it.
 
