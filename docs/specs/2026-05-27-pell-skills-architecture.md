@@ -166,6 +166,7 @@ Each review dimension is a sibling in the one `pell` plugin, exposed as both a u
 | Correctness | `/pell:correctness-review` | `correctness-reviewer` |
 | Quality | `/pell:quality-review` | `quality-reviewer` |
 | Security | `/pell:security-review` | `security-reviewer` |
+| Test coverage | `/pell:test-review` | `test-reviewer` |
 
 Composites (`/pell:three-pass-review`, `/pell:local-review`) do NOT reimplement review logic. They dispatch the agents above as parallel sub-agents and act on the aggregated findings. The same pattern extends to the repo-wide audits (`repo-quality-reviewer`, `repo-security-reviewer`).
 
@@ -178,6 +179,15 @@ Every reviewer:
 3. **Surfaces everything** — including low-confidence observations and stylistic nits. Each finding gets a `severity` so the consumer can filter. **Do not pre-filter.** The consumer (human user or orchestrating composite) decides what's actionable.
 4. **Outputs structured findings only** — a JSON array of `{severity, file, line, finding, fix}` plus a one-line `summary`. Does not decide what to do with them.
 5. **Has no side effects** — never modifies files, never posts comments, never transitions tickets. Purely a reporter.
+
+> **Exception — `conductor-*` agents.** The five conductor worker agents
+> (`conductor-implementer`, `conductor-scout`, `conductor-correctness-reviewer`,
+> `conductor-integration-gap-auditor`, `conductor-design-steward`) intentionally break
+> rule 4: they emit ranked prose reports rather than JSON, because the coordinating skill
+> reads reasoning-rich prose. The read-only ones also carry an explicit `tools:` line
+> instead of inheriting the orchestrator's surface, so read-only is enforced rather than
+> assumed. This is a faithful port, not drift — see
+> [`2026-07-13-conductor-port-design.md`](2026-07-13-conductor-port-design.md).
 
 ### 8.1 Context source: local filesystem by default, Bitbucket on request
 
@@ -211,12 +221,12 @@ Reviewers must use the appropriate severity word for their dimension (e.g. secur
 Composites are thin orchestrators that:
 
 1. Resolve the input scope (PR or local) and gather any context the reviewers can't (Jira ticket, GitFlow base branch, etc.)
-2. Dispatch the three reviewer agents in parallel with shared context
+2. Dispatch the reviewer agents in parallel with shared context — correctness, quality and security by default, plus `test-reviewer` when `with tests` is passed
 3. Aggregate findings into a unified report, **grouped by severity** — render nits in a collapsed/separate section so they don't drown the signal
 4. Decide on **side effects** based on the composite's purpose:
-   - `pell-three-pass-review` (PR context) → ask the user which severity threshold to post (e.g. "post blockers + major only? all? selected?"). Never post nits by default
-   - `pell-three-pass-review` also offers a run-marker comment — one general PR comment listing the passes run and per-dimension counts, no verdict — gated on a default-yes prompt. `skip marker` suppresses the offer; `--dry-run` suppresses the post
-   - `pell-local-review` (local context) → same selection model for fixes
+   - `/pell:three-pass-review` (PR context) → ask the user which severity threshold to post (e.g. "post blockers + major only? all? selected?"). Never post nits by default
+   - `/pell:three-pass-review` also offers a run-marker comment — one general PR comment listing the passes run and per-dimension counts, no verdict — gated on a default-yes prompt. `skip marker` suppresses the offer; `--dry-run` suppresses the post
+   - `/pell:local-review` (local context) → same selection model for fixes
 5. Gate every side effect on user confirmation
 
 ### Why this matters
@@ -245,7 +255,7 @@ pell_skills/
         │   ├── security-review.md
         │   ├── test-review.md
         │   # Review composites
-        │   ├── three-pass-review.md         # PR + Jira context → optional inline comments
+        │   ├── three-pass-review.md         # PR + Jira context → run marker + optional inline comments
         │   ├── local-review.md              # working tree → optional in-place fixes
         │   # PR review ops
         │   ├── review-queue.md              # open PRs awaiting your review → chain into a review
@@ -258,6 +268,7 @@ pell_skills/
         │   ├── triage.md
         │   ├── related.md
         │   ├── precheck.md                  # is this work already filed / in-flight / shipped?
+        │   ├── scope.md                     # cached SOW synthesis + Definition-of-Ready check
         │   ├── start-work.md
         │   ├── finish-work.md
         │   # Bucket 3: composers
@@ -268,7 +279,15 @@ pell_skills/
         ├── skills/
         │   # Bucket 2: house-style guidance (auto-invoked)
         │   ├── frontend-router/SKILL.md     # nudges toward /frontend-design
-        │   └── visual-scratchpad/           # SKILL.md + server.py + viewer.html + tests
+        │   ├── visual-scratchpad/           # SKILL.md + server.py + viewer.html + tests
+        │   # Conductor subsystem (see 2026-07-13-conductor-port-design.md)
+        │   ├── coordinate-agents/           # SKILL.md + references/ — the lead's playbook
+        │   ├── fan-and-critic/SKILL.md      # outside eyes on each change in long sessions
+        │   ├── autonomous-build/SKILL.md    # explicit-invocation-only session driver
+        │   ├── autonomous-build-commit-essays/SKILL.md
+        │   ├── autonomous-build-jealousy-ranking/SKILL.md
+        │   ├── autonomous-build-purpose-layers/SKILL.md
+        │   └── autonomous-build-session-pacing/SKILL.md
         │   # claude-md-init/ — planned, not yet built (see improvements plan §5)
         └── agents/
             # Diff-based reviewer agents (composable primitives)
@@ -278,7 +297,15 @@ pell_skills/
             ├── test-reviewer.md
             # Repo-based reviewer agents
             ├── repo-quality-reviewer.md
-            └── repo-security-reviewer.md
+            ├── repo-security-reviewer.md
+            # Jira/scope agent
+            ├── sow-builder.md               # per-epic SOW synthesis for /pell:scope
+            # Conductor workers (prose reports + explicit `tools:` — see the exception in §8)
+            ├── conductor-implementer.md
+            ├── conductor-scout.md
+            ├── conductor-correctness-reviewer.md
+            ├── conductor-integration-gap-auditor.md
+            └── conductor-design-steward.md
 ```
 
 ### Optional companion: `pell-everything` meta-plugin
@@ -323,5 +350,6 @@ All previously-open questions are now resolved:
 The conventions above are stable and the bulk of the roadmap shipped:
 
 - **Built:** all four review primitives (`correctness`, `quality`, `security`, `test`) + both composites; the PR review ops (`review-queue`, `address-review`); both repo-wide audits (`repo-review`, `repo-security-review`) with their `repo-*-reviewer` agents; Jira ops (`my-tickets`, `triage`, `related`, `precheck`, `scope` + its `sow-builder` agent, `start-work`, `finish-work`); composers (`from-ticket`, `wrap-up`); the `frontend-router` skill; and the `visual-scratchpad` skill + `/pell:visualize` command (a surface not anticipated in the original build order).
+- **Conductor subsystem:** the `coordinate-agents` lead skill, the `fan-and-critic` review-loop skill, the five `autonomous-build*` session skills, and the five `conductor-*` worker agents — a faithful port of Tom Neyland's `conductor`, folded into `pell` (see [`2026-07-13-conductor-port-design.md`](2026-07-13-conductor-port-design.md)). These agents deliberately deviate from §8's JSON-output contract; the exception is documented there.
 - **Not yet built:** `claude-md-init` (§10.6), second-tier composers (e.g. standup, release-notes), and the optional `pell-everything` meta-plugin (§9).
 - **Open work** is tracked in [`2026-05-28-pell-toolkit-improvements-plan.md`](2026-05-28-pell-toolkit-improvements-plan.md).
