@@ -399,8 +399,16 @@ first — and the coordinates are what the `CLAUDE.md` pointer promises.
 | `docs/pell/context.md` | after the interview | `Write repo coordinates to docs/pell/context.md? (y/n)` |
 | `docs/pell/sow-<KEY>.md` | per discovered project, after the above | own `(y/n)` per project, naming the cost, Section 8 |
 | `docs/pell/context.md` SOW line | after a successful SOW build | none — covered by the SOW gate just answered |
+| `docs/pell/context.md` `## Gaps` line | after a declined or failed SOW build | none — covered by the SOW gate just answered |
 | `<repo_root>/CLAUDE.md` pointer block | after the SOW pass | separate `(y/n)`, Section 10 |
 | `<repo_root>/CLAUDE.md` created | only when absent and the pointer was accepted | further `(y/n)` |
+| `docs/pell/context.md` scoped rewrite | `verify` mode only, when drift was found | own `(y/n)`, Section 11 |
+
+The last row is on the `verify` path, which is exclusive with every row above it:
+a run either builds or verifies, never both. The two ungated `context.md` rows are
+follow-on edits to a file the developer has already consented to in this run, made
+as a direct consequence of the SOW answer they just gave — a second prompt for
+"and now record that you said no" is noise, not consent.
 
 The gates are **never bundled**. `CLAUDE.md` especially is a file this command does
 not own, and consent to write a cache file under `docs/pell/` is not consent to edit
@@ -427,9 +435,14 @@ Canonical block, inserted verbatim (shown indented here; written flush-left):
     it names.
 
 **Idempotency.** Locate `<!-- pell:context-pointer -->`. If present, replace from the
-marker through the end of that section (up to the next `## ` at the same level, or
-EOF). If absent, append the block at the end of the file. Re-running never stacks
-duplicates.
+marker through the end of the block — that is, up to the next `## ` heading
+**after** the block's own `## Repo context` heading, or EOF if none follows. If
+absent, append the block at the end of the file. Re-running never stacks duplicates.
+
+The "after its own heading" qualifier is load-bearing. `## Repo context` is the very
+next line after the marker, so a naive "replace up to the next `## `" replaces the
+marker alone and leaves the stale body sitting under a duplicated heading — which is
+precisely the failure acceptance case 5 exists to catch.
 
 Show the exact text and the target path before prompting. If `CLAUDE.md` does not
 exist, offer to create a minimal file containing only the pointer block, gated
