@@ -85,10 +85,11 @@ claude mcp add-json atlassian-bitbucket '{
 
 ## Commands
 
-Twenty commands, grouped by where they fall in a ticket's lifecycle — pick up work, review it, audit broadly, ship it. Driving a large build is now the [conductor subsystem](#conductor-subsystem) — a skill family, not a command.
+Twenty-one commands, grouped by where they fall in a ticket's lifecycle — pick up work, review it, audit broadly, ship it. Driving a large build is now the [conductor subsystem](#conductor-subsystem) — a skill family, not a command.
 
 | Stage | Commands |
 |-|-|
+| **Repo setup** | [`map-repo`](#pellmap-repo-refresh--verify--with-sow--skip-sow--project-key--url----dry-run----verbose) |
 | **Starting work** | [`my-tickets`](#pellmy-tickets) · [`triage`](#pelltriage-key) · [`related`](#pellrelated-key) · [`precheck`](#pellprecheck-key--idea) · [`scope`](#pellscope-key--project-key) · [`start-work`](#pellstart-work-key) · [`from-ticket`](#pellfrom-ticket-jira-key-freeform-context) |
 | **Reviewing code** | [`correctness-review`](#pellcorrectness-review) · [`quality-review`](#pellquality-review) · [`security-review`](#pellsecurity-review) · [`test-review`](#pelltest-review) · [`local-review`](#pelllocal-review) · [`three-pass-review`](#pellthree-pass-review-pr) · [`address-review`](#pelladdress-review-pr) · [`review-queue`](#pellreview-queue-repo-) |
 | **Auditing a whole repo** | [`repo-review`](#pellrepo-review) · [`repo-security-review`](#pellrepo-security-review) |
@@ -114,6 +115,39 @@ Driving a large build is a **skill family**, not a slash command — a faithful 
 | `fan-and-critic` | A long session with little per-change feedback — two standing, opposed reviewers. |
 
 **Worker agents** (dispatched by `coordinate-agents`; prose reports, not JSON): `conductor-implementer` (build one unit end-to-end in an isolated worktree), `conductor-scout` (read-only investigation), `conductor-correctness-reviewer` + `conductor-integration-gap-auditor` (dual-pair review — is it correct, is it connected), and `conductor-design-steward` (UI/verbal cohesion). The shared way-to-think is `plugins/pell/skills/coordinate-agents/references/playbook.md`.
+
+---
+
+## Repo setup
+
+### `/pell:map-repo [refresh | verify | with sow | skip sow | PROJECT-KEY | <url> | --dry-run | --verbose]`
+
+Walk this repo's Jira, Confluence, Drive, and Bitbucket coordinates once and write them to a committed `docs/pell/context.md`, so every later command and every later session stops re-deriving which Jira project the repo belongs to, what its transitions are actually called, which Confluence space holds the architecture doc, and where requirements live in Drive. The file holds coordinates, not content — it says where the sources of truth live and is never itself one.
+
+**Usage:**
+
+```
+/pell:map-repo                                  # full walk, writes docs/pell/context.md
+/pell:map-repo refresh                          # rebuild even though a current file exists
+/pell:map-repo verify                           # cheap drift re-check only, no full walk
+/pell:map-repo with sow                         # build the SOW for every discovered project, no per-project prompt
+/pell:map-repo skip sow                         # suppress the SOW offer entirely
+/pell:map-repo RRS https://.../wiki/spaces/...  # seed a Jira project key or a Confluence/Drive/Bitbucket URL
+/pell:map-repo --dry-run                        # render everything, write nothing
+```
+
+**Behavior:**
+
+1. Dispatches the `repo-mapper` agent to walk git history plus Jira, Confluence, Drive, and Bitbucket
+2. Renders the proven coordinates first, then interviews `low_confidence` and `gaps` items one at a time — never batched
+3. Writes `docs/pell/context.md` on confirmation: repository, Atlassian site, one section per discovered Jira project, Confluence, Drive, and `## Gaps`
+4. Per discovered Jira project, offers to build `docs/pell/sow-<KEY>.md` at setup time — the same expensive walk `/pell:scope` otherwise does lazily, mid-task — skipping any project whose SOW is already current
+5. Offers to add a `<!-- pell:context-pointer -->` block to the repo's own `CLAUDE.md` so future sessions load `docs/pell/context.md` automatically
+6. Under `verify`, skips the walk entirely and re-checks only cheap, falsifiable facts (Bitbucket slug/base branch, transition names, Confluence page ids, Drive folder ids, SOW age) against what's recorded, offering to rewrite only the drifted lines
+
+**Output:** a rendered coordinate summary (Repository / Atlassian / Jira / Confluence / Drive / Gaps), followed by one line per file actually written this run.
+
+**Side-effects:** read-only against Jira, Confluence, Drive, and Bitbucket — every write is local and its own `(y/n)` gate (`context.md`, each `sow-<KEY>.md`, and the `CLAUDE.md` pointer block are gated separately). Never commits.
 
 ---
 
@@ -555,6 +589,7 @@ The reviewers are also exposed as composable agents — any current or future co
 | Test-coverage reviewer | `test-reviewer` | Same shape |
 | Repo quality reviewer | `repo-quality-reviewer` | Same shape, with optional `also_in` for cross-file findings within a chunk |
 | Repo security reviewer | `repo-security-reviewer` | Same shape |
+| Repo mapper | `repo-mapper` | `{coordinates, low_confidence, gaps, summary}` — not findings; produces the repo's Jira/Confluence/Drive/Bitbucket coordinates, not a review |
 
 This is the foundation of the workflow composers: commands like `/pell:wrap-up` dispatch these without re-implementing review logic.
 

@@ -6,6 +6,12 @@ Pell Software's Claude Code toolkit. One plugin, many skills. Install once, get 
 
 ## Commands
 
+### Repo setup
+
+| Command | What it does |
+|-|-|
+| `/pell:map-repo [refresh \| verify \| PROJECT-KEY]` | Map this repo's Jira, Confluence, Drive, and Bitbucket coordinates into a committed `docs/pell/context.md`; optionally build the project SOW at setup time. `verify` re-checks for drift. Read-only against every remote system. |
+
 ### Review primitives (single-dimension, read-only)
 
 | Command | What it does |
@@ -86,6 +92,10 @@ Repo-based reviewers (dispatched by the repo audits):
 Project scoper (dispatched by `/pell:scope` when the SOW cache is missing or stale):
 
 - `sow-builder` — returns `{sow_markdown, sources, stats, summary}` rather than findings; it produces a document, not a review.
+
+Repo mapper (dispatched by `/pell:map-repo`):
+
+- `repo-mapper` — returns `{coordinates, low_confidence, gaps, summary}` rather than findings; it produces the repo's Jira/Confluence/Drive/Bitbucket coordinates, not a review.
 
 The reviewers return structured JSON: `{findings: [{severity, file, line, finding, fix}], summary}`. The repo-based reviewers may add an optional `also_in` array on a finding to list other locations where the same issue recurs.
 

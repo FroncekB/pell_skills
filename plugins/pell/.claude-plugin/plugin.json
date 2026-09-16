@@ -1,7 +1,7 @@
 {
   "name": "pell",
-  "version": "0.16.0",
-  "description": "Pell Software's Claude Code toolkit: PR/local code reviewers (correctness, quality, security), Jira workflow ops, house-style guidance, and the conductor subsystem (coordinate-agents + autonomous-build family + worker agents). One plugin, many skills.",
+  "version": "0.17.0",
+  "description": "Pell Software's Claude Code toolkit: PR/local code reviewers (correctness, quality, security), Jira workflow ops, repo coordinate mapping, house-style guidance, and the conductor subsystem (coordinate-agents + autonomous-build family + worker agents). One plugin, many skills.",
   "author": {
     "name": "Pell Software"
   }
