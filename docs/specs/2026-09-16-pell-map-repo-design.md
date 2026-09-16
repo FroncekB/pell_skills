@@ -140,14 +140,45 @@ verbose: <true|false>
 | Repo | read `bitbucket-pipelines.yml` / `.github/workflows/` | CI system |
 | Repo | `git symbolic-ref refs/remotes/origin/HEAD` | default base branch |
 | Jira keys | `git log --oneline -200` + `git branch -a`, issue-key regex | project keys ranked by frequency |
-| Atlassian | `getAccessibleAtlassianResources` (skipped when `known_cloud_id` set) | cloudId, site URL |
-| Jira | `getJiraProjectIssueTypesMetadata`, `getVisibleJiraProjects` | project name, issue types, components |
-| Jira | `getTransitionsForJiraIssue` on sampled issues (Section 5.1) | exact transition names |
-| Jira | JQL `project = <K> AND issuetype = Epic AND status != Done` | active epics |
-| Confluence | `getJiraIssueRemoteIssueLinks` across ~20 recent issues | candidate page ids, ranked by inbound link count |
-| Confluence | `getConfluenceSpaces`, name-similarity filtered on project name | space key and id |
-| Drive | `search_files` on project name and key | candidate folder ids |
+| Atlassian | `getAccessibleAtlassianResources` — primary (skipped when `known_cloud_id` set) | cloudId, site URL |
+| Jira | project issue-type metadata; visible-projects list — **indirect**, see 5.0 | project name, issue types, components |
+| Jira | transitions-for-issue on sampled issues — **indirect** (Section 5.1) | exact transition names |
+| Jira | `searchJiraIssuesUsingJql` — primary. `project = <K> AND issuetype = Epic AND status != Done` | active epics |
+| Confluence | remote-issue-links across ~20 recent issues — **indirect** | candidate page ids, ranked by inbound link count |
+| Confluence | Confluence spaces list — **indirect**, name-similarity filtered on project name | space key and id |
+| Drive | the Drive file-search tool, on project name and key | candidate folder ids |
 | Repo | glob `docs/pell/sow-*.md` | existing SOW paths and build dates |
+
+### 5.0 Tool naming across Atlassian connection shapes
+
+Verified live during implementation (Task 1 of the plan). Two differently-shaped
+Atlassian MCP connections exist in the wild, and a prompt that hardcodes one
+shape's names fails **silently** on the other.
+
+This repo standardizes on `plugin:atlassian:atlassian`, and every existing pell
+command stays inside that server's **primary** tool set. Four of this walk's calls
+are primary there and are named directly: `getAccessibleAtlassianResources`,
+`searchJiraIssuesUsingJql`, `getJiraIssue`, `getConfluenceContent`.
+
+The five collection operations are **not** primary on that server. They are reached
+via `discover({query})` to get an operation name, then
+`executeRead({name, cloudId, inputs})` — and the operation names differ, `list*`
+rather than `get*`:
+
+| Role | `plugin:atlassian:atlassian` via discover/executeRead | Classic connection, direct |
+|-|-|-|
+| Visible projects | `listJiraProjects` | `getVisibleJiraProjects` |
+| Project issue-type metadata | `listJiraProjectIssueTypesMetadata` | `getJiraProjectIssueTypesMetadata` |
+| Transitions for an issue | `listJiraIssueTransitions` | `getTransitionsForJiraIssue` |
+| Remote issue links | `listJiraIssueRemoteIssueLinks` | `getJiraIssueRemoteIssueLinks` |
+| Confluence spaces | `listConfluenceSpaces` | `getConfluenceSpaces` |
+
+**The agent prompt must name both**, per role, and use whichever the session
+exposes. Naming only one is the silent-runtime-failure class this walk exists to
+avoid — the same trap as hardcoding the Drive server's install-specific id.
+
+`cloudId` is a **top-level** argument on every execute-family call, a sibling of
+`name` and `inputs`, never nested inside `inputs`.
 
 ### 5.1 Transition sampling and its known limitation
 
