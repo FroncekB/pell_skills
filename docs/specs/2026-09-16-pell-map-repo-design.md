@@ -156,9 +156,15 @@ Atlassian MCP connections exist in the wild, and a prompt that hardcodes one
 shape's names fails **silently** on the other.
 
 This repo standardizes on `plugin:atlassian:atlassian`, and every existing pell
-command stays inside that server's **primary** tool set. Four of this walk's calls
+command stays inside that server's **primary** tool set. Three of this walk's calls
 are primary there and are named directly: `getAccessibleAtlassianResources`,
-`searchJiraIssuesUsingJql`, `getJiraIssue`, `getConfluenceContent`.
+`searchJiraIssuesUsingJql`, and — only when fetching a candidate page's summary for
+the `covers` column — `getConfluenceContent`.
+
+The walk deliberately never fetches a single issue by key. Transition sampling
+(5.1) and the remote-link scan reach their issues through JQL, so `getJiraIssue`
+has no step here despite being primary; other pell commands use it, this one does
+not.
 
 The five collection operations are **not** primary on that server. They are reached
 via `discover({query})` to get an operation name, then
