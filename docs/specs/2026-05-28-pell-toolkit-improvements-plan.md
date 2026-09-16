@@ -1,6 +1,6 @@
 # Pell Toolkit Improvements — Implementation Plan
 
-> **For agentic workers:** This is a multi-phase roadmap. Phases 1–2 are fully specified and executable now. Phases 3–5 are scoped with acceptance criteria and a required design-first step (brainstorm → spec) before their command bodies are authored — they are NOT pre-written here because their designs aren't settled, and guessing them would violate the no-placeholder rule. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** This is a multi-phase roadmap. **Phases 1–4 are complete and shipped** — their boxes are checked and the work is on `main`. Only Phase 5 remains; each of its items is scoped with acceptance criteria and a required design-first step (brainstorm → spec) before its command body is authored — they are NOT pre-written here because their designs aren't settled, and guessing them would violate the no-placeholder rule. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Close the documentation drift in the existing toolkit, then fill the two missing halves of the review lifecycle (reviewing others' PRs; responding to review on your own PR) plus a test-coverage review dimension.
 
@@ -55,7 +55,7 @@ Three corrections. All low-risk. No new commands.
 **Files:**
 - Modify: `plugins/pell/README.md` (full rewrite)
 
-- [ ] **Step 1: Rewrite the plugin README as a short index that defers to the root README for detail.** Keep: a one-line plugin description, a command list grouped by bucket (names + one-liners only), the agent list, the severity-scale table, and a "full reference: see the marketplace root README" pointer. Remove the per-command usage blocks and the entire "Future additions" / "Coming soon" section. Group the command list exactly by the buckets actually shipped:
+- [x] **Step 1: Rewrite the plugin README as a short index that defers to the root README for detail.** Keep: a one-line plugin description, a command list grouped by bucket (names + one-liners only), the agent list, the severity-scale table, and a "full reference: see the marketplace root README" pointer. Remove the per-command usage blocks and the entire "Future additions" / "Coming soon" section. Group the command list exactly by the buckets actually shipped:
   - **Review primitives:** `correctness-review`, `quality-review`, `security-review`, (Phase 2 adds `test-review`)
   - **Review composites:** `three-pass-review`, `local-review`
   - **Repo-wide audits:** `repo-review`, `repo-security-review`
@@ -64,8 +64,8 @@ Three corrections. All low-risk. No new commands.
   - **Visual:** `visualize`
   - **Auto-invoked skills:** `frontend-router`, `visual-scratchpad`
   - **Agents:** `correctness-reviewer`, `quality-reviewer`, `security-reviewer`, `repo-quality-reviewer`, `repo-security-reviewer`
-- [ ] **Step 2: Validate.** Run `claude plugin validate ./plugins/pell`. Expected: PASS (README is not schema-validated, but this catches accidental frontmatter/structure breakage elsewhere).
-- [ ] **Step 3: Commit.**
+- [x] **Step 2: Validate.** Run `claude plugin validate ./plugins/pell`. Expected: PASS (README is not schema-validated, but this catches accidental frontmatter/structure breakage elsewhere).
+- [x] **Step 3: Commit.**
 ```bash
 git add plugins/pell/README.md
 git commit -m "docs(readme): make plugin README a thin index, fix command drift"
@@ -78,7 +78,7 @@ The spec is declared "the source of truth" in CLAUDE.md but contradicts itself: 
 **Files:**
 - Modify: `docs/specs/2026-05-27-pell-skills-architecture.md`
 
-- [ ] **Step 1: Fix §8's table and prose** to single-plugin namespacing. Keep the *principles* (reviewers report, composites act; surface everything with severity; uniform contract; local-FS-default context) — those are implemented and correct. Replace the per-plugin table with the real shape:
+- [x] **Step 1: Fix §8's table and prose** to single-plugin namespacing. Keep the *principles* (reviewers report, composites act; surface everything with severity; uniform contract; local-FS-default context) — those are implemented and correct. Replace the per-plugin table with the real shape:
 
 | Dimension | Slash command | Agent (`subagent_type`) |
 |-|-|-|
@@ -87,9 +87,9 @@ The spec is declared "the source of truth" in CLAUDE.md but contradicts itself: 
 | Security | `/pell:security-review` | `security-reviewer` |
 
   Update §8.1's reference from "each review dimension is its own plugin" framing to "each reviewer is a sibling agent in the one `pell` plugin."
-- [ ] **Step 2: Update §9's repo layout** to list all shipped files: commands (`correctness-review`, `quality-review`, `security-review`, `three-pass-review`, `local-review`, `repo-review`, `repo-security-review`, `my-tickets`, `triage`, `related`, `start-work`, `finish-work`, `from-ticket`, `wrap-up`, `visualize`), agents (add `repo-quality-reviewer`, `repo-security-reviewer`), skills (`frontend-router`, `visual-scratchpad`), and `hooks/hooks.json`.
-- [ ] **Step 3: Update the status line and build order.** Change the top status from "draft (§4–§7 working assumptions)" to "implemented — see §12." Add a short **§12. Implementation status** section: a one-line note that Buckets 1–3 plus repo-audits and the visual scratchpad shipped, and that this improvements plan (`2026-05-28-pell-toolkit-improvements-plan.md`) tracks the remaining gaps.
-- [ ] **Step 4: Commit.**
+- [x] **Step 2: Update §9's repo layout** to list all shipped files: _(Done as scoped; §9 has drifted again since — it is now missing `scope.md`, `sow-builder.md`, the five `conductor-*` agents, and the `coordinate-agents` / `fan-and-critic` / `autonomous-build*` skills.)_ commands (`correctness-review`, `quality-review`, `security-review`, `three-pass-review`, `local-review`, `repo-review`, `repo-security-review`, `my-tickets`, `triage`, `related`, `start-work`, `finish-work`, `from-ticket`, `wrap-up`, `visualize`), agents (add `repo-quality-reviewer`, `repo-security-reviewer`), skills (`frontend-router`, `visual-scratchpad`), and `hooks/hooks.json`.
+- [x] **Step 3: Update the status line and build order.** Change the top status from "draft (§4–§7 working assumptions)" to "implemented — see §12." Add a short **§12. Implementation status** section: a one-line note that Buckets 1–3 plus repo-audits and the visual scratchpad shipped, and that this improvements plan (`2026-05-28-pell-toolkit-improvements-plan.md`) tracks the remaining gaps.
+- [x] **Step 4: Commit.**
 ```bash
 git add docs/specs/2026-05-27-pell-skills-architecture.md
 git commit -m "docs(spec): reconcile architecture spec with shipped single-plugin layout"
@@ -103,11 +103,11 @@ Both commands chain only into `start-work` (branch only), never the richer `from
 - Modify: `plugins/pell/commands/my-tickets.md` (Step 5)
 - Modify: `plugins/pell/commands/triage.md` (Step 5 action menu)
 
-- [ ] **Step 1: `my-tickets` Step 5** — change the chain prompt from a single start-work hand-off to a depth choice. New prompt: `Start work on one of these? Enter a number for branch-only (/pell:start-work), or "<number> plan" to also brainstorm + plan (/pell:from-ticket). "n" to skip.` Parse a trailing `plan`/`design` token on the picked number → invoke `/pell:from-ticket <KEY> <forwarded context>`; bare number → `/pell:start-work <KEY> <forwarded context>` (unchanged). Preserve the existing pass-through of pre-authorizations.
-- [ ] **Step 2: `triage` Step 5 action menu** — add one line: `d = design (claim + /pell:from-ticket)` beneath the existing `s = start work` line. Behavior for `d`: claim with the same y/n gate as `c`/`s`, then invoke `/pell:from-ticket <KEY>` with leftover freeform context. Update the menu's documented choices in the operator notes accordingly.
-- [ ] **Step 3: Validate.** `claude plugin validate ./plugins/pell` → PASS.
-- [ ] **Step 4: Smoke-test.** `/reload-plugins`, run `/pell:my-tickets` and `/pell:triage <KEY>`, confirm both new hand-off paths dispatch the right command. (If no live Jira, at minimum confirm the prompts render and parse the `plan`/`d` tokens.)
-- [ ] **Step 5: Commit.**
+- [x] **Step 1: `my-tickets` Step 5** — change the chain prompt from a single start-work hand-off to a depth choice. New prompt: `Start work on one of these? Enter a number for branch-only (/pell:start-work), or "<number> plan" to also brainstorm + plan (/pell:from-ticket). "n" to skip.` Parse a trailing `plan`/`design` token on the picked number → invoke `/pell:from-ticket <KEY> <forwarded context>`; bare number → `/pell:start-work <KEY> <forwarded context>` (unchanged). Preserve the existing pass-through of pre-authorizations.
+- [x] **Step 2: `triage` Step 5 action menu** — add one line: `d = design (claim + /pell:from-ticket)` beneath the existing `s = start work` line. Behavior for `d`: claim with the same y/n gate as `c`/`s`, then invoke `/pell:from-ticket <KEY>` with leftover freeform context. Update the menu's documented choices in the operator notes accordingly.
+- [x] **Step 3: Validate.** `claude plugin validate ./plugins/pell` → PASS.
+- [x] **Step 4: Smoke-test.** `/reload-plugins`, run `/pell:my-tickets` and `/pell:triage <KEY>`, confirm both new hand-off paths dispatch the right command. (If no live Jira, at minimum confirm the prompts render and parse the `plan`/`d` tokens.)
+- [x] **Step 5: Commit.**
 ```bash
 git add plugins/pell/commands/my-tickets.md plugins/pell/commands/triage.md
 git commit -m "feat(jira-ops): offer from-ticket hand-off from my-tickets and triage"
@@ -126,7 +126,7 @@ Add a fourth review dimension. Today nothing asks "are these changes adequately 
 **Files:**
 - Create: `plugins/pell/agents/test-reviewer.md`
 
-- [ ] **Step 1: Write the agent**, mirroring `agents/quality-reviewer.md`'s structure (same Inputs / Context-discovery / Output-format sections, same `local`|`bitbucket` context-source handling, same 4000-char cap, same trailing-JSON contract). Frontmatter:
+- [x] **Step 1: Write the agent**, mirroring `agents/quality-reviewer.md`'s structure (same Inputs / Context-discovery / Output-format sections, same `local`|`bitbucket` context-source handling, same 4000-char cap, same trailing-JSON contract). Frontmatter:
 ```yaml
 ---
 name: test-reviewer
@@ -136,8 +136,8 @@ model: inherit
 ```
   **What it looks for:** (1) new/changed behavior with no test at all; (2) tests that would still pass if the code were broken (assertion-free, tautological, asserting on mocks instead of behavior) — call this out explicitly, it's the mock/prod-divergence trap; (3) happy-path-only coverage (missing edge cases, error paths, boundary values); (4) flaky patterns (time/ordering/network dependence, shared mutable fixtures); (5) tests in the wrong layer (unit test that should be integration to catch the real failure). **What it does NOT look for:** impl correctness (correctness-reviewer), style (quality-reviewer), security (security-reviewer). **Context discovery:** locate the test framework + where tests live (mirror quality-reviewer's convention-file discovery; add `*.spec.ts`/`*.test.ts`, `*Tests.cs`/`*_test.go`/`test_*.py` location detection).
   **Severity scale:** `major` (untested critical new logic, or a test that can't fail) / `minor` (happy-path-only, missing edge cases) / `nit` (test naming, arrange-act-assert clarity, fixture hygiene).
-- [ ] **Step 2: Validate.** `claude plugin validate ./plugins/pell` → PASS.
-- [ ] **Step 3: Commit.**
+- [x] **Step 2: Validate.** `claude plugin validate ./plugins/pell` → PASS.
+- [x] **Step 3: Commit.**
 ```bash
 git add plugins/pell/agents/test-reviewer.md
 git commit -m "feat(review): add test-reviewer agent for test-adequacy dimension"
@@ -148,9 +148,9 @@ git commit -m "feat(review): add test-reviewer agent for test-adequacy dimension
 **Files:**
 - Create: `plugins/pell/commands/test-review.md`
 
-- [ ] **Step 1: Write the command** by copying `commands/correctness-review.md` and swapping the dimension: dispatch `subagent_type="test-reviewer"`, render a report titled `## Test Coverage Review` with `### Major / ### Minor / ### Nits` sections (no blocker tier — test gaps aren't production blockers). Keep the identical scope/context-source parsing, the PR-vs-local detection, the Jira-context fetch in PR mode, and the read-only hand-off (Step 5). Frontmatter `description` and `argument-hint` mirror correctness-review's shape.
-- [ ] **Step 2: Validate** → PASS.
-- [ ] **Step 3: Commit.**
+- [x] **Step 1: Write the command** by copying `commands/correctness-review.md` and swapping the dimension: dispatch `subagent_type="test-reviewer"`, render a report titled `## Test Coverage Review` with `### Major / ### Minor / ### Nits` sections (no blocker tier — test gaps aren't production blockers). Keep the identical scope/context-source parsing, the PR-vs-local detection, the Jira-context fetch in PR mode, and the read-only hand-off (Step 5). Frontmatter `description` and `argument-hint` mirror correctness-review's shape.
+- [x] **Step 2: Validate** → PASS.
+- [x] **Step 3: Commit.**
 ```bash
 git add plugins/pell/commands/test-review.md
 git commit -m "feat(review): add /pell:test-review primitive"
@@ -162,11 +162,11 @@ git commit -m "feat(review): add /pell:test-review primitive"
 - Modify: `plugins/pell/commands/three-pass-review.md` (Step 5 dispatch, Step 6 render, Step 1 parse)
 - Modify: `plugins/pell/commands/local-review.md` (Step 2 dispatch, Step 3 render, Step 1 parse)
 
-- [ ] **Step 1: Make it a 4th parallel agent, opt-in (off by default).** In both composites' parse step, recognize `with tests` / `include tests` / `+tests` → also dispatch `test-reviewer` alongside the existing three in the same single-message parallel `Agent` block. Default (no flag) runs the three core reviewers only. (Decision: the test pass is opt-in, not default — a review pass shouldn't be forced on every run.)
-- [ ] **Step 2: Add a `### Test Coverage` section** to both report templates (after `### Security`), rendered **only when the test pass was enabled**, with `Major / Minor / Nits` sub-lines, and add a matching Test line to the `### Counts` block. Keep the `three-pass-review` command name (renaming is churn); update its frontmatter description to note the optional fourth pass.
-- [ ] **Step 3: Update the README** (root + the now-thin plugin index from Task 1.1) to list `test-review` and note the composites can add an optional test pass via `with tests`.
-- [ ] **Step 4: Validate** → PASS. **Smoke-test:** run `/pell:local-review with tests` on a diff that adds untested logic; confirm the Test Coverage section appears and flags it; run `/pell:local-review` (no flag) and confirm the section is absent.
-- [ ] **Step 5: Commit.**
+- [x] **Step 1: Make it a 4th parallel agent, opt-in (off by default).** In both composites' parse step, recognize `with tests` / `include tests` / `+tests` → also dispatch `test-reviewer` alongside the existing three in the same single-message parallel `Agent` block. Default (no flag) runs the three core reviewers only. (Decision: the test pass is opt-in, not default — a review pass shouldn't be forced on every run.)
+- [x] **Step 2: Add a `### Test Coverage` section** to both report templates (after `### Security`), rendered **only when the test pass was enabled**, with `Major / Minor / Nits` sub-lines, and add a matching Test line to the `### Counts` block. Keep the `three-pass-review` command name (renaming is churn); update its frontmatter description to note the optional fourth pass.
+- [x] **Step 3: Update the README** (root + the now-thin plugin index from Task 1.1) to list `test-review` and note the composites can add an optional test pass via `with tests`.
+- [x] **Step 4: Validate** → PASS. **Smoke-test:** run `/pell:local-review with tests` on a diff that adds untested logic; confirm the Test Coverage section appears and flags it; run `/pell:local-review` (no flag) and confirm the section is absent.
+- [x] **Step 5: Commit.**
 ```bash
 git add plugins/pell/commands/three-pass-review.md plugins/pell/commands/local-review.md README.md plugins/pell/README.md
 git commit -m "feat(review): add test-coverage pass to three-pass and local review composites"
