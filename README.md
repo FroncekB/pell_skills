@@ -581,8 +581,10 @@ See [`CLAUDE.md`](CLAUDE.md) for conventions when adding a new command, agent, o
 
 1. **Everything goes into `plugins/pell/`** — don't add new plugin directories or new marketplace entries
 2. **Mirror an existing command** when adding one. If you find yourself inventing a new pattern, update the spec first
-3. **Validate before pushing:** `claude plugin validate ./plugins/pell`
-4. **Test the reload loop:** `/plugin marketplace update pell-skills && /reload-plugins`, then invoke the new command and observe
+3. **Update the docs in the same commit** — this README (command table, per-command section, agent/skill lists), [`plugins/pell/README.md`](plugins/pell/README.md), and §12 of the architecture spec. See [Housekeeping](CLAUDE.md#housekeeping--update-the-docs-in-the-same-change) for the full checklist
+4. **Bump the version** in `plugins/pell/.claude-plugin/plugin.json` — minor for a new command/agent/skill, patch for a fix. The plugin cache is keyed by version, so a change without a bump ships to nobody
+5. **Validate before pushing:** `claude plugin validate ./plugins/pell`
+6. **Test the reload loop:** `/plugin marketplace update pell-skills && /reload-plugins`, then invoke the new command and observe
 
 Open a PR. The team uses these tools daily, so feedback is fast.
 
