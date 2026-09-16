@@ -38,7 +38,7 @@ If there are no comments: print `No comments on PR #<prId>.` and stop.
 
 ## Step 3 — Group, filter, render
 
-1. **Drop** comments with `deleted: true` and `pending: true` (the latter are your own unpublished review drafts, not feedback).
+1. **Drop** comments with `deleted: true`, comments with `pending: true` (your own unpublished review drafts, not feedback), and comments whose body starts with `**Three-pass review run**` (the marker `/pell:three-pass-review` posts — not feedback).
 2. **Normalize** each remaining comment:
    - `id` — integer
    - author — `user.display_name` (the field is `user`, **not** `author`)

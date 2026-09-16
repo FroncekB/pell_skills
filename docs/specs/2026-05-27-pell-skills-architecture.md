@@ -215,6 +215,7 @@ Composites are thin orchestrators that:
 3. Aggregate findings into a unified report, **grouped by severity** — render nits in a collapsed/separate section so they don't drown the signal
 4. Decide on **side effects** based on the composite's purpose:
    - `pell-three-pass-review` (PR context) → ask the user which severity threshold to post (e.g. "post blockers + major only? all? selected?"). Never post nits by default
+   - `pell-three-pass-review` also offers a run-marker comment — one general PR comment listing the passes run and per-dimension counts, no verdict — gated on a default-yes prompt. `skip marker` suppresses the offer; `--dry-run` suppresses the post
    - `pell-local-review` (local context) → same selection model for fixes
 5. Gate every side effect on user confirmation
 
