@@ -90,6 +90,33 @@ Per-user preferences (Jira project transitions, GitFlow defaults, etc.) live in 
 
 Reads are free; writes are atomic per-section; any cached value is re-promptable via `--reset`.
 
+## Housekeeping — update the docs in the same change
+
+Docs here are load-bearing. `README.md` is how Pell engineers discover commands, `plugins/pell/README.md` ships *inside* the plugin, and the specs are what the next session reads before touching structure. A change that lands without them looks merged but is invisible. Do the housekeeping in the same commit as the change — not as a follow-up.
+
+**Any change under `plugins/pell/`:**
+
+- Bump `plugins/pell/.claude-plugin/plugin.json` — see [Validation and reload loop](#validation-and-reload-loop) below
+- Update `plugins/pell/README.md`, the in-plugin reference that ships to installed users: grouped command lists, agent list, skill list, severity scales
+- Re-read the frontmatter `description`. It drives routing and auto-invocation, so behavior that changed usually means a description that needs to change too
+
+**Adding, renaming, or removing a command / agent / skill — also:**
+
+- `README.md`: the table under `## Commands` (including the "Twenty commands" count), the per-command `### /pell:<name>` section, and the sub-agent and auto-invoked-skill lists further down. Table anchors must match the headings they point at
+- `docs/specs/2026-05-27-pell-skills-architecture.md` §12 Implementation status — move the item from "Not yet built" to "Built", or drop it
+- The `description` in `plugin.json` and in `.claude-plugin/marketplace.json` when the change shifts what the plugin *is* (a new category of surface) — not for a routine addition
+- Removing something means deleting every mention: both READMEs, the spec, and any command body that dispatches it. Don't leave a dangling anchor or an orphaned `subagent_type`
+
+**Changing a convention, pattern, or policy — also:**
+
+- This `CLAUDE.md`. The conventions sections are the contract for the next session; a deliberate exception gets written down as an exception (see the `conductor-*` note above), not left for someone to "fix"
+- `docs/specs/2026-05-27-pell-skills-architecture.md` — the architecture spec is the source of truth. Update the relevant numbered section, and add to §11 when you resolve an open decision
+- Cross-check the copies that ship: the context-source trigger phrases and the `bitbucketRepoContent` call shape are restated inline in every reviewer command and agent, because `CLAUDE.md` isn't installed. Change one, grep for the rest
+
+**Dated specs (`docs/specs/<date>-*-design.md`, `-plan.md`) are point-in-time records, not living docs.** Don't rewrite one to match a later change — append a short status note ("superseded by ...", "shipped as ...") and put the current truth in the architecture spec or the README.
+
+**Before calling it done, grep for what you renamed:** `grep -rn "<old-name>" README.md docs/ plugins/`. A stale reference inside another command body is the most common form of rot in this repo, and nothing validates it.
+
 ## Validation and reload loop
 
 After editing anything under `plugins/pell/`:
