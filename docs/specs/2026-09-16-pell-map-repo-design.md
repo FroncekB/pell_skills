@@ -354,7 +354,7 @@ or an argument.
 |-|-|
 | Document format and frontmatter | `sow-builder` agent — unchanged |
 | Eager build at setup, per discovered project | `/pell:map-repo`, this section |
-| Lazy build when a ticket is assessed and no cache exists | `/pell:scope` Step 3 — unchanged |
+| Lazy build when a ticket is assessed and no cache exists | `/pell:scope` Step 4 — unchanged |
 | The 14-day staleness rule and the drift query | `/pell:scope` alone — one clock, one owner |
 
 `/pell:scope` **keeps** its lazy path. Requiring every developer to have run
