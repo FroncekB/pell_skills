@@ -45,6 +45,8 @@ Skip this step entirely when `known_cloud_id` is non-empty — use it directly a
 
 Otherwise call `getAccessibleAtlassianResources`. This is a primary tool on every Atlassian connection shape in use — call it directly, no `discover`/`executeRead` indirection needed. Read `cloudId` and the site URL from the resource entry that lists `jira` and `confluence` in its products.
 
+Record `atlassian.site` as a **bare hostname**: strip any leading `https://` or `http://` and any trailing `/` from the resource entry's URL before recording it. Write `pellsoftware.atlassian.net`, never `https://pellsoftware.atlassian.net`. This is load-bearing, not cosmetic — the orchestrator composes page URLs as `https://<site>/wiki/...`, so a scheme left in place yields `https://https://...`, which every downstream fetcher rejects as an unrecognized URL shape. The same rule applies to a site value supplied through `known_cloud_id`'s config or seeded by the caller: normalize it before it reaches `coordinates`.
+
 If the call fails or returns nothing — no Atlassian MCP wired up, or unauthenticated — add a `gaps` entry (`field: "atlassian"`) and skip every Jira and Confluence step below (Steps 3–5). This never aborts the whole walk; Drive and the local repository facts still get reported.
 
 ## Step 3 — Jira, per project key
@@ -98,7 +100,31 @@ Skipped entirely (with the `gaps` entry from Step 2) if the Atlassian site could
 |-|-|-|
 | Remote issue links | `listJiraIssueRemoteIssueLinks` | `getJiraIssueRemoteIssueLinks` |
 
-Params: `cloudId`, `issueIdOrKey`. An empty result for any one issue is a valid, normal outcome, not an error — keep going. Keep only entries whose `object.url` contains `/wiki/`, and count how many distinct issues link to each URL. Rank candidate pages by that inbound-link count; the top few become `confluence.pages` candidates, with `title` taken from `object.title`. Treat `covers` as an inference: either derive a one-line description by fetching the page directly with `getConfluenceContent` (primary tool, called directly — no indirection needed for this one), or leave `covers` null rather than invent one. Either way, the whole `confluence.pages` list goes in `low_confidence` — it is ranked by inbound links, not confirmed as authoritative.
+Params: `cloudId`, `issueIdOrKey`. An empty result for any one issue is a valid, normal outcome, not an error — keep going.
+
+The page **fetch** used below — for `covers`, for a page's `status`, and for resolving a short-form id — is named differently per connection, so name both and use whichever the session exposes:
+
+| Role | `plugin:atlassian:atlassian` — primary tool, called directly | Classic connection — direct tool |
+|-|-|-|
+| Fetch one Confluence page by id | `getConfluenceContent` | `getConfluencePage` |
+| Search Confluence by title | `searchConfluence` | `searchConfluenceUsingCql` |
+
+Then work the collected link objects in this order:
+
+1. **Filter.** Keep only entries whose `object.url` contains `/wiki/`. This correctly excludes Bitbucket and other remote-link types.
+
+2. **Extract the page id from the URL.** This is required, not optional: `confluence.pages[].id` has no other source, and the orchestrator renders a `Page | id | Covers` table and composes the SOW source URL from it. Two URL shapes occur:
+
+   - **Long form** — `/wiki/spaces/<SPACE>/pages/<id>/<slug>`. The id is the numeric segment immediately after `/pages/`, running to the next `/`, `?`, or `#`, or to the end of the string. The trailing slug is optional; a URL that ends right after the id still yields the id.
+   - **Short form** — `/wiki/x/<code>`. The id is **not** recoverable from the URL. Try to resolve it once: search Confluence for `object.title` (tool row above) and, if exactly one current page in the resolved space matches that title, take its `id`. If the search is unavailable, fails, returns nothing, or returns more than one match, emit that page with `id: null` and add a `low_confidence` entry naming the page and stating that its id could not be resolved from a short-form `/wiki/x/` link. Never invent an id, and never guess among several matches.
+
+3. **Dedupe by page id, not by raw URL.** `.../pages/131073/Architecture`, `.../pages/131073/Architecture?focusedCommentId=1`, and `.../pages/131073` are one page; keying on the raw URL splits that page's inbound count three ways and buries the very page the ranking exists to surface. Count distinct linking issues per **id**. For a candidate whose id could not be resolved, fall back to deduping on the URL with its scheme, query string, and fragment stripped.
+
+4. **Drop archived pages.** Real spaces in this org carry many archived, auto-generated pages, and surfacing one as a canonical page is worse than surfacing none. Whenever you fetch a page (for `covers`, for a short-form id, or deliberately to check), read its `status` and drop anything that is not `current`. For a candidate you never fetched, keep it but say in its `low_confidence` entry that its archived/current status was not checked.
+
+5. **Rank and cut.** Rank the surviving pages by distinct-inbound-issue count, highest first, and take at most **five**. Break ties by most recently updated when the response gives you that, otherwise by title ascending — a stable tie-break, never an arbitrary slice. With ~20 sampled issues most counts will be 1, so treat the result as a shortlist for the orchestrator's interview, not a verdict.
+
+`title` comes from `object.title`. Treat `covers` as an inference: either derive a one-line description by fetching the page, or leave `covers` null rather than invent one. Either way, the whole `confluence.pages` list goes in `low_confidence` — it is ranked by inbound links, not confirmed as authoritative.
 
 **Space.** Fetch the space list:
 
@@ -142,7 +168,7 @@ Return **only** a single JSON object on the last line of your response (after an
 {
   "coordinates": {
     "repository": { "workspace": "...", "slug": "...", "base_branch": "...", "ci": "..." },
-    "atlassian":  { "site": "...", "cloud_id": "..." },
+    "atlassian":  { "site": "pellsoftware.atlassian.net", "cloud_id": "..." },
     "jira":       [ { "key": "RRS", "name": "...", "issue_types": [], "statuses": [],
                       "transitions": { "start": "...", "in_review": null, "done": "..." },
                       "components": [], "active_epics": [], "sow_path": "..." } ],
@@ -157,5 +183,12 @@ Return **only** a single JSON object on the last line of your response (after an
   "summary": "one-line outcome"
 }
 ```
+
+Two fields in that object have exact shapes the orchestrator depends on:
+
+- **`atlassian.site` is a bare hostname** — no `https://`, no trailing slash (Step 2).
+- **`confluence.pages[].id` is the numeric Confluence page id** extracted per Step 5, or `null` when it genuinely could not be resolved — never a URL, a slug, or a guess. Every `null` id carries a matching `low_confidence` entry saying why.
+
+The `jira[]` array is ordered by the frequency rank Step 1 established — most-referenced project key first. The orchestrator renders and prompts in that order, so do not re-sort it.
 
 Never write files. Never mutate Jira, Confluence, Drive, or Bitbucket. Never ask a question directly — every unresolved item goes in `gaps` with a suggested `ask` for the orchestrator to pose later.

@@ -39,6 +39,13 @@ If it exists, parse its YAML frontmatter for `schema`, `generated_at`, and `repo
 
 - **Unparseable or missing frontmatter** → print `context.md has no readable frontmatter — rebuilding.` and treat the file as missing. Continue to Step 3.
 - **`schema` newer than the schema this build writes (1)** → print `context.md is schema <n>; this build writes schema 1 — rebuilding.` and treat the file as missing. Continue to Step 3.
+- **Either of those two while `verify` is set** → do not continue to Step 3, and do not fall through to Step 8. `verify` is a drift check against what the file records, and a file that cannot be parsed records nothing to check. Print exactly one of:
+
+  > `context.md` has no readable frontmatter — nothing to verify. Run `/pell:map-repo` to rebuild it.
+
+  > `context.md` is schema `<n>`; this build reads schema 1 — nothing to verify. Run `/pell:map-repo` to rebuild it.
+
+  Then exit without writing. `verify` never rebuilds and never walks, so it has nothing else to offer here.
 - **Valid** →
   - `refresh` set → rebuild regardless of age; continue to Step 3.
   - `verify` set → skip the rebuild prompt below. `verify` is a cheap drift re-check, not a rebuild — it never reaches Step 3 or Step 4.
@@ -128,7 +135,7 @@ Under `--dry-run`, skip this prompt entirely: print `--dry-run: context.md not w
 
 On `n`: print `context.md not written.` and continue to Step 7, skipping Step 6 for the same reason — a declined write leaves nothing for the SOW build to patch.
 
-On `y`: create `docs/pell/` under `repo_root` if it does not exist, then write `context_path` in this shape (design spec Section 7). Frontmatter:
+On `y`: create `docs/pell/` under `repo_root` if it does not exist, then write `context_path` in the shape this step defines. **This step is the contract.** Other pell commands read this file and look for its literal labels and heading shapes — `Default base branch`, `Bitbucket workspace`, `cloudId`, the `## Jira — <KEY>` heading — so the labels below are fixed strings, not a suggested wording. Changing one silently breaks every reader. Frontmatter:
 
 ```
 ---
@@ -153,9 +160,59 @@ Then the body sections, in this order, built from the resolved coordinates and t
 - **`## Jira — <KEY> (<name>)`** — one section per discovered project key, repeated in the same frequency-rank order Step 3 discovered them. Each holds: issue types, workflow (statuses joined by `->`), transition names exactly as the API returned them (`start`, `in_review`, `done` — write `unverified` for any role that could not be confirmed; never a fabricated name), components, active epics as `<KEY> (<summary>)`, and a `Synthesized SOW:` line. Before Step 6 runs, write that line as `Synthesized SOW: none — run /pell:scope <KEY>`; Step 6 patches it on a successful build.
 - **`## Confluence`** — space key, space id, and a `Page | id | Covers` table of canonical pages.
 - **`## Google Drive`** — one line per labelled folder: `<label>: <folder_id> (<name>)`.
-- **`## Gaps`** — one line per dropped `low_confidence` field and per `gaps` entry (answered or skipped), each stating how to resolve it. Render `_None._` when empty.
+- **`## Gaps`** — one line per dropped `low_confidence` field and per `gaps` entry (answered or skipped), each stating how to resolve it. Render `_None._` when the section is empty at write time. `_None._` is a placeholder meaning "no gaps," not a heading line: anything appended to this section later (Step 6) **replaces** it rather than stacking beneath it, so `_None._` can never sit above a real gap line.
 
 Repo-level sections (`Repository`, `Atlassian site`, `Confluence`, `Google Drive`, `Gaps`) appear once regardless of how many projects were found; only `## Jira —` repeats. This file holds coordinates and confirmed values only — never a scope statement, epic body, or Confluence page body. That content lives in the SOW or on the source system, not here.
+
+Written out, with the exact labels and heading shapes consumers depend on:
+
+```markdown
+# Repo context — rrs-web
+
+Coordinates only. Nothing here is a source of truth — it tells you where the
+sources of truth live. Fetch live before relying on any content.
+
+## Repository
+- Bitbucket workspace: `pellsoftware`
+- Repo slug: `rrs-web`
+- Default base branch: `develop`
+- Branch shape: `<KEY>-<description>` (e.g. `RRS-1020-fix-cart`)
+- CI: Bitbucket Pipelines (`bitbucket-pipelines.yml`)
+
+## Atlassian site
+- Site: `pellsoftware.atlassian.net`
+- cloudId: `dfe5fa82-885e-4fff-a83f-633a4db40961`
+
+## Jira — RRS (Retail Rewards System)
+- Issue types: Epic, Story, Bug, Task, Sub-task
+- Workflow: To Do -> In Progress -> In Progress QA -> Done
+- Transition names, exactly as the API returns them:
+  - start: `In Progress`
+  - in_review: `IN PROGRESS QA`
+  - done: `Done`
+- Components: cart, checkout, reporting
+- Active epics: RRS-900 (Checkout redesign), RRS-1100 (Reporting v2)
+- Synthesized SOW: `docs/pell/sow-RRS.md` (built 2026-08-30)
+
+## Confluence
+- Space: `RRSDEV` (RRS Development), id `98304`
+- Canonical pages:
+
+| Page | id | Covers |
+|-|-|-|
+| RRS Architecture Overview | 131073 | service boundaries, data flow |
+| API Contracts v2 | 131090 | request/response shapes |
+
+## Google Drive
+- Requirements: `1a2B3c...` (RRS / Requirements)
+- Design: `1d4E5f...` (RRS / Design)
+
+## Gaps
+- No Drive folder found for QA test plans. Re-run `/pell:map-repo refresh` once one exists.
+- `in_review` transition unverified — no sampled issue sat in a status that offered it.
+```
+
+The values above are illustrative; the labels are not. Keep `Bitbucket workspace`, `Repo slug`, `Default base branch`, `Branch shape`, `CI`, `Site`, `cloudId`, the `## Jira — <KEY> (<name>)` heading, `Synthesized SOW`, and the `Page | id | Covers` table header verbatim. `Site:` records a bare hostname — no `https://` and no trailing slash. Omit a line whose value is unknown rather than writing the label with an empty value, except inside `## Jira —`, where a section with no line at all would be ambiguous.
 
 Print `Wrote docs/pell/context.md` and continue to Step 6.
 
@@ -179,7 +236,15 @@ For each Jira project key discovered in Step 3, in the same frequency-rank order
    > Build the Statement of Work for `<KEY>`? This walks every issue in the project plus any linked Confluence scope docs — typically 1-3 minutes. (y/n)
 
    `with_sow` answers this `y` for every key without prompting.
-3. On `y` (or `with_sow`): build `sow_sources` before dispatching. `sow-builder`'s Step 4 needs a real Confluence URL per page and treats anything else as unresolvable (`_Fetch failed: unrecognized Confluence URL shape_`), but `repo-mapper` returns `coordinates.confluence.pages[]` as `{title, id, covers}` — no URL (design spec §5.3; `repo-mapper.md`'s output format). Passing the bare `id` through would silently lose the exact saving §8 promises over the lazy path. For each page in `coordinates.confluence.pages`, construct `https://<coordinates.atlassian.site>/wiki/spaces/<coordinates.confluence.space_key>/pages/<id>`. Add any `seed_urls` captured in Step 1 to the same list — a URL the developer supplied at invocation is as authoritative as one the walk discovered. Then dispatch the Agent tool with `subagent_type="sow-builder"` — the existing agent, unmodified — with a prompt containing these labeled lines:
+3. On `y` (or `with_sow`): build `sow_sources` before dispatching. `sow-builder` needs a real Confluence URL per page and treats anything else as unresolvable (`_Fetch failed: unrecognized Confluence URL shape_`), but `repo-mapper` returns `coordinates.confluence.pages[]` as `{title, id, covers}` — no URL (see `repo-mapper.md`'s output format). Passing the bare `id` through would silently forfeit the scope-doc content this eager path exists to capture. For each page in `coordinates.confluence.pages`, construct:
+
+   ```
+   https://<site>/wiki/spaces/<coordinates.confluence.space_key>/pages/<id>
+   ```
+
+   **Normalize `<site>` first.** `repo-mapper` records `coordinates.atlassian.site` as a bare hostname, but do not rely on that here: strip any leading `https://` or `http://` and any trailing `/` from the value you hold before composing. A site value that still carries its scheme produces `https://https://pellsoftware.atlassian.net/wiki/...`, which `sow-builder` rejects as an unrecognized URL shape — a silent, total loss of the Confluence half of the SOW. The composed URL must contain exactly one `https://`, at the very start, and read `https://pellsoftware.atlassian.net/wiki/spaces/RRSDEV/pages/131073`.
+
+   Skip any page whose `id` is null rather than composing a URL with a missing segment — a null id means `repo-mapper` could not resolve it and said so in `low_confidence`, and `.../pages/` with nothing after it resolves to nothing. Add any `seed_urls` captured in Step 1 to the same list — a URL the developer supplied at invocation is as authoritative as one the walk discovered. Then dispatch the Agent tool with `subagent_type="sow-builder"` — the existing agent, unmodified — with a prompt containing these labeled lines:
 
    ```
    cloudId: <coordinates.atlassian.cloud_id>
@@ -190,7 +255,7 @@ For each Jira project key discovered in Step 3, in the same frequency-rank order
    ```
 
 4. On success (non-empty `sow_markdown`): write `docs/pell/sow-<KEY>.md` with the returned document, print `Wrote docs/pell/sow-<KEY>.md (<stats.issues> issues · <stats.epics> epics · <stats.scope_docs> scope doc)`, then patch **only** the `Synthesized SOW:` line for `<KEY>` in the `context.md` just written, to `Synthesized SOW: docs/pell/sow-<KEY>.md (built <today's date>)`. No separate gate covers this patch — it is covered by the `y` already given to the build itself.
-5. On `n`, or on failure or an empty result: leave the `context.md` line as `Synthesized SOW: none — run /pell:scope <KEY>`, and add a line under `## Gaps` — `SOW for <KEY> not built — run /pell:scope <KEY>.` on decline, or `SOW build for <KEY> failed: <summary> — run /pell:scope <KEY>.` on failure. This is a **per-source** failure: `context.md` stays intact exactly as written, and the walk continues to the next project key.
+5. On `n`, or on failure or an empty result: leave the `context.md` line as `Synthesized SOW: none — run /pell:scope <KEY>`, and add a line under `## Gaps` — `SOW for <KEY> not built — run /pell:scope <KEY>.` on decline, or `SOW build for <KEY> failed: <summary> — run /pell:scope <KEY>.` on failure. If `## Gaps` currently holds the `_None._` placeholder, **replace** that line with this one instead of appending beneath it; `_None._` asserts there are no gaps, so leaving it above a gap line contradicts the file's own section. Subsequent gap lines append normally, since the placeholder is gone after the first. This is a **per-source** failure: `context.md` stays intact exactly as written, and the walk continues to the next project key.
 
 Continue to Step 7 once every discovered key has been handled.
 
@@ -216,7 +281,7 @@ If `CLAUDE.md` exists, prompt:
 > Add the repo-context pointer block to `CLAUDE.md`? (y/n)
 
 On `y`: locate `<!-- pell:context-pointer -->` in the file.
-- If present, replace from that marker through the end of the block — that is, up to the next `## ` heading **after** the block's own `## Repo context` heading, or end of file if none follows — with the block above. The "after its own heading" qualifier is load-bearing: `## Repo context` is the very next line after the marker, so a naive "replace up to the next `## `" would match the block's own heading and replace only the marker line, leaving the stale body stranded under a duplicated heading. That is precisely the failure acceptance case 5 ("run twice, replaced not duplicated") exists to catch — do not re-simplify this back to "the next `## `."
+- If present, replace from that marker through the end of the block — that is, up to the next `## ` heading **after** the block's own `## Repo context` heading, or end of file if none follows — with the block above. The "after its own heading" qualifier is load-bearing: `## Repo context` is the very next line after the marker, so a naive "replace up to the next `## `" would match the block's own heading and replace only the marker line, leaving the stale body stranded under a duplicated heading. That is precisely the re-run failure this qualifier exists to catch — running the command twice must replace the block, never stack a second copy — so do not re-simplify this back to "the next `## `."
 - If absent, append the block at the end of the file, preceded by a blank line.
 
 This makes re-running idempotent — the marker plus the corrected replace-range is what stops a second copy from stacking.
@@ -237,19 +302,25 @@ Continue to Step 9.
 
 ## Step 8 — `verify` mode
 
-Runs instead of Steps 3 through 7 when `verify` was parsed in Step 1. Steps 3 and 4 already skip themselves in that case (see Step 3) and Step 5 routes here too (see Step 5) — this step is what all of them were skipping ahead to. No full walk, no `repo-mapper` dispatch: only cheap, falsifiable checks (design spec Section 11).
+Runs instead of Steps 3 through 7 when `verify` was parsed in Step 1. Steps 3 and 4 already skip themselves in that case (see Step 3) and Step 5 routes here too (see Step 5) — this step is what all of them were skipping ahead to. No full walk, no `repo-mapper` dispatch: only cheap, falsifiable checks.
 
 If `context_path` does not exist, print `No context.md found — nothing to verify. Run /pell:map-repo to build one.` and exit.
+
+A file that exists but has unreadable frontmatter or an unknown `schema:` never reaches this step — Step 2 reports it and exits under `verify`. Reaching this step therefore means the frontmatter parsed and the schema is one this build reads. If the **body** then turns out to be unparseable — no recognizable sections, or none of the fields below extractable — print `context.md has no readable body sections — nothing to verify. Run /pell:map-repo to rebuild it.` and exit. Never attempt a drift check against a file you could not read; an unreadable file is a rebuild, not a diff.
 
 Otherwise, parse `context_path` in full. Step 2 only reads the `schema` / `generated_at` / `repo` frontmatter, and under `verify` it skips its own summary render entirely — nothing about the body has been read yet, and this step needs it. Read the body sections now and extract: Bitbucket workspace, slug, and base branch from `## Repository`; the recorded transition names (`start`, `in_review`, `done`) from each `## Jira — <KEY>` section; the canonical page ids from the `## Confluence` table; the folder ids from `## Google Drive`; and each project's `Synthesized SOW:` path from its Jira section. Then re-check each of:
 
 | Check | Method |
 |-|-|
 | Bitbucket slug, base branch | `git remote -v`, `git symbolic-ref refs/remotes/origin/HEAD` |
-| Transition names | the transitions-for-issue call (direct, or via `discover`/`executeRead` per Section 5.0) on one sampled issue per recorded Jira project |
-| Confluence page ids | `getConfluencePage` by id — resolves or 404s |
-| Drive folder ids | `get_file_metadata` by id — resolves or 404s |
+| Transition names | fetch transitions for one sampled issue per recorded Jira project — `listJiraIssueTransitions` via `discover` then `executeRead` on `plugin:atlassian:atlassian`, or `getTransitionsForJiraIssue` directly on a classic connection |
+| Confluence page ids | fetch each recorded page by id — `getConfluenceContent` (primary on `plugin:atlassian:atlassian`, called directly) or `getConfluencePage` (classic connection direct tool) — resolves or 404s |
+| Drive folder ids | the Drive file-metadata tool by id — referred to by role, never by an install-specific server id — resolves or 404s |
 | SOW freshness | stat `docs/pell/sow-<KEY>.md` per recorded project, read its own `generated_at` |
+
+Both Atlassian rows name **two** tools on purpose, and both names must be tried. Two differently-shaped Atlassian connections are in use: on `plugin:atlassian:atlassian` the collection operations are not primary tools and are reached only through `discover({query})` then `executeRead({name, cloudId, inputs})` under `list*` names, while a classic connection exposes each as a direct `get*` tool. Naming only one shape is a silent no-such-tool failure at runtime rather than an error you can see — use whichever the session exposes, and if neither resolves, report that row as unchecked rather than as "no drift." On any execute-family call, `cloudId` is a **top-level** argument, a sibling of `name` and `inputs`, never nested inside `inputs`.
+
+A recorded page whose `id` cell is empty gets no fetch and is not drift — it was written that way because the id could not be resolved, and it is already recorded under `## Gaps`. Skip it rather than fetching an empty id.
 
 The first four rows compare the live value against what `context.md` records; a mismatch, or a 404 against a recorded id, is drift. The SOW row **reports only** — `verify` never rebuilds a SOW, no matter its age. Rebuilding is the expensive operation this whole design moved out of the mid-task path; that stays with `/pell:scope`. Render it per recorded project as `sow-<KEY>.md is <n> days old. Run /pell:map-repo refresh, or "refresh" inside /pell:scope.` A project with no recorded SOW gets no row.
 
@@ -271,7 +342,7 @@ Exit after this step. `verify` never continues to Step 9 or to any of Steps 5 th
 
 Skipped entirely under `verify` — Step 8 renders its own outcome and exits.
 
-The **existing-file summary** — headed `context.md — mapped <n> days ago.`, the `Repository` / `Atlassian` / `Jira` / `Confluence` / `Drive` / `Gaps` field block, and the `Say "refresh" to rebuild, or "verify" to check it for drift.` closer — is already defined in Step 2. It reproduces design spec Section 14's field set exactly; reuse it verbatim from there and do not redefine it here.
+The **existing-file summary** — headed `context.md — mapped <n> days ago.`, the `Repository` / `Atlassian` / `Jira` / `Confluence` / `Drive` / `Gaps` field block, and the `Say "refresh" to rebuild, or "verify" to check it for drift.` closer — is already defined in Step 2. Reuse it verbatim from Step 2 and do not redefine it here.
 
 After a build in this run (Steps 3 through 7 ran, regardless of how many of their gates were accepted), render the **post-build summary**: the same field block Step 2 uses (`Repository`, `Atlassian`, `Jira`, `Confluence`, `Drive`, `Gaps` — identical shape and content rules, one repeated `Jira` row per discovered project when there is more than one), headed `Mapped <slug>.` instead of an age line, built from the coordinates and interview answers just gathered:
 
@@ -301,7 +372,7 @@ Under `--dry-run`, render this same summary from the interview answers so the de
 
 ## Failure behavior
 
-Design spec Section 13 names two failure classes. A **per-source** failure degrades to a `## Gaps` entry and the walk continues; a **total** failure exits outright because there is nothing left to interview or write. Only the first two rows below are total — everything else is per-source and must never stop the command.
+Two failure classes govern this command. A **per-source** failure degrades to a `## Gaps` entry and the walk continues; a **total** failure exits outright because there is nothing left to interview or write. Only the first two rows below are total — everything else is per-source and must never stop the command.
 
 | Condition | Behavior |
 |-|-|
@@ -316,4 +387,4 @@ Design spec Section 13 names two failure classes. A **per-source** failure degra
 | SOW build fails or returns empty | `context.md` is already written and stays intact; record the failure under `## Gaps` (Step 6); continue to the next project |
 | Unknown `schema:` in an existing `context.md` | Print `context.md is schema <n>; this build writes schema 1 — rebuilding.` and treat the file as missing (Step 2) |
 
-MCP handling follows architecture spec Section 4: notify, never force. A developer without the Drive connector still gets a useful Jira, Confluence, and Bitbucket map.
+MCP handling is notify, never force. A developer without the Drive connector still gets a useful Jira, Confluence, and Bitbucket map.
