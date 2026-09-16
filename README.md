@@ -329,7 +329,7 @@ Composite — runs the correctness, quality, and security reviewers against loca
 
 ### `/pell:three-pass-review <PR>`
 
-Composite — runs the correctness, quality, and security reviewers in parallel against a Bitbucket PR with linked Jira context (add `with tests` for a fourth test-coverage pass). Aggregates findings into a unified report. Offers to post each finding as an inline comment on the PR.
+Composite — runs the correctness, quality, and security reviewers in parallel against a Bitbucket PR with linked Jira context (add `with tests` for a fourth test-coverage pass). Aggregates findings into a unified report. Offers a run-marker comment on the PR — one general comment naming the passes that ran and the per-dimension counts, no verdict — then offers to post each finding as an inline comment.
 
 **Usage:**
 
@@ -340,6 +340,8 @@ Composite — runs the correctness, quality, and security reviewers in parallel 
 /pell:three-pass-review 42 skip jira                             # don't prompt for Jira if no key found
 /pell:three-pass-review 42 with tests                            # add the optional test-coverage pass
 /pell:three-pass-review 42 use bitbucket                         # fetch surrounding context via MCP instead of local FS
+/pell:three-pass-review 42 skip marker                           # don't offer the run-marker comment
+/pell:three-pass-review 42 --dry-run                             # render everything, post nothing
 ```
 
 **Behavior:**
@@ -351,9 +353,10 @@ Composite — runs the correctness, quality, and security reviewers in parallel 
 5. Detects WIP/draft PRs and asks for confirmation before proceeding
 6. Dispatches the reviewer agents in parallel — correctness, quality, security, and (opt-in via `with tests`) test-coverage
 7. Renders a unified report grouped by dimension and severity
-8. Asks which severity threshold (if any) to post as inline comments: `blockers-only`, `major+`, `minor+` (default), `all`, `select`, or `no`
+8. Offers a run-marker comment on the PR, default yes — passes run plus per-dimension counts, no verdict and no finding text. `skip marker` suppresses the offer; `post marker` posts without asking
+9. Asks which severity threshold (if any) to post as inline comments: `blockers-only`, `major+`, `minor+` (default), `all`, `select`, or `no`
 
-**Output:** markdown report + optional Bitbucket inline comments.
+**Output:** markdown report + optional run-marker comment + optional Bitbucket inline comments.
 
 ### `/pell:address-review <PR>`
 
@@ -376,7 +379,7 @@ The receiving end of `/pell:three-pass-review`. Pulls the review comments back o
 
 1. Resolves the PR identifier + context source
 2. Fetches PR metadata + all comment pages from Bitbucket
-3. Drops deleted/draft comments; groups the rest by file (inline) plus a General bucket. Default scope is **all comments**, narrowable client-side (`unresolved`, `since last push`, `from <name>`)
+3. Drops deleted/draft comments and `/pell:three-pass-review` run markers; groups the rest by file (inline) plus a General bucket. Default scope is **all comments**, narrowable client-side (`unresolved`, `since last push`, `from <name>`)
 4. Per-comment triage — you drive `fix` / `reply` / `skip` (or a bulk verb like `all fix`)
 5. Applies only concrete, mechanical fixes to the working tree (never weakens tests, never guesses); drafts thread replies for confirmation before posting
 

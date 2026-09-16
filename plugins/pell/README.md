@@ -19,7 +19,7 @@ Pell Software's Claude Code toolkit. One plugin, many skills. Install once, get 
 
 | Command | What it does |
 |-|-|
-| `/pell:three-pass-review <PR>` | All reviewers in parallel against a Bitbucket PR with Jira context; offers inline PR comments. |
+| `/pell:three-pass-review <PR>` | All reviewers in parallel against a Bitbucket PR with Jira context; offers a run-marker comment, then inline PR comments. |
 | `/pell:local-review` | All reviewers against local uncommitted changes; offers in-place fixes. |
 
 Both composites can add a test-coverage pass — pass `with tests` to enable it (off by default).
