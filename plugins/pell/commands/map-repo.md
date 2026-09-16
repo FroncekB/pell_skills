@@ -167,23 +167,29 @@ Skip this entire step, and go directly to Step 7, when any of: `verify` is set (
 
 For each Jira project key discovered in Step 3, in the same frequency-rank order:
 
-1. If `docs/pell/sow-<KEY>.md` exists, read its own YAML frontmatter for `generated_at`, and that date is less than 14 days old: print `SOW for <KEY> is current (built <date>) — skipping.` and continue to the next key. This age comes only from that file's own frontmatter — never re-derive or re-implement a clock here; the 14-day rule belongs to `/pell:scope` alone.
-2. Otherwise, unless `with_sow` is set, prompt naming the cost:
+1. Check whether `docs/pell/sow-<KEY>.md` exists.
+   - It does not exist: not current — fall through to the prompt below.
+   - It exists: read its own YAML frontmatter for `generated_at`.
+     - Present and less than 14 days old: print `SOW for <KEY> is current (built <date>) — skipping.` and continue to the next key.
+     - Absent, unparseable, or 14 days old or older: not current — fall through to the prompt below.
+
+   This age is read only from that file's own frontmatter — never re-derive or re-implement a clock here; the 14-day rule belongs to `/pell:scope` alone.
+2. Unless `with_sow` is set, prompt naming the cost:
 
    > Build the Statement of Work for `<KEY>`? This walks every issue in the project plus any linked Confluence scope docs — typically 1-3 minutes. (y/n)
 
    `with_sow` answers this `y` for every key without prompting.
-3. On `y` (or `with_sow`): dispatch the Agent tool with `subagent_type="sow-builder"` — the existing agent, unmodified — with a prompt containing these labeled lines:
+3. On `y` (or `with_sow`): build `sow_sources` before dispatching. `sow-builder`'s Step 4 needs a real Confluence URL per page and treats anything else as unresolvable (`_Fetch failed: unrecognized Confluence URL shape_`), but `repo-mapper` returns `coordinates.confluence.pages[]` as `{title, id, covers}` — no URL (design spec §5.3; `repo-mapper.md`'s output format). Passing the bare `id` through would silently lose the exact saving §8 promises over the lazy path. For each page in `coordinates.confluence.pages`, construct `https://<coordinates.atlassian.site>/wiki/spaces/<coordinates.confluence.space_key>/pages/<id>`. Add any `seed_urls` captured in Step 1 to the same list — a URL the developer supplied at invocation is as authoritative as one the walk discovered. Then dispatch the Agent tool with `subagent_type="sow-builder"` — the existing agent, unmodified — with a prompt containing these labeled lines:
 
    ```
    cloudId: <coordinates.atlassian.cloud_id>
    project_key: <KEY>
-   sow_sources: [<Confluence page URLs this walk already identified as candidate scope docs, or empty>]
+   sow_sources: [<constructed Confluence page URLs, plus seed_urls, or empty>]
    deep: false
    verbose: <verbose>
    ```
 
-4. On success (non-empty `sow_markdown`): write `docs/pell/sow-<KEY>.md` with the returned document, print `Wrote docs/pell/sow-<KEY>.md (<stats.issues> issues · <stats.epics> epics · <stats.scope_docs> scope doc(s)).`, then patch **only** the `Synthesized SOW:` line for `<KEY>` in the `context.md` just written, to `Synthesized SOW: docs/pell/sow-<KEY>.md (built <today's date>)`. No separate gate covers this patch — it is covered by the `y` already given to the build itself.
+4. On success (non-empty `sow_markdown`): write `docs/pell/sow-<KEY>.md` with the returned document, print `Wrote docs/pell/sow-<KEY>.md (<stats.issues> issues · <stats.epics> epics · <stats.scope_docs> scope doc)`, then patch **only** the `Synthesized SOW:` line for `<KEY>` in the `context.md` just written, to `Synthesized SOW: docs/pell/sow-<KEY>.md (built <today's date>)`. No separate gate covers this patch — it is covered by the `y` already given to the build itself.
 5. On `n`, or on failure or an empty result: leave the `context.md` line as `Synthesized SOW: none — run /pell:scope <KEY>`, and add a line under `## Gaps` — `SOW for <KEY> not built — run /pell:scope <KEY>.` on decline, or `SOW build for <KEY> failed: <summary> — run /pell:scope <KEY>.` on failure. This is a **per-source** failure: `context.md` stays intact exactly as written, and the walk continues to the next project key.
 
 Continue to Step 7 once every discovered key has been handled.
@@ -210,10 +216,10 @@ If `CLAUDE.md` exists, prompt:
 > Add the repo-context pointer block to `CLAUDE.md`? (y/n)
 
 On `y`: locate `<!-- pell:context-pointer -->` in the file.
-- If present, replace everything from that marker through the end of its section (up to the next `## ` heading at the same level, or end of file) with the block above.
+- If present, replace from that marker through the end of the block — that is, up to the next `## ` heading **after** the block's own `## Repo context` heading, or end of file if none follows — with the block above. The "after its own heading" qualifier is load-bearing: `## Repo context` is the very next line after the marker, so a naive "replace up to the next `## `" would match the block's own heading and replace only the marker line, leaving the stale body stranded under a duplicated heading. That is precisely the failure acceptance case 5 ("run twice, replaced not duplicated") exists to catch — do not re-simplify this back to "the next `## `."
 - If absent, append the block at the end of the file, preceded by a blank line.
 
-This makes re-running idempotent — the marker is what stops a second copy from stacking.
+This makes re-running idempotent — the marker plus the corrected replace-range is what stops a second copy from stacking.
 
 If `CLAUDE.md` does not exist, ask a further, separate `(y/n)`:
 
@@ -225,7 +231,7 @@ Under `--dry-run`: skip both prompts, print `--dry-run: CLAUDE.md not written.`,
 
 This gate is always separate from the `context.md` gate and the SOW gates in Step 6 — never bundle it with either. Consent to write a cache file under `docs/pell/` is not consent to edit the repo's own instruction file.
 
-On a successful write, print exactly one of: `Added the pointer block to CLAUDE.md`, `Replaced the pointer block in CLAUDE.md`, or `Created CLAUDE.md with the pointer block.`
+On a successful write, print exactly one of: `Added the pointer block to CLAUDE.md`, `Replaced the pointer block in CLAUDE.md`, or `Created CLAUDE.md with the pointer block`.
 
 Continue to Step 9.
 
@@ -235,7 +241,7 @@ Runs instead of Steps 3 through 7 when `verify` was parsed in Step 1. Steps 3 an
 
 If `context_path` does not exist, print `No context.md found — nothing to verify. Run /pell:map-repo to build one.` and exit.
 
-Otherwise, using the `schema` / `generated_at` / `repo` frontmatter and the coordinate values already parsed from `context_path` in Step 2, re-check each of:
+Otherwise, parse `context_path` in full. Step 2 only reads the `schema` / `generated_at` / `repo` frontmatter, and under `verify` it skips its own summary render entirely — nothing about the body has been read yet, and this step needs it. Read the body sections now and extract: Bitbucket workspace, slug, and base branch from `## Repository`; the recorded transition names (`start`, `in_review`, `done`) from each `## Jira — <KEY>` section; the canonical page ids from the `## Confluence` table; the folder ids from `## Google Drive`; and each project's `Synthesized SOW:` path from its Jira section. Then re-check each of:
 
 | Check | Method |
 |-|-|
@@ -287,7 +293,7 @@ Added the pointer block to CLAUDE.md
 Commit all three with your normal workflow.
 ```
 
-Follow the field block with one `Wrote ...` / `Added ...` / `Replaced ...` / `Created ...` line per file this run actually touched, in the fixed order `context.md`, then each `sow-<KEY>.md` built this run, then the `CLAUDE.md` line — using the exact per-file lines already specified in Steps 5 through 7. Omit the line for any file not written this run (declined, `--dry-run`, or skipped).
+Follow the field block with one `Wrote ...` / `Added ...` / `Replaced ...` / `Created ...` line per file this run actually touched, in the fixed order `context.md`, then each `sow-<KEY>.md` built this run, then the `CLAUDE.md` line — worded exactly as shown in the template above. Omit the line for any file not written this run (declined, `--dry-run`, or skipped).
 
 Close with `Commit all three with your normal workflow.` when all three kinds of file were written this run (`context.md`, at least one SOW, and `CLAUDE.md`); otherwise close with `Commit the file(s) written above with your normal workflow.` Never tell the developer to commit something that was not written.
 
