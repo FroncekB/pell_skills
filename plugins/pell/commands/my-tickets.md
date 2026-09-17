@@ -21,10 +21,25 @@ If `$ARGUMENTS` is empty, no filters apply.
 
 Read `~/.claude/pell-config.json` (use the Read tool; if the file doesn't exist, treat it as `{}`).
 
-- If `jira.cloud_id` is set, use it.
+- If `docs/pell/context.md` names a `cloudId` under its Atlassian site section (Step 3 loads it; repo-scoped, so it wins here), use it.
+- Otherwise, if `jira.cloud_id` is set, use it.
 - Otherwise, call `mcp__plugin_atlassian_atlassian__getAccessibleAtlassianResources`. Use the first result's `id` as `cloudId`, then write it back to `pell-config.json:jira.cloud_id` (atomic read-modify-write).
 
-## Step 3 — Build and run the JQL query
+## Step 3 — Load repo context
+
+Run `git rev-parse --show-toplevel`. If it succeeds, read `<toplevel>/docs/pell/context.md` (Read tool). A missing file, unreadable frontmatter, or a `schema:` value other than `1` all mean "no context" — continue without it and say nothing.
+
+When present, treat it as a **coordinate source only**. It holds pointers, not content: never treat its epic lists, page titles, or component names as current truth. Resolve any coordinate in this order:
+
+1. an explicit value in `$ARGUMENTS`
+2. `docs/pell/context.md`
+3. `~/.claude/pell-config.json`
+4. a live MCP lookup
+5. prompt the user
+
+Never write to `context.md`. If a live call later contradicts it, use the live value and print one line: `context.md is out of date on <field>. Run /pell:map-repo verify.`
+
+## Step 4 — Build and run the JQL query
 
 Base JQL: `assignee = currentUser() AND statusCategory != Done`
 
@@ -46,7 +61,7 @@ If the call fails with a JQL syntax error → exit with: "Jira rejected that fil
 
 If the MCP isn't connected → exit with: "Jira MCP isn't connected — see the README prerequisites."
 
-## Step 4 — Render the list
+## Step 5 — Render the list
 
 If the response has 0 issues:
 
@@ -87,7 +102,7 @@ Below the list, render exactly one of:
 
 The `searchJiraIssuesUsingJql` MCP returns `isLast`/`nextPageToken` but no total count. Don't promise a total you can't deliver.
 
-## Step 5 — Offer to chain into start-work or from-ticket
+## Step 6 — Offer to chain into start-work or from-ticket
 
 After the list, ask:
 

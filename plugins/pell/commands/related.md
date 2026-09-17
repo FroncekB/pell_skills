@@ -21,10 +21,25 @@ Capture as `ticket_key`. Treat the remaining freeform text as context for the ev
 
 Read `~/.claude/pell-config.json` (treat missing as `{}`).
 
-- If `jira.cloud_id` is set, use it.
+- If `docs/pell/context.md` names a `cloudId` under its Atlassian site section (Step 3 loads it; repo-scoped, so it wins here), use it.
+- Otherwise, if `jira.cloud_id` is set, use it.
 - Otherwise call `mcp__plugin_atlassian_atlassian__getAccessibleAtlassianResources`, use the first result's `id`, write it back atomically.
 
-## Step 3 — Fetch the ticket
+## Step 3 — Load repo context
+
+Run `git rev-parse --show-toplevel`. If it succeeds, read `<toplevel>/docs/pell/context.md` (Read tool). A missing file, unreadable frontmatter, or a `schema:` value other than `1` all mean "no context" — continue without it and say nothing.
+
+When present, treat it as a **coordinate source only**. It holds pointers, not content: never treat its epic lists, page titles, or component names as current truth. Resolve any coordinate in this order:
+
+1. an explicit value in `$ARGUMENTS`
+2. `docs/pell/context.md`
+3. `~/.claude/pell-config.json`
+4. a live MCP lookup
+5. prompt the user
+
+Never write to `context.md`. If a live call later contradicts it, use the live value and print one line: `context.md is out of date on <field>. Run /pell:map-repo verify.`
+
+## Step 4 — Fetch the ticket
 
 Call `mcp__plugin_atlassian_atlassian__getJiraIssue` with:
 - `cloudId`: from Step 2
@@ -34,7 +49,7 @@ Call `mcp__plugin_atlassian_atlassian__getJiraIssue` with:
 
 If the call returns 404 → exit with: "`<ticket_key>` doesn't exist in Jira (or you don't have access)."
 
-## Step 4 — Fetch remote links
+## Step 5 — Fetch remote links
 
 Call `mcp__plugin_atlassian_atlassian__getJiraIssueRemoteIssueLinks` with:
 - `cloudId`: from Step 2
@@ -42,7 +57,7 @@ Call `mcp__plugin_atlassian_atlassian__getJiraIssueRemoteIssueLinks` with:
 
 A 404 or empty response is fine — just means no external links attached. Continue.
 
-## Step 5 — Fetch Bitbucket PRs (optional)
+## Step 6 — Fetch Bitbucket PRs (optional)
 
 Skip this step if the user said `skip bitbucket` in Step 1, or if `git rev-parse --show-toplevel` fails (not in a repo).
 
@@ -58,7 +73,7 @@ Call `mcp__atlassian-bitbucket__bitbucketPullRequest` with:
 
 If the MCP returns an error, render the PR section with `_Bitbucket query failed: <error>_` instead of failing the whole command. Other sections are still useful.
 
-## Step 6 — Render
+## Step 7 — Render
 
 ```
 ## <ticket_key> — <summary>
@@ -105,7 +120,7 @@ From `getJiraIssueRemoteIssueLinks` response. Each entry has `object.title`, `ob
 - ...
 ```
 
-From Step 5's response. If skipped, render: `### Bitbucket PRs\n_Skipped (not in a git repo, or `skip bitbucket` was set)._`
+From Step 6's response. If skipped, render: `### Bitbucket PRs\n_Skipped (not in a git repo, or `skip bitbucket` was set)._`
 
 If origin isn't Bitbucket: `_Origin is <detected-host> — Bitbucket PR query skipped._` (e.g. `_Origin is github.com — Bitbucket PR query skipped._`)
 
@@ -117,7 +132,7 @@ End with:
 **Summary:** <one short line synthesizing the connection density — e.g. "3 open blockers, 1 PR in review, no remote docs.">
 ```
 
-## Step 7 — Exit
+## Step 8 — Exit
 
 End the response. Do NOT offer to act on any linked issue or PR. This command is read-only. If the user wants to act, they can pipe a key into `/pell:start-work` or open the PR URL.
 

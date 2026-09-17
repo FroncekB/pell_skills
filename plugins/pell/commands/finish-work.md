@@ -13,15 +13,15 @@ Extract from `$ARGUMENTS`:
 
 - **Jira key** (optional) — first match for `[A-Z][A-Z0-9]+-\d+`. If absent, inferred from the branch name in Step 2.
 - **Base branch override** — phrases like `into <branch>`, `against <branch>`, `target <branch>`. Capture `<branch>` verbatim.
-- **PR title override** — `title: "<text>"` or `title: <text>` (quoted text wins; otherwise capture the rest of the line). If absent, default title is built in Step 6.
+- **PR title override** — `title: "<text>"` or `title: <text>` (quoted text wins; otherwise capture the rest of the line). If absent, default title is built in Step 7.
 - **Pre-authorizations** (each independent):
   - Push: `push it`, `push the branch`, `go ahead and push`
   - Transition: `move to <status>`, `move it to <status>`, `transition to <status>`
   - Comment: `comment with PR link`, `comment on jira`, `link the PR`
 - **Declines:**
-  - `don't touch jira`, `skip jira`, `no jira changes` → suppress both Step 7 sub-steps
-  - `skip the comment`, `no comment` → suppress only Step 7b
-- **`--reset` flag** — clears the cached "in_review" transition for this project before Step 7a.
+  - `don't touch jira`, `skip jira`, `no jira changes` → suppress both Step 8 sub-steps
+  - `skip the comment`, `no comment` → suppress only Step 8b
+- **`--reset` flag** — clears the cached "in_review" transition for this project before Step 8a.
 
 The rest of `$ARGUMENTS` is informational context.
 
@@ -43,7 +43,7 @@ Extract `projectKey` from the resolved Jira key (everything before the `-`).
 
 Read `~/.claude/pell-config.json` (treat missing file as `{}`).
 
-**Cloud ID:** if `jira.cloud_id` is set, use it. Otherwise call `mcp__plugin_atlassian_atlassian__getAccessibleAtlassianResources`, use the first result's `id`, write it back to config (atomic read-modify-write).
+**Cloud ID:** resolve in order — if `docs/pell/context.md` names a `cloudId` under its Atlassian site section (Step 4 loads it; repo-scoped, so it wins here), use it. Otherwise, if `jira.cloud_id` is set in `pell-config.json`, use it. Otherwise call `mcp__plugin_atlassian_atlassian__getAccessibleAtlassianResources`, use the first result's `id`, write it back to config (atomic read-modify-write).
 
 **Ticket:** call `mcp__plugin_atlassian_atlassian__getJiraIssue` with `cloudId`, `issueIdOrKey: <KEY>`, `responseContentFormat: "markdown"`. Capture `summary`, `status.name`, `description`.
 
@@ -51,20 +51,35 @@ If not found → exit with: "Couldn't find `<KEY>`. Check the key and your Jira 
 
 **Current user:** call `mcp__plugin_atlassian_atlassian__atlassianUserInfo`. Capture `accountId`. Session-scoped only — do NOT write to config.
 
-## Step 4 — Resolve the base branch
+## Step 4 — Load repo context
+
+Run `git rev-parse --show-toplevel`. If it succeeds, read `<toplevel>/docs/pell/context.md` (Read tool). A missing file, unreadable frontmatter, or a `schema:` value other than `1` all mean "no context" — continue without it and say nothing.
+
+When present, treat it as a **coordinate source only**. It holds pointers, not content: never treat its epic lists, page titles, or component names as current truth. Resolve any coordinate in this order:
+
+1. an explicit value in `$ARGUMENTS`
+2. `docs/pell/context.md`
+3. `~/.claude/pell-config.json`
+4. a live MCP lookup
+5. prompt the user
+
+Never write to `context.md`. If a live call later contradicts it, use the live value and print one line: `context.md is out of date on <field>. Run /pell:map-repo verify.`
+
+## Step 5 — Resolve the base branch
 
 The PR's destination branch, in this order:
 
 1. If `into <branch>` was passed inline → use it (Step 1)
 2. Run `git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null` — strip the `refs/remotes/origin/` prefix. This is the repo's default branch (`develop` for most Pell repos, `main` for some).
-3. If step 2 fails or returns empty → read `pell-config.json:bitbucket.default_base_branch`
-4. If still empty → ask:
+3. If step 2 fails or returns empty → check `docs/pell/context.md`'s `## Repository` section for a `Default base branch` line (Step 4 loads it). It is repo-scoped, so use it if present — ahead of the machine-global cache below.
+4. If context.md didn't supply one → read `pell-config.json:bitbucket.default_base_branch`
+5. If still empty → ask:
 
    > I couldn't determine the base branch for this PR. What should I target? (e.g. `develop`, `main`)
 
 Resolve the branch name; remember it as `<base>`.
 
-## Step 5 — Pre-flight (push state + existing PR)
+## Step 6 — Pre-flight (push state + existing PR)
 
 Run `git branch --show-current` to get the current branch name (`<branch>`).
 
@@ -101,10 +116,10 @@ If a PR exists, print:
 
 > A PR is already open for `<branch>`: `<existing PR URL>`. Skip the PR-create step and continue with optional Jira updates? (y/n)
 
-- `y` → skip Step 6, use the existing PR's URL/ID for Step 7b's comment step
+- `y` → skip Step 7, use the existing PR's URL/ID for Step 8b's comment step
 - `n` → exit cleanly
 
-## Step 6 — Create the PR
+## Step 7 — Create the PR
 
 **Build the title:**
 
@@ -145,15 +160,15 @@ Capture the new PR's URL and ID from the response.
 
 On `n`, exit cleanly: "Cancelled. No PR opened, no Jira changes made."
 
-On MCP failure, surface the error and exit. Do NOT proceed to Step 7 — the PR is the load-bearing deliverable.
+On MCP failure, surface the error and exit. Do NOT proceed to Step 8 — the PR is the load-bearing deliverable.
 
-## Step 7 — Jira side-effects (opt-in, asked one at a time)
+## Step 8 — Jira side-effects (opt-in, asked one at a time)
 
 If the user typed `don't touch jira`, `skip jira`, or `no jira changes`, skip this entire step.
 
-Otherwise, run 7a and 7b in order. Each is independent.
+Otherwise, run 8a and 8b in order. Each is independent.
 
-### Step 7a — Transition to "in review"
+### Step 8a — Transition to "in review"
 
 **Discover the "in_review" transition for this project:**
 
@@ -161,7 +176,7 @@ If `$ARGUMENTS` contained `--reset`, clear `pell-config.json:jira.transitions[<p
 
 Look up `pell-config.json:jira.transitions[<projectKey>].in_review`:
 
-- **Cached and the ticket's current `status.name` matches it (case-insensitive)** → skip Step 7a entirely. Print: "Ticket already in `<status.name>` — skipping transition."
+- **Cached and the ticket's current `status.name` matches it (case-insensitive)** → skip Step 8a entirely. Print: "Ticket already in `<status.name>` — skipping transition."
 - **Cached but the ticket is NOT in that status** → use the cached transition name. Skip discovery.
 - **Not cached** → run discovery:
   1. Call `mcp__plugin_atlassian_atlassian__getTransitionsForJiraIssue` with `cloudId` and `issueIdOrKey: <KEY>`. Capture `{id, name}` for each transition
@@ -175,6 +190,17 @@ Look up `pell-config.json:jira.transitions[<projectKey>].in_review`:
 
 Match `<status>` (case-insensitive) against the candidate names. Exactly one match → use it, cache. Zero or multiple matches → fall back to the discovery flow above.
 
+**Expected spelling from `context.md`:**
+
+If Step 4 loaded a `context.md` and it carries a `## Jira — <projectKey>` section, read the `in_review:` name from that section's "Transition names, exactly as the API returns them" list. A recorded value of `unverified`, or no such section, means nothing was recorded — skip this block entirely and carry on unchanged.
+
+That recorded name is the expected **spelling** of the transition and nothing else. Config (or the discovery flow, or an inline `move it to <status>`) has already chosen *which* transition to use above, and this block never revisits that choice, never adds, removes, or answers a prompt, and never transitions anything itself. Use it in exactly two ways, both against the live `{id, name}` list this step fetches:
+
+1. **Matching.** When the chosen name does not match a live name exactly, match case-insensitively, and treat the recorded name as a second acceptable spelling of that same chosen transition — a cached `In Progress QA` and a recorded `IN PROGRESS QA` are one transition. The `id` you send always comes from the live entry you matched, never from `context.md`.
+2. **Drift.** If the recorded name matches no live name even case-insensitively, the live list wins — it is the only authority on what transitions exist right now. Do not send the recorded name and do not substitute it for the chosen one; print one line and continue: `context.md is out of date on jira.transitions.in_review. Run /pell:map-repo verify.`
+
+With no `context.md`, or nothing usable recorded in it, this step behaves exactly as it did before.
+
 **Apply the transition:**
 
 If pre-authorized, run without prompting. Otherwise ask:
@@ -183,11 +209,11 @@ If pre-authorized, run without prompting. Otherwise ask:
 
 On `y`, call `mcp__plugin_atlassian_atlassian__transitionJiraIssue` with `cloudId`, `issueIdOrKey: <KEY>`, `transition: {id: <chosen id>}`.
 
-On failure, print: "Failed to transition — `<error>`." Continue to Step 7b. Do NOT roll back the PR.
+On failure, print: "Failed to transition — `<error>`." Continue to Step 8b. Do NOT roll back the PR.
 
-On `n`, continue to Step 7b silently.
+On `n`, continue to Step 8b silently.
 
-### Step 7b — Comment with PR link
+### Step 8b — Comment with PR link
 
 Skip this sub-step if the user passed `skip the comment` or `no comment` inline.
 
@@ -203,11 +229,11 @@ On `y`, call `mcp__plugin_atlassian_atlassian__addCommentToJiraIssue` with:
 - `commentBody`: `PR opened: <PR URL>`
 - `contentFormat`: `"markdown"`
 
-On failure, print: "Failed to comment — `<error>`." Continue to Step 8.
+On failure, print: "Failed to comment — `<error>`." Continue to Step 9.
 
 On `n`, continue silently.
 
-## Step 8 — Report
+## Step 9 — Report
 
 Print this report. Omit lines that don't apply:
 

@@ -13,16 +13,16 @@ Extract from `$ARGUMENTS` (all matches independent; freeform-first):
 
 - **Jira key** (required) — first match for `[A-Z][A-Z0-9]+-\d+`. If none, exit with: "I need a Jira key, e.g. `/pell:from-ticket RRS-1020`."
 - **Skip flags** (case-insensitive):
-  - `skip start-work` / `branch ready` / `already on branch` → skip Stage 4
-  - `skip scope` / `no scope check` → skip Step 2.5 (the `/pell:scope` readiness check)
-  - `design only` / `skip plan` / `no plan` → after Stage 5, instruct brainstorming not to chain into writing-plans
+  - `skip start-work` / `branch ready` / `already on branch` → skip Stage 6
+  - `skip scope` / `no scope check` → skip Step 4 (the `/pell:scope` readiness check)
+  - `design only` / `skip plan` / `no plan` → after Stage 7, instruct brainstorming not to chain into writing-plans
   - `plan only` / `skip brainstorm` / `skip design` → skip brainstorming; dispatch writing-plans directly. Requires an existing spec for `<KEY>`; otherwise error: "plan only requires an existing spec for `<KEY>`."
 - **Pre-auths forwarded verbatim to `/pell:start-work`** (do NOT reinterpret; capture the matched substrings to append to the start-work invocation):
   - `assign to me`, `assign me`
   - `move it to <status>`, `transition to <status>`, `move to <status>`
   - `don't touch jira`, `skip jira`, `no jira changes`
   - `call it <slug>`, `name it <slug>`, `branch <slug>`
-- **`--reset` flag** — clears artifacts for this ticket key (handled in Step 3).
+- **`--reset` flag** — clears artifacts for this ticket key (handled in Step 5).
 
 **Conflict rules:**
 - `skip start-work` + `plan only` is valid (resume-from-spec workflow).
@@ -36,7 +36,8 @@ Extract `projectKey` from the Jira key (everything before the `-`).
 **Resolve `cloudId`:**
 
 Read `~/.claude/pell-config.json` (treat missing as `{}`).
-- If `jira.cloud_id` is set, use it.
+- If `docs/pell/context.md` names a `cloudId` under its Atlassian site section (Step 3 loads it; repo-scoped, so it wins here), use it.
+- Otherwise, if `jira.cloud_id` is set, use it.
 - Otherwise call `mcp__plugin_atlassian_atlassian__getAccessibleAtlassianResources`, use the first result's `id`, atomically write it back to `pell-config.json:jira.cloud_id`.
 
 **Run the two MCP calls in parallel:**
@@ -64,7 +65,21 @@ Read `~/.claude/pell-config.json` (treat missing as `{}`).
 
 After the fetch, print one line: `Loaded <KEY> — <summary> (status: <status>, type: <type>).`
 
-## Step 2.5 — Readiness check via `/pell:scope`
+## Step 3 — Load repo context
+
+Run `git rev-parse --show-toplevel`. If it succeeds, read `<toplevel>/docs/pell/context.md` (Read tool). A missing file, unreadable frontmatter, or a `schema:` value other than `1` all mean "no context" — continue without it and say nothing.
+
+When present, treat it as a **coordinate source only**. It holds pointers, not content: never treat its epic lists, page titles, or component names as current truth. Resolve any coordinate in this order:
+
+1. an explicit value in `$ARGUMENTS`
+2. `docs/pell/context.md`
+3. `~/.claude/pell-config.json`
+4. a live MCP lookup
+5. prompt the user
+
+Never write to `context.md`. If a live call later contradicts it, use the live value and print one line: `context.md is out of date on <field>. Run /pell:map-repo verify.`
+
+## Step 4 — Readiness check via `/pell:scope`
 
 Skip this step when `skip scope` / `no scope check` was in `$ARGUMENTS`, and skip it when `plan only` / `skip brainstorm` / `skip design` was passed — a resume-from-spec run has no design conversation to feed and must not be asked `Continue into design anyway?`.
 
@@ -78,19 +93,19 @@ Read the `Verdict:` line from its output:
 - `Ready with questions` → continue without prompting; the findings are on screen and feed the brainstorming seed.
 - `Ready` → continue.
 
-Capture the `### Where it fits` and `### Readiness` blocks verbatim as `project_context` for Step 5's seed. If `/pell:scope` itself fails (MCP error, no cache and the build failed), print `Scope check unavailable: <error> — continuing without project context.`, set `project_context` to that line, and continue. The readiness check never blocks `from-ticket` on its own errors.
+Capture the `### Where it fits` and `### Readiness` blocks verbatim as `project_context` for Step 7's seed. If `/pell:scope` itself fails (MCP error, no cache and the build failed), print `Scope check unavailable: <error> — continuing without project context.`, set `project_context` to that line, and continue. The readiness check never blocks `from-ticket` on its own errors.
 
-**Cache commit gate.** `/pell:scope` may have just written `docs/pell/sow-<projectKey>.md`, and `/pell:start-work`'s pre-flight refuses a dirty tree. Unless Step 4 is already being skipped, run `git status --porcelain` (unscoped — `/pell:start-work`'s own pre-flight is unscoped). Three cases:
+**Cache commit gate.** `/pell:scope` may have just written `docs/pell/sow-<projectKey>.md`, and `/pell:start-work`'s pre-flight refuses a dirty tree. Unless Step 6 is already being skipped, run `git status --porcelain` (unscoped — `/pell:start-work`'s own pre-flight is unscoped). Three cases:
 - The output is exactly one line and it names `docs/pell/sow-<projectKey>.md` → prompt:
 
 > `/pell:scope` saved `docs/pell/sow-<projectKey>.md`. `/pell:start-work` needs a clean tree. Commit that one file on `<current branch>` now? (y/n)
 
 - `y` → `git add docs/pell/sow-<projectKey>.md` and `git commit -m "docs(pell): add synthesized SOW for <projectKey>"`. Print `Committed docs/pell/sow-<projectKey>.md on <current branch>.` This is the only commit `from-ticket` ever makes, and it touches exactly that one file.
-- `n` → print `Continuing as "skip start-work". Commit or stash the file, then run /pell:start-work <KEY> yourself.` and treat `skip start-work` as set for Step 4.
+- `n` → print `Continuing as "skip start-work". Commit or stash the file, then run /pell:start-work <KEY> yourself.` and treat `skip start-work` as set for Step 6.
 - The output names `docs/pell/sow-<projectKey>.md` and other files too → do not commit anything. Print `Working tree has other uncommitted changes; /pell:start-work will refuse. Continuing as "skip start-work".` and treat `skip start-work` as set.
 - The output is empty, or does not mention `docs/pell/sow-<projectKey>.md` → the gate does not apply; continue.
 
-## Step 3 — Existing-artifact detection
+## Step 5 — Existing-artifact detection
 
 Glob for prior artifacts in the working directory:
 
@@ -128,23 +143,23 @@ On `y`, delete all listed files and proceed as Fresh below. On `n`, exit cleanly
 
 **Resume implies "skip start-work":** when the user picks option (1) for any non-fresh state, treat it as if `skip start-work` was also passed. The assumption is they're already on a `<KEY>-*` branch. If they aren't, they can re-invoke `/pell:from-ticket <KEY>` without resuming to get the branch created.
 
-**Rewrite option (2):** sets the `--reset` flag inline and re-enters Step 3 from the top.
+**Rewrite option (2):** sets the `--reset` flag inline and re-enters Step 5 from the top.
 
-## Step 4 — Dispatch `/pell:start-work`
+## Step 6 — Dispatch `/pell:start-work`
 
 Skip this entire step when:
 - Any of `skip start-work` / `branch ready` / `already on branch` was in `$ARGUMENTS`
-- The user picked option (1) for any non-fresh state in Step 3
+- The user picked option (1) for any non-fresh state in Step 5
 
 Otherwise, invoke `/pell:start-work <KEY> <forwarded args>` where `<forwarded args>` is the concatenation of all pre-auth substrings captured in Step 1 (assign/transition/skip-jira/branch-name phrases).
 
 If `/pell:start-work` exits non-zero (cancellation, git error, etc.), `from-ticket` exits too. No partial state — the design phase is meaningless without a working branch.
 
-## Step 5 — Hand off to `superpowers:brainstorming`
+## Step 7 — Hand off to `superpowers:brainstorming`
 
-**Presence check:** attempt to invoke the `superpowers:brainstorming` skill via the Skill tool. If the call errors with "skill not found" or equivalent, fall through to Step 6 (inline substitute). Test the specific skill being invoked — if `brainstorming` is missing but `writing-plans` is present (or vice versa), only the missing one falls back.
+**Presence check:** attempt to invoke the `superpowers:brainstorming` skill via the Skill tool. If the call errors with "skill not found" or equivalent, fall through to Step 8 (inline substitute). Test the specific skill being invoked — if `brainstorming` is missing but `writing-plans` is present (or vice versa), only the missing one falls back.
 
-**Plan-only path (resume from Step 3):**
+**Plan-only path (resume from Step 5):**
 
 If the user chose option (1) in a spec-found case, skip brainstorming entirely. Dispatch `superpowers:writing-plans` directly via the Skill tool with these args:
 
@@ -184,7 +199,7 @@ Connections:
   - [<title>](<url>) — <application.name>
   - ...                                                  (omit section if no remote links)
 
-Project context (from /pell:scope; omit this section when Step 2.5 was skipped):
+Project context (from /pell:scope; omit this section when Step 4 was skipped):
 <project_context — the "Where it fits" and "Readiness" blocks verbatim>
 
 Save the design spec to docs/superpowers/specs/<KEY>-YYYY-MM-DD-<topic>-design.md (topic slug chosen during brainstorming).
@@ -200,9 +215,9 @@ Append to the seed: `Do not chain into writing-plans after the design is approve
 
 After dispatching brainstorming, `from-ticket` is done. Brainstorming owns the design conversation and auto-chains into writing-plans per its own checklist.
 
-## Step 6 — Inline substitute (superpowers missing)
+## Step 8 — Inline substitute (superpowers missing)
 
-This step runs **only** when Step 5's presence check failed. Other failure modes (dispatch errors, filesystem errors) surface verbatim and do NOT trigger the inline substitute.
+This step runs **only** when Step 7's presence check failed. Other failure modes (dispatch errors, filesystem errors) surface verbatim and do NOT trigger the inline substitute.
 
 **Print the notice:**
 
@@ -210,7 +225,7 @@ This step runs **only** when Step 5's presence check failed. Other failure modes
 
 **Inline pass — three sub-steps:**
 
-1. **Print the seed** — render the same ticket+related context block from Step 5's seed directly to the user so they can see what we're working with.
+1. **Print the seed** — render the same ticket+related context block from Step 7's seed directly to the user so they can see what we're working with.
 
 2. **Ask 3 questions, one at a time, using `AskUserQuestion`:**
    - Q1: "What's the smallest version of this that delivers value?" — multiple choice with 3-4 scope options synthesized from the ticket description, plus an "Other" path.
@@ -232,7 +247,7 @@ This step runs **only** when Step 5's presence check failed. Other failure modes
 <full markdown description from Jira>
 
 ## Connections
-<parent/subtasks/issuelinks/remote-links rendered as in Step 5's seed>
+<parent/subtasks/issuelinks/remote-links rendered as in Step 7's seed>
 
 ## Project context
 <project_context, or "(scope check skipped)">
@@ -264,13 +279,13 @@ If the filesystem write fails, print the error verbatim and leave the user on th
 ## Operator notes
 
 - **Never** mutate Jira from this command directly. All Jira side-effects route through `/pell:start-work`'s gates.
-- **Never** push or open a PR. The only commit `from-ticket` makes is the Step 2.5 cache-commit gate — one named file, `(y/n)`-gated — so `/pell:start-work`'s clean-tree check can pass.
+- **Never** push or open a PR. The only commit `from-ticket` makes is the Step 4 cache-commit gate — one named file, `(y/n)`-gated — so `/pell:start-work`'s clean-tree check can pass.
 - **Never** auto-pick artifacts. When multiple specs or plans exist for a key, always ask the user which to use.
 - **No rollback ever.** If `start-work` creates a branch and brainstorming subsequently errors, the branch stays. The user's working tree is the source of truth; `from-ticket` doesn't undo work.
 - The seed sent to brainstorming is a one-shot context dump. If brainstorming asks for follow-up details mid-conversation, the user can re-run `/pell:related <KEY>` separately for that.
 - The inline substitute is reserved for the missing-plugin case. Other dispatch errors (e.g. brainstorming throws mid-run) surface verbatim — they're not what the substitute is for.
-- If `superpowers:writing-plans` exists but `superpowers:brainstorming` doesn't (or vice versa), treat them independently. The plan-only resume case in Step 5 needs only `writing-plans`; the normal path needs `brainstorming`.
-- The Step 2.5 readiness check is advisory. Only a `Not ready` verdict prompts; everything else flows into the brainstorming seed. `skip scope` bypasses it entirely.
+- If `superpowers:writing-plans` exists but `superpowers:brainstorming` doesn't (or vice versa), treat them independently. The plan-only resume case in Step 7 needs only `writing-plans`; the normal path needs `brainstorming`.
+- The Step 4 readiness check is advisory. Only a `Not ready` verdict prompts; everything else flows into the brainstorming seed. `skip scope` bypasses it entirely.
 
 ## Out of scope
 

@@ -84,6 +84,28 @@ Reviewers read surrounding code from one of two sources:
 
 Override is triggered by freeform `$ARGUMENTS` phrases: `use bitbucket`, `use mcp`, `use remote`, `fetch via bitbucket`, `not LFS`, `not local`.
 
+## Repo context convention
+
+This section is the **maintainer's reference** for the repo-context read that nine consumer commands perform (`finish-work`, `from-ticket`, `my-tickets`, `precheck`, `related`, `review-queue`, `scope`, `start-work`, `triage`). Note: the plugin ships as `plugins/pell/` only — this `CLAUDE.md` is **not** installed, so command bodies **cannot** reference it at runtime (a bare "see CLAUDE.md" in a shipped body would resolve to the *user's own* project file). Shipped bodies must restate the block below inline and be kept in sync with the canonical wording here.
+
+```markdown
+## Step N — Load repo context
+
+Run `git rev-parse --show-toplevel`. If it succeeds, read `<toplevel>/docs/pell/context.md` (Read tool). A missing file, unreadable frontmatter, or a `schema:` value other than `1` all mean "no context" — continue without it and say nothing.
+
+When present, treat it as a **coordinate source only**. It holds pointers, not content: never treat its epic lists, page titles, or component names as current truth. Resolve any coordinate in this order:
+
+1. an explicit value in `$ARGUMENTS`
+2. `docs/pell/context.md`
+3. `~/.claude/pell-config.json`
+4. a live MCP lookup
+5. prompt the user
+
+Never write to `context.md`. If a live call later contradicts it, use the live value and print one line: `context.md is out of date on <field>. Run /pell:map-repo verify.`
+```
+
+Each shipped command inserts this verbatim immediately after its existing `pell-config.json` read, adjusting only the step number (`N`) in the heading to fit that command's own sequence. Three invariants make this safe to wire into nine commands at once — see design spec [`2026-09-16-pell-map-repo-design.md`](docs/specs/2026-09-16-pell-map-repo-design.md) Section 12: a consumer never writes `context.md` (only `/pell:map-repo` does), never validates it (no extra MCP call spent checking freshness), and a missing, unparseable, or unknown-`schema:` file falls through to that command's existing behavior plus at most one note. `docs/pell/context.md` is repo-scoped and resolves **above** `~/.claude/pell-config.json`, which is machine-global — this fixes the latent bug where a cached `jira.cloud_id` follows the developer rather than the repo.
+
 ## Shared config
 
 Per-user preferences (Jira project transitions, GitFlow defaults, etc.) live in `~/.claude/pell-config.json`. Schema sketched in the architecture spec §5. **No secrets** — those stay in MCP config.
