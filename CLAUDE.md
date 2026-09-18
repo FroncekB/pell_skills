@@ -45,6 +45,9 @@ pell_skills/
    model: inherit
    ---
    ```
+
+   > **Exception — mechanical agents.** `model: inherit` is the default because most agents review or design and need the orchestrator's model. An agent whose work is mechanical — paginate an API, group records, summarize pages into a few sentences, fill a fixed template — may pin `model: sonnet` instead, with a one-paragraph rationale at the top of its body. Today that is only `sow-builder`, the longest-running agent in the plugin. Pinning is a deliberate cost decision, not a quality shortcut: spot-check the output on a real project before pinning, and revert to `inherit` if the template quality drops.
+
 3. **Omit the `tools:` line** so the agent inherits the orchestrator's tool surface (including MCP tools when needed).
 4. **Output JSON, not prose.** Orchestrators parse the trailing JSON object. Use the shape `{"findings": [...], "summary": "..."}`.
 5. **Surface everything** with severity tags. Never pre-filter — the orchestrator decides what's actionable.

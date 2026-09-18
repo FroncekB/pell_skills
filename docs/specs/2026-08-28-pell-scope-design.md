@@ -375,3 +375,12 @@ Add a step to `plugins/pell/commands/from-ticket.md` between its ticket fetch (S
 - Multi-project SOWs (a repo whose work spans several Jira projects gets one cache file per project, not a merged view).
 - Hooking `start-work`, `my-tickets`, or `triage`. Those can offer `/pell:scope` as a hand-off later if it proves useful.
 - A `pell-config.json` section. The cache frontmatter holds every persistent value this command needs; add config only if a real per-user preference emerges.
+
+---
+
+**Status note (2026-09-17, GitHub issue #7).** Three parts of this spec are superseded; the current truth is in `plugins/pell/commands/scope.md`, `plugins/pell/agents/sow-builder.md`, and the architecture spec §11.
+
+- §5 *Rebuild*: the `sow-builder` dispatch is now `(y/n)`-gated *before* it starts, on every trigger except `refresh`, and under `--dry-run` too (`--dry-run` suppresses writes, never the gate). Declining with a stale cache falls back to that cache; declining with no cache renders the readiness report with placement unassessed and the three SOW-dependent rubric rows skipped. Before dispatch, when the effective `sow_sources` is empty, the command searches Confluence and Google Drive for an existing SOW and offers to pin one as an authoritative source. Using a found document never skips the Jira walk.
+- §9: `sow-builder` is `model: sonnet`, not `inherit` (CLAUDE.md carve-out for mechanical agents). `sow_sources` and the `sow <url>` pin accept Google Drive / Docs URLs, fetched via the Drive read tool by role; a missing Drive MCP degrades that one source.
+- §14: the Drive MCP is referred to by role, never by its install-specific server id, matching `repo-mapper`.
+- §6 and §9 traversal: both `getJiraIssue` (ticket fetch) and `searchJiraIssuesUsingJql` (project walk) now pass `view: "full"`. The Atlassian MCP's default `compact` view silently drops `parent`, `issuetype`, `issuelinks`, `project`, and `statusCategory.key` even when they are listed in `fields`, so every ticket looked unparented and every epic showed `0/0 done`. Surfaced by the Sonnet spot-check against RRS (971 of 1023 issues parented; compact returned none). The `reporter` "sometimes omitted" note in §14 was this same behavior.
