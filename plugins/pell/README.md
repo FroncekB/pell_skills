@@ -89,9 +89,9 @@ Repo-based reviewers (dispatched by the repo audits):
 
 - `repo-quality-reviewer` · `repo-security-reviewer`
 
-Project scoper (dispatched by `/pell:scope` when the SOW cache is missing or stale):
+Project scoper (dispatched by `/pell:scope` when the SOW cache is missing or stale, and by `/pell:map-repo` at setup time; `(y/n)`-gated before dispatch because the walk is the most expensive thing the plugin does):
 
-- `sow-builder` — returns `{sow_markdown, sources, stats, summary}` rather than findings; it produces a document, not a review.
+- `sow-builder` — returns `{sow_markdown, sources, stats, summary}` rather than findings; it produces a document, not a review. Pinned to `model: sonnet` — the only agent that does not inherit the orchestrator's model, because its work is mechanical.
 
 Repo mapper (dispatched by `/pell:map-repo`):
 

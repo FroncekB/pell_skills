@@ -771,3 +771,7 @@ Note any deviation from expected in a short list. Fix prompt wording inline wher
 - **Placeholders:** the only bracketed substitutions are `<CONFLUENCE_PAGE_TOOL>` / `<CONFLUENCE_PAGE_PARAMS>` in Task 2, which Task 1 resolves before Task 2 runs — the plan says so explicitly rather than guessing a tool name the design session could not verify.
 - **Interface consistency:** the agent's input labels (`cloudId`, `project_key`, `sow_sources`, `deep`, `verbose`) match the command's dispatch prompt in Task 3; the agent's JSON keys (`sow_markdown`, `sources`, `stats.{issues,epics,unparented,dropped,scope_docs,truncated,project_name}`, `summary`) match what Task 3 reads; the `Verdict:` line format in Task 4 matches what Task 5 parses; `skip comment` is the same token in Task 3's parser and Task 5's invocation.
 - **Convention adherence:** plan saved under `docs/specs/` per repo convention; commits use conventional-commit scopes; validation is `claude plugin validate` + reload + invoke; `writing-skills` is invoked before each authoring task per the repo's standing rule.
+
+---
+
+**Status note (2026-09-17).** Point-in-time record of the original build. The SOW build gate, existing-SOW discovery (Confluence + Google Drive), Drive URL support in `sow_sources`, and `sow-builder`'s `model: sonnet` pin landed later under GitHub issue #7 — see the status note at the end of `2026-08-28-pell-scope-design.md` and the shipped bodies in `plugins/pell/`.

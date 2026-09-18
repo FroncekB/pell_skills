@@ -241,7 +241,7 @@ For each Jira project key discovered in Step 3, in the same frequency-rank order
    > Build the Statement of Work for `<KEY>`? This walks every issue in the project plus any linked Confluence scope docs — typically 1-3 minutes. (y/n)
 
    `with_sow` answers this `y` for every key without prompting.
-3. On `y` (or `with_sow`): build `sow_sources` before dispatching. `sow-builder` needs a real Confluence URL per page and treats anything else as unresolvable (`_Fetch failed: unrecognized Confluence URL shape_`), but `repo-mapper` returns `coordinates.confluence.pages[]` as `{title, id, covers}` — no URL (see `repo-mapper.md`'s output format). Passing the bare `id` through would silently forfeit the scope-doc content this eager path exists to capture. For each page in `coordinates.confluence.pages`, construct:
+3. On `y` (or `with_sow`): build `sow_sources` before dispatching. `sow-builder` needs a real Confluence URL per page and treats anything else as unresolvable (`_Fetch failed: unrecognized URL shape_`), but `repo-mapper` returns `coordinates.confluence.pages[]` as `{title, id, covers}` — no URL (see `repo-mapper.md`'s output format). Passing the bare `id` through would silently forfeit the scope-doc content this eager path exists to capture. For each page in `coordinates.confluence.pages`, construct:
 
    ```
    https://<site>/wiki/spaces/<coordinates.confluence.space_key>/pages/<id>

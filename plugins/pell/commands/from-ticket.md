@@ -85,7 +85,7 @@ Skip this step when `skip scope` / `no scope check` was in `$ARGUMENTS`, and ski
 
 Print one line: `Checking where <KEY> fits in the project...`
 
-Invoke `/pell:scope <KEY> skip comment` (append `--verbose` if the user passed it). The comment is suppressed here because `from-ticket` is about to start design work; the developer can run `/pell:scope <KEY>` on its own to post questions to the reporter. `scope` may prompt `(y/n)` to write its SOW cache — that prompt is its own and passes through.
+Invoke `/pell:scope <KEY> skip comment` (append `--verbose` if the user passed it). The comment is suppressed here because `from-ticket` is about to start design work; the developer can run `/pell:scope <KEY>` on its own to post questions to the reporter. `scope` may prompt `(y/n)` to build its SOW cache (when the cache is missing or older than 14 days) and again to write it — those prompts are its own and pass through. If the developer declines the build, `scope` still renders a readiness report with placement unassessed.
 
 Read the `Verdict:` line from its output:
 

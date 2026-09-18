@@ -235,14 +235,14 @@ Before anyone starts a ticket, see where it fits in the whole project and whethe
 /pell:scope RRS-1020 skip comment             # never offer the Jira comment
 /pell:scope RRS                               # project picture only — epic table, gaps, drift
 /pell:scope RRS refresh                       # rebuild the SOW cache now
-/pell:scope RRS sow https://.../wiki/...      # pin a Confluence page as an authoritative scope source
+/pell:scope RRS sow https://.../wiki/...      # pin a Confluence page or Drive doc as an authoritative scope source
 /pell:scope RRS-1020 --dry-run                # no cache write, no comment offer
 /pell:scope                                   # ticket key from the current branch
 ```
 
-**Output:** "Where it fits" (home epic, scope statement, sibling status counts, cross-epic dependencies, scope docs), then findings by severity (`blocker / major / minor / nit`) and a verdict. A drift line reports how many tickets changed since the cache was built; the cache rebuilds automatically after 14 days.
+**Output:** "Where it fits" (home epic, scope statement, sibling status counts, cross-epic dependencies, scope docs), then findings by severity (`blocker / major / minor / nit`) and a verdict. A drift line reports how many tickets changed since the cache was built; after 14 days the command offers a rebuild rather than running one unasked.
 
-**Side-effects:** writing the SOW cache file (`(y/n)`-gated; never committed for you) and, when the verdict isn't `Ready`, a comment on the ticket phrased as numbered questions to the reporter (`(y/n)`-gated, full text shown first). Never transitions, edits fields, or links issues. `/pell:from-ticket` runs this check automatically with the comment suppressed; pass `skip scope` to bypass.
+**Side-effects:** building the SOW (`(y/n)`-gated before the expensive Jira walk starts; the command first searches Confluence and Google Drive for an existing SOW and offers to use it), writing the SOW cache file (`(y/n)`-gated; never committed for you) and, when the verdict isn't `Ready`, a comment on the ticket phrased as numbered questions to the reporter (`(y/n)`-gated, full text shown first). Never transitions, edits fields, or links issues. `/pell:from-ticket` runs this check automatically with the comment suppressed; pass `skip scope` to bypass.
 
 ### `/pell:start-work <KEY>`
 

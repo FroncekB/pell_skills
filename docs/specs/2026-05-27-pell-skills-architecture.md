@@ -344,6 +344,7 @@ All previously-open questions are now resolved:
 - ✅ **Reviewer output filtering** — reviewers surface everything including nits, with severity. Consumer triages (§8)
 - ✅ **Direct-invoke output mode** — pretty markdown when invoked via slash command, raw JSON when dispatched via `Agent` tool. Reviewer detects mode and adapts (§8)
 - ✅ **Meta-plugin** — `pell-everything` to be added after `pell` is stable (§9)
+- ✅ **Agent model pinning** — `model: inherit` stays the default. A mechanical agent (paginate, group, summarize into a fixed template) may pin `model: sonnet` with a rationale paragraph in its body; `sow-builder` is the first and, so far, only instance (2026-09-17, GitHub issue #7). The expensive `sow-builder` walk is also `(y/n)`-gated in `/pell:scope` before dispatch, and `/pell:scope` searches Confluence and Google Drive for an existing SOW before synthesizing one (§7)
 
 ## 12. Implementation status
 
