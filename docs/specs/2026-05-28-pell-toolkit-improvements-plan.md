@@ -230,3 +230,7 @@ Not detailed here; these are independent features that each warrant their own cy
 - **No fabricated command bodies for unsettled designs:** Phases 3–5 deliberately stop at scope + acceptance + a design-first task rather than inventing prompt text that brainstorming hasn't validated. That is intentional, not a placeholder gap.
 - **Naming consistency:** new `subagent_type="test-reviewer"` and `/pell:test-review` match the existing `<dimension>-reviewer` / `/pell:<dimension>-review` convention.
 - **Convention adherence:** plans saved under `docs/specs/` (repo convention) rather than the writing-plans default `docs/superpowers/plans/`; commits use the repo's conventional-commit scopes; validation uses `claude plugin validate` + the reload loop, since there is no prompt-file test harness.
+
+## Status note (2026-09-22)
+
+Task 2.3's decisions — test pass opt-in via `with tests`, keep the `three-pass-review` name — were reversed by GitHub issue #12. The test-coverage reviewer now runs by default in both composites (`skip tests` opts out) and the PR composite is `/pell:four-pass-review`; `/pell:three-pass-review` remains as a deprecated alias that forwards to it. Current truth lives in the architecture spec (§8, §11) and the READMEs.

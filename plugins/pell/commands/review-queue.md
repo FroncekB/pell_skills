@@ -88,9 +88,9 @@ Format rules:
 
 After the list, ask:
 
-> Review one of these? Enter a number for a full `/pell:three-pass-review`, or `<number> correctness|quality|security|test` for a lighter single-dimension pass. `n` to skip.
+> Review one of these? Enter a number for a full `/pell:four-pass-review`, or `<number> correctness|quality|security|test` for a lighter single-dimension pass. `n` to skip.
 
-- **A bare number** that maps to a listed PR → invoke `/pell:three-pass-review <workspace>/<repo>#<id>` for that PR.
+- **A bare number** that maps to a listed PR → invoke `/pell:four-pass-review <workspace>/<repo>#<id>` for that PR.
 - **A number followed by `correctness` / `quality` / `security` / `test`** → invoke the matching single-dimension review on that PR instead (`/pell:correctness-review <PR>`, etc.).
 - **`n` (or empty/Enter)** → exit cleanly. No side effects.
 - **An out-of-range number** → "That's not on the list — pick `1` through `<N>`, or `n` to skip." Re-prompt once; after a second miss, exit cleanly.

@@ -1,6 +1,6 @@
 ---
 name: test-reviewer
-description: Reviews a code change for test adequacy — whether new or changed behavior is tested, whether the tests actually assert that behavior (not tautological or mock-only), coverage of edge and error paths, and flaky-test patterns. Returns ALL findings including nits. Use as part of /pell:test-review, /pell:three-pass-review, or /pell:local-review.
+description: Reviews a code change for test adequacy — whether new or changed behavior is tested, whether the tests actually assert that behavior (not tautological or mock-only), coverage of edge and error paths, and flaky-test patterns. Returns ALL findings including nits. Use as part of /pell:test-review, /pell:four-pass-review, or /pell:local-review.
 model: inherit
 ---
 

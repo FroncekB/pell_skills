@@ -3,7 +3,7 @@ description: Pull the inline + general comments off one of your Bitbucket PRs an
 argument-hint: <PR url | repo#number | bare PR number> [unresolved | since last push | from <name>]
 ---
 
-You are running **`/pell:address-review`** — the receiving end of review. `three-pass-review` posts comments; this pulls them back so the PR author can triage and respond. Orchestrate, decide on side effects, never commit.
+You are running **`/pell:address-review`** — the receiving end of review. `four-pass-review` posts comments; this pulls them back so the PR author can triage and respond. Orchestrate, decide on side effects, never commit.
 
 The user passed: `$ARGUMENTS`
 
@@ -38,7 +38,7 @@ If there are no comments: print `No comments on PR #<prId>.` and stop.
 
 ## Step 3 — Group, filter, render
 
-1. **Drop** comments with `deleted: true`, comments with `pending: true` (your own unpublished review drafts, not feedback), and comments whose body starts with `**Three-pass review run**` (the marker `/pell:three-pass-review` posts — not feedback).
+1. **Drop** comments with `deleted: true`, comments with `pending: true` (your own unpublished review drafts, not feedback), and comments whose body starts with `**Four-pass review run**` or `**Three-pass review run**` (the run marker `/pell:four-pass-review` posts — the older string is the pre-rename marker still sitting on open PRs — not feedback).
 2. **Normalize** each remaining comment:
    - `id` — integer
    - author — `user.display_name` (the field is `user`, **not** `author`)

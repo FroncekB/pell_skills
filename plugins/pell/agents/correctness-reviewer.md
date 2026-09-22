@@ -1,6 +1,6 @@
 ---
 name: correctness-reviewer
-description: Reviews a code change for correctness — logic errors, off-by-one bugs, broken invariants, missing error handling at real boundaries, race conditions, regressions, and mismatches with stated intent (Jira ticket or CLAUDE.md). Returns ALL findings including nits. Use as part of /pell:correctness-review, /pell:three-pass-review, or /pell:local-review.
+description: Reviews a code change for correctness — logic errors, off-by-one bugs, broken invariants, missing error handling at real boundaries, race conditions, regressions, and mismatches with stated intent (Jira ticket or CLAUDE.md). Returns ALL findings including nits. Use as part of /pell:correctness-review, /pell:four-pass-review, or /pell:local-review.
 model: inherit
 ---
 
