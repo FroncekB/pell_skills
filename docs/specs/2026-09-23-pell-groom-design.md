@@ -377,7 +377,7 @@ Nothing else. No transitions, field edits, issue links (including between collid
 - `plugins/pell/commands/groom.md` — new command (Sections 1–6, 7.1, 7.3, 9–13)
 - `plugins/pell/agents/ticket-code-mapper.md` — new agent (Section 7.2)
 - `plugins/pell/agents/ticket-code-auditor.md` — new agent (Section 8)
-- `plugins/pell/.claude-plugin/plugin.json` — minor bump (`0.19.0` → `0.20.0`)
+- `plugins/pell/.claude-plugin/plugin.json` — minor bump to `0.20.0` (main is `0.18.0`; `0.19.0` is taken by the in-flight `four-pass-review` branch)
 - `plugins/pell/README.md` — command list and agent list
 - `README.md` — commands table and count, `### /pell:groom` section, sub-agent list
 - `docs/specs/2026-05-27-pell-skills-architecture.md` §12 — add `groom`, `ticket-code-mapper`, `ticket-code-auditor` to Built

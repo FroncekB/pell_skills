@@ -1,0 +1,642 @@
+# `/pell:groom` Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Ship `/pell:groom` — a command that walks a set of Jira tickets, maps the code they touch, audits each ticket for requirement gaps, code conflicts, blast radius, and cross-ticket collisions, and posts split-audience comments to the tickets the user selects — plus the `ticket-code-mapper` and `ticket-code-auditor` agents it dispatches.
+
+**Architecture:** One command (`plugins/pell/commands/groom.md`) orchestrates: arg parsing, ticket-set resolution, clustering, cost gate, mapper dispatch, map merge and collision candidates, auditor dispatch, verdicts and drafts, render, posting. `ticket-code-mapper` (one per cluster of ≤8 tickets, ≤4 parallel) returns a shared area map. `ticket-code-auditor` (one per ticket, ≤6 parallel) reads the ticket's comment thread and the code, returns grounded findings. The command's only write is Jira comments.
+
+**Tech Stack:** Markdown command + agent prompts (Claude Code plugin). MCP tools on `plugin:atlassian:atlassian` (`getAccessibleAtlassianResources`, `searchJiraIssuesUsingJql`, `addOrEditJiraIssueComment`, and `listJiraIssueComments` via `discover`/`executeRead`), with classic-connection equivalents named per role. Local: `Read`/`Grep`/`Glob`/`Bash` (git).
+
+**Spec:** [`2026-09-23-pell-groom-design.md`](2026-09-23-pell-groom-design.md). Every `§N` below points there.
+
+**Verification model (read this):** These deliverables are declarative prompts, not executable code — there is no unit-test harness in this repo. The gate at each task is, in order: (1) `claude plugin validate ./plugins/pell` passes; (2) a re-read of the written file against the cited spec sections. Functional verification is **manual invocation** (Task 8), because behavior depends on live Jira data and a real target repo. Do not invent a pytest/jest suite.
+
+**Authoring discipline (required):** Before writing or editing any file under `plugins/pell/` in Tasks 2–6, invoke `superpowers:writing-skills` via the Skill tool (notify-don't-force if it isn't installed) and follow its structure guidance.
+
+## Global Constraints
+
+- Output is plain text — no emoji or glyphs. Status lines use text markers (`Commented.`, `Failed: <error>`, `_None._`, `Not posted.`).
+- Read the current branch with `git branch --show-current`, never `git rev-parse --abbrev-ref HEAD`.
+- Issue-key regex is `\b[A-Z][A-Z0-9]+-\d+\b`; `KEY` means the full issue key (e.g. `RRS-1020`).
+- Severity vocabulary is the correctness scale: `blocker / major / minor / nit`. Verdict wording is `/pell:scope`'s: `Ready`, `Ready with questions`, `Not ready`, plus `Not assessed` for an auditor failure.
+- Reserved flags `--reset` (documented no-op), `--dry-run`, `--verbose` are accepted.
+- `--dry-run` suppresses the posting offer; it never suppresses the cost gate or any read.
+- Agent frontmatter: `name`, `description`, `model: inherit`; **no `tools:` line**; trailing JSON. `ticket-code-mapper` returns a custom shape (not `findings`) — a documented exception (§7.2).
+- The only write anywhere is Jira comments, after the full report, to tickets the user selects. No transitions, field edits, issue links, file writes, or commits.
+- Every `searchJiraIssuesUsingJql` call passes `view: "full"` (or `"evidence"` for the next-sprint grouping). The default `compact` view silently drops `parent`, `issuetype`, and `issuelinks`.
+- Comment-read and comment-post tools differ between Atlassian connection shapes; every prompt names both per role (map-repo spec §5.0).
+- Every finding cites `file:line` code the auditor read in this run. The map is a pointer, not evidence.
+- Comment marker: every posted comment ends with the line `Posted from /pell:groom.`
+- Cap 25 tickets per run unless `all`. Clusters ≤8 tickets. ≤4 mappers and ≤6 auditors in parallel. Cost gate prompts only when the set has more than 5 tickets.
+- Bump `plugins/pell/.claude-plugin/plugin.json` to `0.20.0`. Main is `0.18.0`; `0.19.0` is taken by the unmerged `four-pass-review` branch. The local plugin cache holds only `0.14.0`, so `0.20.0` is free.
+
+---
+
+## File Structure
+
+- **Create:** `plugins/pell/agents/ticket-code-mapper.md` — maps a cluster's tickets to code areas. Input: `repo_root`, `branch`, `tickets`. Output: `{areas, unmapped, summary}`. Never judges tickets, never calls Jira, never writes.
+- **Create:** `plugins/pell/agents/ticket-code-auditor.md` — audits one ticket. Input: `cloudId`, `repo_root`, `branch`, `ticket`, `map_slice`, `unmapped_reason`, `neighbors`. Output: `{findings, touched, thread_read, summary}`. Reads Jira comments; never writes.
+- **Create:** `plugins/pell/commands/groom.md` — the orchestrator. A multi-step composite; its length is sequential steps, like `scope.md`. Written in three tasks: resolve (Task 4), orchestrate and render (Task 5), post (Task 6).
+- **Modify:** `plugins/pell/.claude-plugin/plugin.json` — `0.18.0` → `0.20.0`.
+- **Modify:** `README.md`, `plugins/pell/README.md` — command table and count, per-command section, agent lists.
+- **Modify:** `docs/specs/2026-05-27-pell-skills-architecture.md` §12 — built list.
+- **Modify:** `CLAUDE.md` "Repo context convention" — nine consumer commands become ten.
+
+Task order: schemas first (Task 1) so every tool name the prompts embed is real; the two agents next (Tasks 2–3) so the command dispatches interfaces that exist; the command in three reviewable slices (Tasks 4–6), split at the first agent dispatch and at the first write; docs and version (Task 7); manual verification (Task 8).
+
+**Branch note.** Work on `add-groom-command` (branched from `main`). If `four-pass-review` merges first, rebase onto `main` before Task 7: its rename of `three-pass-review` touches the same README table row and the command count.
+
+---
+
+## Task 1: Verify every MCP schema the prompts will name
+
+**Files:**
+- None written to the repo. Produces a scratch note at `<scratchpad>/groom-mcp-schemas.md` that Tasks 3–6 copy from.
+
+**Interfaces:**
+- Produces: exact tool names, input shapes, and paging parameters for comment read, comment post, sprint field, and epic-children JQL.
+
+**Already verified live on 2026-09-23 (copy into the note; do not re-derive):**
+- `mcp__plugin_atlassian_atlassian__getJiraIssue` — returns a comment *count*, not comment bodies; its description points to `listJiraIssueComments`.
+- `mcp__plugin_atlassian_atlassian__addOrEditJiraIssueComment` — `cloudId`, `issueIdOrKey`, `commentBody`, `contentFormat` (`markdown` | `html`, default markdown); omit `commentId` to add a new comment.
+- `mcp__plugin_atlassian_atlassian__searchJiraIssuesUsingJql` — `cloudId`, `jql`, `fields`, `maxResults` (default 50, max 100), `nextPageToken`, `view` (`compact` | `evidence` | `full`), `responseContentFormat`; page until `isLast` is true.
+
+- [ ] **Step 1: Authenticate the Atlassian MCP if needed**
+
+Run `ToolSearch` with query `+atlassian`. If the only match is an `authenticate` tool, call it, give the user the URL, and wait until Jira tools appear.
+
+- [ ] **Step 2: Resolve `listJiraIssueComments`**
+
+Load `mcp__plugin_atlassian_atlassian__discover` and `mcp__plugin_atlassian_atlassian__executeRead` via `ToolSearch` (`select:` both). Call `discover` with `query: "list comments on a Jira issue"`. Record the exact operation `name`, its `inputs` (issue key parameter, paging parameters — `startAt`/`maxResults` or a token), and the execute tier it maps to. Then call `executeRead({name, cloudId, inputs})` on a real ticket that has at least 3 comments. Record: ordering (oldest-first or newest-first), whether bodies come back as markdown, where the author and created timestamp live, and how the response signals more pages.
+
+- [ ] **Step 3: Check the classic connection, if present**
+
+Run `ToolSearch` with query `addCommentToJiraIssue getJiraIssue`. If a non-plugin Atlassian server appears (UUID-named, exposing `addCommentToJiraIssue`), load its `getJiraIssue` and `addCommentToJiraIssue` schemas. Record whether `getJiraIssue` there returns comment bodies when `fields` includes `"comment"`, and the `addCommentToJiraIssue` parameters. Record the tools by role and bare operation name only — never the UUID server id, which differs per install. If no classic server is present, note that and use the names already in `scope.md` (`addCommentToJiraIssue`) and the spec (`comment` field of `getJiraIssue`).
+
+- [ ] **Step 4: Sprint field and epic-children JQL**
+
+With a real project key that has a future sprint and an epic with open children:
+
+1. `searchJiraIssuesUsingJql` with `jql: "project = <KEY> AND sprint in futureSprints()"`, `view: "evidence"`, `maxResults: 5`. Record the path under `fields.customFields` that holds the sprint name and start date.
+2. `jql: "parent = <EPIC> AND statusCategory != Done"`, `view: "full"`, `maxResults: 5`. Record the count. If it is 0 for an epic known to have children, retry `"Epic Link" = <EPIC>` and record which works. If only `"Epic Link"` works, the command's epic-mode JQL (Task 4 Step 5) must try `parent =` first and fall back to `"Epic Link" =` on zero results.
+3. `jql: "project = <KEY> AND issuetype not in subTaskIssueTypes() AND issuetype != Epic AND statusCategory = \"To Do\" ORDER BY Rank ASC"`, `maxResults: 5`. Confirm it parses (no `repairHint`).
+
+- [ ] **Step 5: Write the note**
+
+Write `<scratchpad>/groom-mcp-schemas.md` with one section per role: *comment read (plugin)*, *comment read (classic)*, *comment post (plugin)*, *comment post (classic)*, *JQL search*, *sprint field path*, *epic-children JQL*. Each section holds the exact tool or operation name and a literal example call. No commit.
+
+---
+
+## Task 2: `ticket-code-mapper` agent (§7.2)
+
+**Files:**
+- Create: `plugins/pell/agents/ticket-code-mapper.md`
+
+**Interfaces:**
+- Consumes: nothing from Task 1 (the mapper never calls Jira).
+- Produces: the JSON contract below. Task 5 parses exactly `areas[].{id, name, entry_points, files, state, rules, consumers, data, tickets}`, `unmapped[].{key, reason}`, and `summary`.
+
+- [ ] **Step 1: Invoke `superpowers:writing-skills`**
+
+Skill tool, `skill: superpowers:writing-skills`. If not installed, say so and continue.
+
+- [ ] **Step 2: Read the reference agents**
+
+Read `plugins/pell/agents/sow-builder.md` and `plugins/pell/agents/repo-mapper.md` in full. Both are walkers that return a custom JSON shape. Match their heading style ("Inputs you will receive in the dispatching prompt", numbered "Step N —" headings, a closing "Output format" section) and tone.
+
+- [ ] **Step 3: Create the agent file**
+
+Start with exactly this frontmatter:
+
+```yaml
+---
+name: ticket-code-mapper
+description: Maps the code a cluster of Jira tickets would touch — entry points, files, state, rules, consumers, and data per flow — into one shared area map. Read-only; judges nothing. Dispatched by /pell:groom.
+model: inherit
+---
+```
+
+Body sections, in order:
+
+1. **Role statement** — one paragraph: you do one thing, turn a cluster of tickets into a map of the code they touch. You do not judge the tickets; `ticket-code-auditor` does that with your map.
+2. **Inputs you will receive in the dispatching prompt** — `repo_root`, `branch` (`<branch> @ <head>`), `tickets` (JSON array of `{key, summary, description, components, labels}`). Missing pieces: stop and return an empty map with `summary` naming what was missing.
+3. **Step 1 — Extract code nouns** — per ticket, list the nouns that name code: entities, screens, routes, statuses, jobs, integrations, config keys.
+4. **Step 2 — Locate** — `Grep` and `Glob` under `repo_root` for each noun, including obvious variants (PascalCase class, kebab-case route, plural table).
+5. **Step 3 — Trace** — from each hit, outward to entry points (controllers, pages, handlers, scheduled jobs, message consumers) and inward to services, validators, and data access.
+6. **Step 4 — Consumers** — search for callers of the key symbols found in Step 3: reports, exports, integrations, jobs, other screens, public API endpoints.
+7. **Step 5 — Group into areas** — one area per flow or component, shared across the cluster's tickets. An area lists every ticket that touches it.
+8. **Depth rule** — stay at map depth: record pointers with `file:line`; do not assess requirements, predict bugs, or recommend changes.
+9. **Unmapped** — a ticket with no locatable code goes in `unmapped` with a `reason` that says which it is: `no existing code found; reads as greenfield` or `too vague to locate: <what was missing>`.
+10. **Rules** — never write files; never call Jira; paths relative to `repo_root`; every `entry_points` and `rules` entry carries `file:line`; an omitted field is correct when nothing was found, an invented pointer is a defect.
+11. **Output format** — the contract below; the final message ends with this object and nothing after it. Add one sentence: this agent deliberately does not use the reviewer `{findings, summary}` shape because it returns a map, not findings.
+
+The output contract, copied exactly:
+
+```json
+{
+  "areas": [{
+    "id": "checkout-submit",
+    "name": "Checkout submit",
+    "entry_points": ["Controllers/CheckoutController.cs:88 POST /checkout", "Jobs/RetryOrderJob.cs:40"],
+    "files": ["Services/OrderService.cs", "Validators/OrderValidator.cs"],
+    "state": ["OrderStatus: Draft -> Submitted -> Paid | Failed"],
+    "rules": ["Validators/OrderValidator.cs:31 max 50 line items", "flag: EnableGuestCheckout"],
+    "consumers": ["Reports/DailySales.cs", "Integrations/Netsuite/OrderExport.cs"],
+    "data": ["Orders", "OrderLines"],
+    "tickets": ["RRS-12", "RRS-20"]
+  }],
+  "unmapped": [{"key": "RRS-31", "reason": "no existing code found; reads as greenfield"}],
+  "summary": "one or two sentences"
+}
+```
+
+- [ ] **Step 4: Validate**
+
+```bash
+claude plugin validate ./plugins/pell
+```
+
+Expected: PASS. Fix frontmatter YAML and re-run on failure.
+
+- [ ] **Step 5: Self-check against §7.2**
+
+Confirm: no `tools:` line; `model: inherit`; no Jira calls; the depth rule is explicit; both `unmapped` reason forms are named; the JSON-shape exception is stated; the final-message rule is present.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add plugins/pell/agents/ticket-code-mapper.md
+git commit -m "feat(groom): add ticket-code-mapper agent
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+## Task 3: `ticket-code-auditor` agent (§8)
+
+**Files:**
+- Create: `plugins/pell/agents/ticket-code-auditor.md`
+
+**Interfaces:**
+- Consumes: the comment-read tool names from `<scratchpad>/groom-mcp-schemas.md` (Task 1); the area object shape from Task 2 (as `map_slice` entries).
+- Produces: the JSON contract below. Task 5 parses exactly `findings[].{category, severity, title, evidence, question, code_note, related_tickets, thread_status}`, `touched`, `thread_read`, `summary`.
+
+- [ ] **Step 1: Invoke `superpowers:writing-skills`**
+
+As in Task 2.
+
+- [ ] **Step 2: Read the reference agent**
+
+Read `plugins/pell/agents/correctness-reviewer.md` in full — a findings-returning agent with severity tags and a "return ALL findings" rule. Match its structure for the rubric and output sections.
+
+- [ ] **Step 3: Create the agent file**
+
+Start with exactly this frontmatter:
+
+```yaml
+---
+name: ticket-code-auditor
+description: Audits one Jira ticket against the code it would touch — requirement gaps, code conflicts, blast radius, and collisions with neighboring tickets — grounding every finding in file:line evidence and checking the ticket's comment thread for questions already asked. Returns ALL findings. Dispatched by /pell:groom.
+model: inherit
+---
+```
+
+Body sections, in order:
+
+1. **Role statement** — one paragraph: you audit one ticket against the code as it stands on `branch`, asking where the code makes the ticket harder than it reads. You do not assess description quality or acceptance criteria.
+2. **Inputs you will receive in the dispatching prompt** — the seven labeled lines from §8.1 verbatim (`cloudId`, `repo_root`, `branch`, `ticket`, `map_slice`, `unmapped_reason`, `neighbors`).
+3. **Step 1 — Read the comment thread** — transcribe §8.1 Step 1. Name both tools per role using the exact names and a literal example call from the Task 1 note: plugin server via `discover` → `executeRead({name, cloudId, inputs})` with `cloudId` top-level; classic via the `comment` field of `getJiraIssue`. Fetch every page. On failure, continue and set `thread_read: false`.
+4. **Step 2 — Read the code** — start from `map_slice`; open each entry point, rule, and consumer it lists and read the surrounding code yourself. When `map_slice` is empty, locate the ticket's code with `Grep`/`Glob` (mapper fallback). When `unmapped_reason` says greenfield, emit the single `requirement-gap` / `minor` greenfield finding and look for adjacent code the new feature must integrate with.
+5. **Step 3 — Apply the rubric** — the four-row table from §8.1, verbatim. Then the out-of-rubric line: description quality, acceptance criteria, epic placement, and sibling overlap from ticket text belong to `/pell:scope` — do not report them.
+6. **Grounding rule** — transcribe §8.1's grounding rule verbatim, including the greenfield exception.
+7. **Severity** — the four-row table from §8.1, verbatim.
+8. **Thread status** — `new`, `asked`, `answered`, per §8.1. Include: a prior comment ending `Posted from /pell:groom.` makes its questions `asked` unless a later comment answers them. Report every finding regardless of status.
+9. **Field rules** — `question` required for `blocker` and `major`, plain language, no file paths, answerable by the reporter; `code_note` required at every severity, may cite paths; `related_tickets` required for `collision`; every `evidence` entry is `file:line` plus what that line shows.
+10. **Return everything** — return ALL findings including nits; never pre-filter; the orchestrator decides what reaches the comment.
+11. **Output format** — the contract below; the final message ends with this object and nothing after it.
+
+The output contract, copied exactly:
+
+```json
+{
+  "findings": [{
+    "category": "code-conflict",
+    "severity": "blocker",
+    "title": "Ticket asks for 100 line items; validator caps at 50",
+    "evidence": ["Validators/OrderValidator.cs:31 MaxLineItems = 50", "Integrations/Netsuite/OrderExport.cs:12 same cap"],
+    "question": "Should the 50-item limit rise for everyone, or only this customer? The NetSuite export enforces the same cap.",
+    "code_note": "Cap duplicated in OrderValidator.cs:31 and OrderExport.cs:12; NetSuite may reject >50 server-side.",
+    "related_tickets": [],
+    "thread_status": "new"
+  }],
+  "touched": ["Validators/OrderValidator.cs", "Integrations/Netsuite/OrderExport.cs"],
+  "thread_read": true,
+  "summary": "one or two sentences"
+}
+```
+
+`category` is one of `requirement-gap`, `code-conflict`, `blast-radius`, `collision`. `severity` is one of `blocker`, `major`, `minor`, `nit`. `thread_status` is one of `new`, `asked`, `answered`.
+
+- [ ] **Step 4: Validate**
+
+```bash
+claude plugin validate ./plugins/pell
+```
+
+Expected: PASS.
+
+- [ ] **Step 5: Self-check against §8**
+
+Confirm: no `tools:` line; both comment-read tools named per role with no UUID server id; grounding rule and greenfield exception present; scope's checks explicitly excluded; the three enums listed exactly; the final-message rule present.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add plugins/pell/agents/ticket-code-auditor.md
+git commit -m "feat(groom): add ticket-code-auditor agent
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+## Task 4: `/pell:groom` — resolve the ticket set (§1, §3–§6, §7.1)
+
+Everything up to the first agent dispatch. At the end of this task the command parses arguments, resolves and caps the ticket set, clusters it, and shows the cost gate — then the body ends.
+
+**Files:**
+- Create: `plugins/pell/commands/groom.md`
+
+**Interfaces:**
+- Consumes: JQL and sprint-field details from the Task 1 note.
+- Produces, for Task 5 (name these variables exactly in the body): `mode`, `project_key`, `keys`, `jql`, `sprint_target`, `all`, `skip_collisions`, `dry_run`, `verbose`, `cloudId`, `repo_root`, `branch`, `head`, `preflight_lines`, `set_description`, `total_found`, `tickets` (list of `{key, summary, description, type, status, priority, labels, components, parent, issuelinks}` in query order), `clusters` (list of lists of ticket keys).
+
+- [ ] **Step 1: Invoke `superpowers:writing-skills`**
+
+As in Task 2.
+
+- [ ] **Step 2: Read the reference command**
+
+Read `plugins/pell/commands/scope.md` in full. Mirror its opening paragraph, `$ARGUMENTS` line, `## Step N — <name>` headings, and the Step 2 cloudId block.
+
+- [ ] **Step 3: Frontmatter and opening**
+
+```yaml
+---
+description: Walk a set of Jira tickets (an epic's open children, a sprint, a JQL query or key list, or the backlog), map the code they touch, and flag requirement gaps, code conflicts, blast radius, and cross-ticket collisions. Renders every draft comment first, then posts only to the tickets you pick. Read-only until then.
+argument-hint: "[EPIC-KEY | KEY... | PROJECT-KEY [sprint | next sprint] | jql \"<query>\"] [all | skip collisions | --dry-run | --verbose]"
+---
+```
+
+Opening paragraph: `You are running **`/pell:groom`**.` followed by the §Purpose framing in two or three sentences, and the read-only statement (only write: Jira comments to selected tickets after the report; `--dry-run` suppresses even the offer). Then `The user passed: `$ARGUMENTS``.
+
+- [ ] **Step 4: Write Steps 1–4 of the body**
+
+- `## Step 1 — Parse arguments` — the §3 order (modifiers from the §1 modifier table → `jql "<query>"` → `next sprint`/`sprint` → issue keys → bare project key → menu), the `--reset` no-op line, and the menu text from §1 verbatim with its follow-up questions.
+- `## Step 2 — Resolve cloudId` — copy `scope.md` Step 2, changing only the command name.
+- `## Step 3 — Load repo context` — insert this block verbatim (canonical wording from `CLAUDE.md`):
+
+```markdown
+Run `git rev-parse --show-toplevel`. If it succeeds, read `<toplevel>/docs/pell/context.md` (Read tool). A missing file, unreadable frontmatter, or a `schema:` value other than `1` all mean "no context" — continue without it and say nothing.
+
+When present, treat it as a **coordinate source only**. It holds pointers, not content: never treat its epic lists, page titles, or component names as current truth. Resolve any coordinate in this order:
+
+1. an explicit value in `$ARGUMENTS`
+2. `docs/pell/context.md`
+3. `~/.claude/pell-config.json`
+4. a live MCP lookup
+5. prompt the user
+
+Never write to `context.md`. If a live call later contradicts it, use the live value and print one line: `context.md is out of date on <field>. Run /pell:map-repo verify.`
+```
+
+- `## Step 4 — Pre-flight` — §5 Pre-flight verbatim: exit message outside a repo; `branch`, `head`; the feature-branch line when `branch` is not `develop`/`main`/`master`; the dirty-tree line. Collect the printed lines into `preflight_lines` for the report header.
+
+- [ ] **Step 5: Write Step 5 — Resolve the ticket set**
+
+- The mode → JQL table from §1, with the subtask and Epic exclusions and `ORDER BY Rank ASC` as §1 specifies. If Task 1 found `parent =` unreliable, add the `"Epic Link" =` fallback on zero results.
+- Key-list mode: one `key in (...)` query first; a lone Epic switches to epic mode; Epics among several keys expand via one epic-mode query each.
+- The fetch call from §5 verbatim (`maxResults: 100`, `view: "full"`, `responseContentFormat: "markdown"`, the nine `fields`), paged until `isLast`, stopping at the cap.
+- Next sprint: the `view: "evidence"` grouping using the sprint field path from the Task 1 note; list multiple sprints in start-date order and ask.
+- Cap at 25 unless `all`; record `total_found`. Zero → `No open tickets in <set_description>.` Jira error → exit with it.
+- One sentence: comments are not fetched here; each auditor reads its own thread.
+
+- [ ] **Step 6: Write Step 6 — Cluster, and Step 7 — Cost gate**
+
+- `## Step 6 — Cluster` — §7.1 verbatim (≤8 per cluster; parent epic → shared component/label → own read of the text; oversized groups split by the next signal, then rank).
+- `## Step 7 — Cost gate` — §6 verbatim, including the four-line prompt with `<total_found>`, the cap note, `<len(clusters)>` mapping agents and `<len(tickets)>` audit agents, the checkout line; prompt only above 5 tickets; runs under `--dry-run`; `n` → `Not run.`
+
+- [ ] **Step 7: Validate and smoke-check**
+
+```bash
+claude plugin validate ./plugins/pell
+```
+
+Expected: PASS. Then `/plugin marketplace update pell-skills`, `/reload-plugins`, and run `/pell:groom <PROJECT-KEY> --dry-run` from a checkout of a real Pell repo. Expected: pre-flight lines, then the cost-gate prompt with a real ticket count and cluster count. Answer `n` → `Not run.`
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add plugins/pell/commands/groom.md
+git commit -m "feat(groom): resolve the ticket set, cluster, and gate the run
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+## Task 5: `/pell:groom` — map, audit, render (§7.2 dispatch, §7.3, §8 dispatch, §9, §10, §13)
+
+**Files:**
+- Modify: `plugins/pell/commands/groom.md` (append Steps 8–12)
+
+**Interfaces:**
+- Consumes: Task 4's variables; Task 2's mapper contract; Task 3's auditor contract.
+- Produces, for Task 6: `rows` (rendered table order, each with `#`, `key`, `verdict`, and `draft` or none).
+
+- [ ] **Step 1: Write Step 8 — Map the code**
+
+Print `Mapping <n> cluster(s)...`. Dispatch one `ticket-code-mapper` per cluster via the Agent tool, `subagent_type="ticket-code-mapper"`, **in a single message per batch of up to 4** so they run concurrently. Dispatch prompt, labeled lines:
+
+```
+repo_root: <repo_root>
+branch: <branch> @ <head>
+tickets: <JSON array of {key, summary, description, components, labels} for this cluster>
+```
+
+Parse each trailing JSON. On failure or unparseable JSON, print `Mapping failed for <keys>: <error> — auditors will locate code themselves.` and treat that cluster as `areas: []`, `unmapped: []`.
+
+- [ ] **Step 2: Write Step 9 — Merge the map and find collision candidates**
+
+§7.3 verbatim: namespace area ids by cluster (`c<n>/<id>`); build `file_index` from `files` plus the file part of `entry_points` and `rules`; the `broad` rule (run ≥6 tickets and file maps to more than half); candidate pairs share an area id or a non-broad file; ≤5 neighbors per ticket, most shared files first; `skip_collisions` → none. When `verbose`, print the merged map.
+
+- [ ] **Step 3: Write Step 10 — Audit each ticket**
+
+Print `Auditing <n> ticket(s)...`. Dispatch one `ticket-code-auditor` per ticket, `subagent_type="ticket-code-auditor"`, **in a single message per batch of up to 6**. Dispatch prompt, labeled lines:
+
+```
+cloudId: <cloudId>
+repo_root: <repo_root>
+branch: <branch> @ <head>
+ticket: <JSON — key, summary, description, type, status, labels, components, parent {key, summary}, issuelinks>
+map_slice: <JSON array of full area objects listing this ticket; [] if none>
+unmapped_reason: <reason from the merged unmapped list, or none>
+neighbors: <JSON array of {key, summary, description, shared: [area ids and files]}; [] under skip collisions>
+```
+
+Parse each trailing JSON. On failure or unparseable JSON the ticket's verdict is `Not assessed: <error>`, with no draft. When `verbose`, print each auditor's `summary`.
+
+- [ ] **Step 4: Write Step 11 — Merge findings, verdicts, drafts**
+
+§9 verbatim: collision dedup rule (mutual `related_tickets` plus a shared evidence file; keep higher severity and longer `code_note`; appears under both tickets); open findings = `new` or `asked`; verdict rule; the draft template with both openings (questions present / code notes only), the omit rules, and the `Posted from /pell:groom.` marker line.
+
+- [ ] **Step 5: Write Step 12 — Render**
+
+§10 verbatim: the sort order and `#` numbering; the header with `set_description`, `<len(tickets)> of <total_found>`, `branch @ head`, and `preflight_lines`; the table (open-finding counts); Collisions (`_None._` when empty, omitted under `skip collisions`); Unmapped (omitted when empty); per-ticket sections with severity subsections, the "Already on the thread" line, the `thread_read: false` warning, and the draft or `Nothing to post.`; the footer pointing at `/pell:scope` and `/pell:from-ticket`, plus the rerun hint when any ticket is `Not assessed`. Plain text; never truncate the table.
+
+Add the §13 failure table rows that belong to these steps (mapper failure, auditor failure, thread read failure) as a short `## Failure handling` note, or inline at each step — pick one and do not duplicate.
+
+- [ ] **Step 6: Validate and smoke-check**
+
+```bash
+claude plugin validate ./plugins/pell
+```
+
+Expected: PASS. Reload, then `/pell:groom <small-epic-key> --dry-run` (3–5 open children). Expected: no gate prompt (≤5 tickets), `Mapping...`, `Auditing...`, then a full report with a table, per-ticket findings carrying `file:line` evidence, and drafts. The body still ends after the render.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add plugins/pell/commands/groom.md
+git commit -m "feat(groom): map clusters, audit tickets, render the report
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+## Task 6: `/pell:groom` — post selected comments (§11, §12, §14)
+
+The only write path. Reviewable on its own.
+
+**Files:**
+- Modify: `plugins/pell/commands/groom.md` (append Steps 13–14 and operator notes)
+
+**Interfaces:**
+- Consumes: `rows` from Task 5; comment-post tool names from the Task 1 note.
+- Produces: nothing downstream.
+
+- [ ] **Step 1: Write Step 13 — Offer to post**
+
+§11 verbatim:
+- Skip with `--dry-run: comments not offered.` under `dry_run`; skip with `No comments to post.` when no row has a draft.
+- The prompt `Draft comments for <n> of <total> tickets: <#> <KEY>, ...` then `Post to which? (all / 1,4,7 / none)`.
+- Input handling: `all`; `none`/`n`; comma- or space-separated numbers; re-prompt once on anything else, then treat as `none`; numbers without a draft ignored with one line.
+- Echo `Posting <n> comments: <KEY>, <KEY>.` before any write.
+- Post one at a time. Name both tools per role from the Task 1 note: `addOrEditJiraIssueComment` on `plugin:atlassian:atlassian` (omit `commentId`), `addCommentToJiraIssue` on the classic connection; both with `cloudId`, `issueIdOrKey`, `commentBody`, `contentFormat: "markdown"`.
+- Per ticket print `<KEY>: Commented.` or `<KEY>: Failed: <error>`, continuing past failures. `none` → `Not posted.`
+
+- [ ] **Step 2: Write Step 14 — Exit and operator notes**
+
+`## Step 14 — Exit`: end the response; do not transition, edit fields, link issues, write files, or commit. Point to `/pell:scope <KEY>` and `/pell:from-ticket <KEY>`.
+
+`## Operator notes`: §14's bullets verbatim, plus the §12 side-effects statement (comments are the only write).
+
+- [ ] **Step 3: Validate and self-check the whole command**
+
+```bash
+claude plugin validate ./plugins/pell
+```
+
+Expected: PASS. Re-read `groom.md` top to bottom against §1–§14. Confirm: every Step N heading is sequential; no `rev-parse --abbrev-ref`; both comment tools named per role with no UUID server id; `--dry-run` never skips the gate; no emoji or glyphs. Note the line count — a composite orchestrator may run past 150 lines, as `scope.md` does.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add plugins/pell/commands/groom.md
+git commit -m "feat(groom): post selected comments after the report
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+## Task 7: Docs, convention list, version bump
+
+**Files:**
+- Modify: `plugins/pell/.claude-plugin/plugin.json`
+- Modify: `README.md`
+- Modify: `plugins/pell/README.md`
+- Modify: `docs/specs/2026-05-27-pell-skills-architecture.md` (§12)
+- Modify: `CLAUDE.md` ("Repo context convention")
+
+**Interfaces:**
+- Consumes: the finished command and agents.
+- Produces: nothing downstream.
+
+- [ ] **Step 1: Rebase if `four-pass-review` has merged**
+
+```bash
+git fetch origin && git log --oneline origin/main -5
+```
+
+If `origin/main` contains the four-pass-review commits, `git rebase origin/main` and resolve conflicts before editing docs.
+
+- [ ] **Step 2: Bump the version**
+
+In `plugins/pell/.claude-plugin/plugin.json`, set `"version": "0.20.0"`.
+
+- [ ] **Step 3: Root `README.md`**
+
+1. The count sentence under `## Commands`: increment by one ("Twenty-one" → "Twenty-two" on today's main; recount the rows if the rebase changed it).
+2. The **Starting work** row: insert after the `scope` link: `` · [`groom`](#pellgroom-epic-key--keys--project-key--jql)``.
+3. After the `### /pell:scope` section and before `### /pell:start-work`, insert:
+
+````markdown
+### `/pell:groom [EPIC-KEY | KEYS | PROJECT-KEY | jql]`
+
+Before a sprint starts, check a batch of tickets against the code they will touch. `groom` resolves a ticket set — an epic's open children, the active or next sprint, a JQL query or key list, or the backlog — maps the code those tickets reach (entry points, rules, state, consumers), then audits each ticket for **requirement gaps** (a case the code has that the ticket skips), **code conflicts** (the ticket asks for something existing code contradicts), **blast radius** (reports, integrations, jobs, and shared components the change ripples into), and **collisions** with other tickets in the batch. Every finding cites `file:line`. Verdict per ticket is **Ready / Ready with questions / Not ready**.
+
+**Usage:**
+
+```
+/pell:groom RRS-500                           # an epic's open children
+/pell:groom RRS sprint                        # the active sprint (or: next sprint)
+/pell:groom RRS                               # the backlog, top 25 by rank ("all" lifts the cap)
+/pell:groom jql "project = RRS AND labels = checkout"
+/pell:groom RRS-12 RRS-20                     # specific tickets
+/pell:groom RRS-500 --dry-run                 # full report, never offers to post
+/pell:groom                                   # menu of the four ticket sets
+```
+
+**Output:** a summary table (verdict and finding counts per ticket, collisions), then per ticket: findings by severity (`blocker / major / minor / nit`) with `file:line` evidence, and a draft comment split into plain-language **Questions** for the reporter and **Code notes** for whoever picks it up. Questions already asked or answered on the ticket's comment thread are not repeated, so a re-run adds only what is new.
+
+**Side-effects:** Jira comments only, after the full report renders: `Post to which? (all / 1,4,7 / none)`. Runs of more than five tickets are `(y/n)`-gated before any agent starts, with the agent count stated. Never transitions, edits fields, links issues, or writes files. Reads the local checkout — run it from the target repo; findings reflect the checked-out branch. For description and acceptance-criteria readiness, use `/pell:scope`.
+````
+
+4. The anchor in item 2 must match the heading in item 3. GitHub drops `` ` ``, `/`, `:`, `[`, `]`, `|`, lowercases, and turns each space into `-`, so the heading yields `pellgroom-epic-key--keys--project-key--jql`. If you change the heading, recompute the anchor.
+5. The sub-agent table under `## Composable building blocks (sub-agents)`: append
+
+```markdown
+| Ticket code mapper | `ticket-code-mapper` | `{areas, unmapped, summary}` — not findings; maps the code a cluster of tickets touches, for `/pell:groom` |
+| Ticket code auditor | `ticket-code-auditor` | `{findings: [{category, severity, title, evidence, question, code_note, related_tickets, thread_status}], touched, thread_read, summary}` |
+```
+
+- [ ] **Step 4: `plugins/pell/README.md`**
+
+1. Jira ops table, after the `/pell:scope` row:
+
+```markdown
+| `/pell:groom [EPIC \| KEYS \| PROJECT [sprint] \| jql]` | Audit a batch of tickets against the code — requirement gaps, code conflicts, blast radius, cross-ticket collisions — with `file:line` evidence. Renders every draft, then posts split questions/code-notes comments only to the tickets you pick. |
+```
+
+2. Agents section, after the "Repo mapper" group:
+
+```markdown
+Ticket groomers (dispatched by `/pell:groom`):
+
+- `ticket-code-mapper` — returns `{areas, unmapped, summary}` rather than findings; it maps the code a cluster of tickets touches, not a review.
+- `ticket-code-auditor` — returns findings tagged `requirement-gap / code-conflict / blast-radius / collision` with `blocker / major / minor / nit` severity, each grounded in `file:line` evidence, plus a `thread_status` for questions already on the ticket.
+```
+
+- [ ] **Step 5: Architecture spec §12**
+
+In the **Built** bullet of `docs/specs/2026-05-27-pell-skills-architecture.md` §12:
+1. In the Jira ops list, after `scope` + its `sow-builder` agent, add: `` `groom` + its `ticket-code-mapper` and `ticket-code-auditor` agents, ``
+2. In the map-repo entry, change `consumed by nine existing commands` to `consumed by ten commands`.
+
+- [ ] **Step 6: `CLAUDE.md`**
+
+In `## Repo context convention`, change `nine consumer commands (`finish-work`, `from-ticket`, `my-tickets`, ...` to `ten consumer commands (`finish-work`, `from-ticket`, `groom`, `my-tickets`, ...` — alphabetical, `groom` after `from-ticket`. Leave the later sentence about wiring "nine commands at once" unchanged; it describes the map-repo rollout, which is history.
+
+- [ ] **Step 7: Grep for stragglers and validate**
+
+```bash
+grep -rn "nine consumer\|nine existing\|Twenty-one commands" README.md CLAUDE.md docs/specs/2026-05-27-pell-skills-architecture.md plugins/
+claude plugin validate ./plugins/pell
+```
+
+Expected: the grep prints nothing (or only a line you deliberately kept, like the "nine commands at once" history sentence); validate PASS.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add plugins/pell/.claude-plugin/plugin.json README.md plugins/pell/README.md docs/specs/2026-05-27-pell-skills-architecture.md CLAUDE.md
+git commit -m "docs(groom): index /pell:groom and its agents, bump plugin to 0.20.0
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+---
+
+## Task 8: Manual verification (§16)
+
+Run from a checkout of a real Pell target repo with an authenticated Atlassian MCP, after `/plugin marketplace update pell-skills` and `/reload-plugins`. Record each row's outcome in the session. Posting rows touch real tickets: **ask the user for a sandbox ticket key before running rows 9–10** and do not post elsewhere.
+
+**Files:**
+- Modify (only if a row fails): the file the failure points to, then re-run that row.
+
+- [ ] **Step 1: Run the matrix**
+
+| # | Invocation | Expected |
+|-|-|-|
+| 1 | `/pell:groom` | Menu of four ticket sets; project key taken from `docs/pell/context.md` or the branch |
+| 2 | `/pell:groom <small-epic> --dry-run` | No gate prompt (≤5 tickets); `Mapping...`, `Auditing...`; full report; `--dry-run: comments not offered.` |
+| 3 | Spot-check row 2 | Open 5 cited `file:line` references; each line shows what its `evidence` claims |
+| 4 | `/pell:groom <PROJECT> sprint --dry-run` | Active-sprint tickets only; no Done, sub-tasks, or Epics |
+| 5 | `/pell:groom <PROJECT> next sprint --dry-run` | When several future sprints exist, lists them by start date and asks |
+| 6 | `/pell:groom <PROJECT> --dry-run` | Backlog capped at 25; gate shows found count, cluster count, agent counts, checkout; `n` → `Not run.` |
+| 7 | `/pell:groom jql "<query>" --dry-run` | Exactly the query's tickets; keys inside the JQL not mistaken for key-list mode |
+| 8 | `/pell:groom <KEY-A> <KEY-B> --dry-run` (two tickets known to share code) | One collision in `### Collisions`; appears under both tickets, each naming the other |
+| 9 | `/pell:groom <SANDBOX-KEY>`, select `1` | Echo line, `<KEY>: Commented.`; in Jira the comment shows Questions and Code notes sections and ends `Posted from /pell:groom.` |
+| 10 | Rerun row 9 | Row 9's questions return as `asked`; "Already on the thread" line; they are absent from the new draft |
+| 11 | `/pell:groom <small-epic> skip collisions --dry-run` | No Collisions section |
+| 12 | Run from a directory that is not a git repo | Exits with the checkout message; no Jira calls |
+| 13 | Run on a feature branch | Header includes `Checkout is on <branch>, not develop — findings reflect that branch.` |
+
+- [ ] **Step 2: Fix and re-run failures**
+
+For each failing row, fix the prompt it points to, re-run `claude plugin validate ./plugins/pell`, bump nothing further (0.20.0 is unreleased on this branch), reload, and re-run the row. Commit each fix:
+
+```bash
+git add <file>
+git commit -m "fix(groom): <what the row exposed>
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
+```
+
+- [ ] **Step 3: Record deviations in the spec**
+
+If any fix changed behavior the spec describes, append a dated `**Status note**` to the end of `docs/specs/2026-09-23-pell-groom-design.md` naming the section and the new behavior. Do not rewrite the section. Commit with the fix.
+
+---
+
+## Self-Review
+
+Spec coverage, section by section:
+
+| Spec section | Task |
+|-|-|
+| §1 Invocation, modifiers, menu | 4 |
+| §2 Flow | 4, 5, 6 |
+| §3 Argument parsing | 4 |
+| §4 cloudId, repo context | 4 (Steps 2–3), 7 (CLAUDE.md list) |
+| §5 Pre-flight, fetch, next sprint, cap | 1 (schemas), 4 |
+| §6 Cost gate | 4 |
+| §7.1 Clustering | 4 |
+| §7.2 Mapper agent | 2; dispatch in 5 |
+| §7.3 Merge, collision candidates | 5 |
+| §8 Auditor agent | 1 (comment tools), 3; dispatch in 5 |
+| §9 Merge, verdicts, drafts | 5 |
+| §10 Render | 5 |
+| §11 Posting | 1 (post tools), 6 |
+| §12 Side effects | 6 |
+| §13 Failure behavior | 4 (repo, Jira, zero, gate), 5 (mapper, auditor, thread), 6 (post) |
+| §14 Operator notes | 6 |
+| §15 Resolved decisions | recorded in spec; no build work |
+| §16 Delivery checklist | 1–8 |
+| §17 Out of scope | nothing built; Task 8 row 12 confirms no file writes |
+
+Placeholder scan: no TBD/TODO; every file has frontmatter or exact row text; agent contracts are copied in full. Name consistency: `ticket-code-mapper`, `ticket-code-auditor`, `thread_status`, `thread_read`, `map_slice`, `unmapped_reason`, `neighbors`, `skip_collisions`, and the marker line `Posted from /pell:groom.` match across Tasks 2–7 and the spec.
