@@ -71,7 +71,7 @@ Return **only** a single JSON object on the last line of your response, and noth
     "entry_points": ["Controllers/CheckoutController.cs:88 POST /checkout", "Jobs/RetryOrderJob.cs:40"],
     "files": ["Services/OrderService.cs", "Validators/OrderValidator.cs"],
     "state": ["OrderStatus: Draft -> Submitted -> Paid | Failed"],
-    "rules": ["Validators/OrderValidator.cs:31 max 50 line items", "flag: EnableGuestCheckout"],
+    "rules": ["Validators/OrderValidator.cs:31 max 50 line items", "Services/OrderService.cs:52 flag: EnableGuestCheckout"],
     "consumers": ["Reports/DailySales.cs", "Integrations/Netsuite/OrderExport.cs"],
     "data": ["Orders", "OrderLines"],
     "tickets": ["RRS-12", "RRS-20"]
