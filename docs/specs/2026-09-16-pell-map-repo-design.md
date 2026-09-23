@@ -186,6 +186,13 @@ avoid — the same trap as hardcoding the Drive server's install-specific id.
 `cloudId` is a **top-level** argument on every execute-family call, a sibling of
 `name` and `inputs`, never nested inside `inputs`.
 
+> **Status note (2026-09-23, GitHub issue #14).** The claim above that every
+> existing pell command stayed inside the primary set was wrong: twelve call sites
+> named tools that do not exist on `plugin:atlassian:atlassian`, among them
+> `addCommentToJiraIssue` (the plugin server's name is `addOrEditJiraIssueComment`).
+> They now name both shapes. The current, fuller role table is in the architecture
+> spec §4.4.
+
 ### 5.1 Transition sampling and its known limitation
 
 The transitions the API returns for an issue depend on that issue's **current

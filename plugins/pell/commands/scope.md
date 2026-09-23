@@ -111,7 +111,7 @@ Call `mcp__plugin_atlassian_atlassian__getJiraIssue` with:
 
 On 404 exit with: "`<ticket_key>` doesn't exist in Jira (or you don't have access)."
 
-Then call `mcp__plugin_atlassian_atlassian__getJiraIssueRemoteIssueLinks` with `cloudId` and `issueIdOrKey: ticket_key`. A 404 or empty response is fine. Capture each returned link's title and url as `ticket_links` for Step 8.
+Then fetch the ticket's remote issue links. The tool differs by connection shape — name both, by role, and use whichever the session exposes: `listJiraIssueRemoteIssueLinks` on `plugin:atlassian:atlassian`, which is not a primary tool there — reach it through `discover`, then run `executeRead({name: "listJiraIssueRemoteIssueLinks", cloudId, inputs: {issueIdOrKey: ticket_key}})` with `cloudId` top-level, never inside `inputs`; `getJiraIssueRemoteIssueLinks` on the classic connection, called directly with `cloudId` and `issueIdOrKey: ticket_key`. A 404 or empty response is fine. Capture each returned link's title and url as `ticket_links` for Step 8.
 
 Use `assignee.displayName or "unassigned"` and `reporter.displayName or "unknown"` — `reporter` can still be absent on tickets that never had one set.
 
@@ -228,7 +228,7 @@ Posted from /pell:scope.
 
 Show the full comment text, then prompt: `Post this comment on <ticket_key>? (y/n)`.
 
-On `y`: call `mcp__plugin_atlassian_atlassian__addCommentToJiraIssue` with `cloudId`, `issueIdOrKey: ticket_key`, `contentFormat: "markdown"`, `commentBody: <the text above>`. Print `Commented.` or `Comment failed: <error>`.
+On `y`: post it. The tool differs by connection shape — name both, by role, and use whichever the session exposes: `mcp__plugin_atlassian_atlassian__addOrEditJiraIssueComment` on `plugin:atlassian:atlassian` (omit `commentId` — with it the tool edits an existing comment instead of adding one); `addCommentToJiraIssue` on the classic connection. Both take `cloudId`, `issueIdOrKey: ticket_key`, `contentFormat: "markdown"`, `commentBody: <the text above>`. Print `Commented.` or `Comment failed: <error>`.
 
 On `n`: print `Not posted.`
 

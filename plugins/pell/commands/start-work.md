@@ -164,10 +164,10 @@ Look up `pell-config.json:jira.transitions[<projectKey>].start`:
 
 - **Cached and the ticket's current `status.name` matches it (case-insensitive)** → skip Step 6b entirely. Nothing to do; the ticket is already in the start status. Print one line: "Ticket already in `<status.name>` — skipping transition."
 
-- **Cached but the ticket is NOT in that status** → use the cached transition name. Skip discovery.
+- **Cached but the ticket is NOT in that status** → use the cached transition name. Run discovery step 1 below to fetch the live `{id, name}` list — the transition call needs a live `id`, and the spelling check below matches against this list — then skip steps 2–5. If the cached name matches no live name, even case-insensitively or through the recorded spelling below, the cache is stale: print `Cached transition <name> is not available on <KEY> — choosing again.` and run steps 2–5 against the list you just fetched.
 
 - **Not cached** → run discovery:
-  1. Call `mcp__plugin_atlassian_atlassian__getTransitionsForJiraIssue` with `cloudId` and `issueIdOrKey: <KEY>`. Capture the list of `{id, name}` objects from the response
+  1. Fetch the live transitions. The tool differs by connection shape — name both, by role, and use whichever the session exposes: `listJiraIssueTransitions` on `plugin:atlassian:atlassian`, which is not a primary tool there — reach it through `discover`, then run `executeRead({name: "listJiraIssueTransitions", cloudId, inputs: {issueIdOrKey: <KEY>}})` with `cloudId` top-level, never inside `inputs`; `getTransitionsForJiraIssue` on the classic connection, called directly with `cloudId` and `issueIdOrKey: <KEY>`. Capture the list of `{id, name}` objects from the response
   2. Filter out names that match (case-insensitive) any of: `done`, `closed`, `resolved`, `won't do`, `wont do`, `cancelled`, `canceled`, `rejected`. These are never "start" candidates
   3. If 0 candidates remain → exit with: "No 'start' transitions available for `<KEY>`. Available transitions: `<comma-separated list of all names from the unfiltered response>`. Pass one explicitly with `move it to <name>` to bypass discovery."
   4. If exactly 1 candidate remains → use it. Ask:
@@ -209,7 +209,7 @@ If the user pre-authorized inline, run the transition without prompting. Otherwi
 On `y`, call `mcp__plugin_atlassian_atlassian__transitionJiraIssue` with:
 - `cloudId`: from Step 2
 - `issueIdOrKey`: `<KEY>`
-- `transition`: the `{id}` object from the candidate (you must pass the ID, not the name)
+- `transition`: the `{id}` object from the live entry for the chosen transition (you must pass the ID, not the name)
 
 On failure, print a single line: "Failed to transition — `<error message>`." and continue to Step 7. Do NOT roll back the branch or the assignment.
 

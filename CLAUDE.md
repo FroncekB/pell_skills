@@ -110,6 +110,12 @@ Never write to `context.md`. If a live call later contradicts it, use the live v
 
 Each shipped command inserts this verbatim immediately after its existing `pell-config.json` read, adjusting only the step number (`N`) in the heading to fit that command's own sequence. Three invariants make this safe to wire into nine commands at once — see design spec [`2026-09-16-pell-map-repo-design.md`](docs/specs/2026-09-16-pell-map-repo-design.md) Section 12: a consumer never writes `context.md` (only `/pell:map-repo` does), never validates it (no extra MCP call spent checking freshness), and a missing, unparseable, or unknown-`schema:` file falls through to that command's existing behavior plus at most one note. `docs/pell/context.md` is repo-scoped and resolves **above** `~/.claude/pell-config.json`, which is machine-global — this fixes the latent bug where a cached `jira.cloud_id` follows the developer rather than the repo.
 
+## Atlassian tool-name convention
+
+`plugin:atlassian:atlassian` is canonical, but only a small set of its tools are primary: `getAccessibleAtlassianResources`, `atlassianUserInfo`, `getJiraIssue`, `searchJiraIssuesUsingJql`, `editJiraIssue`, `transitionJiraIssue`, `createJiraIssue`, `addOrEditJiraIssueComment`, `getConfluenceContent`, `searchConfluence`, `search`, `createConfluenceContent`, `updateConfluenceContent`. Everything else is reached through `discover`, then `executeRead` / `executeWrite` with `cloudId` top-level, under a name that differs from the classic connection's direct tool (`listJiraIssueTransitions` vs `getTransitionsForJiraIssue`, `addOrEditJiraIssueComment` vs `addCommentToJiraIssue`).
+
+Any call outside the primary set names **both** shapes inline, by role — "The tool differs by connection shape — name both, by role, and use whichever the session exposes: …" — with the params for each, since those can differ too (`linkType` vs `type`). Classic names are written bare; their prefix is install-specific. Naming one shape fails silently and nothing validates it, so confirm every new name with `discover` before merging. The verified pairs are in architecture spec §4.4; like the other conventions here, shipped bodies restate them inline rather than pointing at this file or the spec.
+
 ## Shared config
 
 Per-user preferences (Jira project transitions, GitFlow defaults, etc.) live in `~/.claude/pell-config.json`. Schema sketched in the architecture spec §5. **No secrets** — those stay in MCP config.

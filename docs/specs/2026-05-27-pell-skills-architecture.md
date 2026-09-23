@@ -54,7 +54,7 @@ The current `three-pass-review` and `local-review` plugins get **merged into `pe
 
 ## 4. Internal references (formerly "cross-plugin dependencies")
 
-Since everything lives in one plugin, references between commands/skills/agents are internal — no install-time dependency dance. Three patterns:
+Since everything lives in one plugin, references between commands/skills/agents are internal — no install-time dependency dance. Four patterns:
 
 ### 4.1 Dispatching an internal agent
 
@@ -86,6 +86,32 @@ Possible continuations after the notice:
 3. **Stop here if the user prefers** — they may want to install first and rerun
 
 We do NOT use formal `plugin.json` dependency declarations. The notify-don't-block pattern keeps users in control.
+
+### 4.4 Atlassian MCP tools — name both connection shapes
+
+Two differently-shaped Atlassian MCP connections are in use. The repo standardizes on `plugin:atlassian:atlassian`, but developers also run a classic connection whose tool names differ. A prompt that names a tool the session doesn't expose fails **silently**: `claude plugin validate` passes, the step does nothing, and the output still looks plausible.
+
+**Primary on `plugin:atlassian:atlassian`** — named directly, and `mcp__plugin_atlassian_atlassian__<name>` is safe to write: `getAccessibleAtlassianResources`, `atlassianUserInfo`, `getJiraIssue`, `searchJiraIssuesUsingJql`, `editJiraIssue`, `transitionJiraIssue`, `createJiraIssue`, `addOrEditJiraIssueComment`, `getConfluenceContent`, `searchConfluence`, `search`, `createConfluenceContent`, `updateConfluenceContent`.
+
+**Everything else** is reached through `discover({query})`, then an execute-family tool (`executeRead`, `executeWrite`, `executeDestructive`) with `cloudId` as a **top-level** argument — a sibling of `name` and `inputs`, never nested inside `inputs`.
+
+**Rule:** a call whose role is not in the primary list names both shapes inline, by role, and says to use whichever the session exposes. Classic tool prefixes are install-specific, so classic names are always written bare. Parameter names can differ as well as tool names — name them per shape. Verified pairs (live `discover` against the Pell site, 2026-09-23):
+
+| Role | `plugin:atlassian:atlassian` | Classic connection, direct |
+|-|-|-|
+| Add a comment | `addOrEditJiraIssueComment` — primary; omit `commentId` | `addCommentToJiraIssue` |
+| Read a comment thread | `listJiraIssueComments` — `executeRead` | `getJiraIssue` with `fields: ["comment"]` |
+| Transitions for an issue | `listJiraIssueTransitions` — `executeRead` | `getTransitionsForJiraIssue` |
+| Remote issue links | `listJiraIssueRemoteIssueLinks` — `executeRead` | `getJiraIssueRemoteIssueLinks` |
+| Issue link types | `listJiraIssueLinkTypes` — `executeRead` | `getIssueLinkTypes` |
+| Create an issue link | `createJiraIssueLink` — `executeWrite`, param `linkType` | `createIssueLink`, param `type` |
+| Visible projects | `listJiraProjects` — `executeRead` | `getVisibleJiraProjects` |
+| Project issue-type metadata | `listJiraProjectIssueTypesMetadata` — `executeRead` | `getJiraProjectIssueTypesMetadata` |
+| Confluence spaces | `listConfluenceSpaces` — `executeRead` | `getConfluenceSpaces` |
+| Fetch one Confluence page | `getConfluenceContent` — primary; `content_url` or `content_id`, and `detail: "full"` for the body (the default returns title and excerpt only) | `getConfluencePage` — `pageId` only, no URL |
+| Search Confluence | `searchConfluence` — primary | `searchConfluenceUsingCql` |
+
+Nothing validates tool names in prompt bodies. Before merging a new Atlassian call, confirm the name with `discover` on the plugin server and add the row here.
 
 ## 5. Shared configuration
 
@@ -348,6 +374,7 @@ All previously-open questions are now resolved:
 - ✅ **Meta-plugin** — `pell-everything` to be added after `pell` is stable (§9)
 - ✅ **Agent model pinning** — `model: inherit` stays the default. A mechanical agent (paginate, group, summarize into a fixed template) may pin `model: sonnet` with a rationale paragraph in its body; `sow-builder` is the first and, so far, only instance (2026-09-17, GitHub issue #7). The expensive `sow-builder` walk is also `(y/n)`-gated in `/pell:scope` before dispatch, and `/pell:scope` searches Confluence and Google Drive for an existing SOW before synthesizing one (§7)
 - ✅ **Test pass default-on and command-rename policy** — the test-coverage reviewer is a default member of both composites (`skip tests` / `no tests` / `-tests` opts out; the old `with tests` phrases are accepted as no-ops), so the PR composite is `/pell:four-pass-review`. A renamed command ships with a thin deprecated-alias file under the old name that prints a one-line notice and forwards `$ARGUMENTS` verbatim, kept for a release or two, then deleted. `address-review` matches both the old and the new run-marker strings so pre-rename markers on open PRs stay hidden (2026-09-22, GitHub issue #12) (§8)
+- ✅ **Atlassian tool naming** — every Atlassian call outside the `plugin:atlassian:atlassian` primary set names both connection shapes inline, by role; the verified pairs live in §4.4. Twelve call sites named tools that do not exist on that server, including `getConfluencePage`, which silently emptied the Confluence half of every SOW, and `addCommentToJiraIssue`, whose plugin-server name is `addOrEditJiraIssueComment`. The cached-transition path in `start-work` and `finish-work` now always fetches live transitions, since the transition call needs a live `id` (2026-09-23, GitHub issue #14) (§4.4)
 
 ## 12. Implementation status
 
