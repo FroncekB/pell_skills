@@ -33,6 +33,7 @@ pell_skills/
 4. **Reserved flags:** `--reset` (clear cached config), `--dry-run` (preview, no side effects), `--verbose`.
 5. **Default to read-only.** Any side effect (file edit, Bitbucket comment, Jira transition, branch creation) is gated on a `(y/n)` prompt that names exactly what will change.
 6. **Notify, never force, for external plugin dependencies** (e.g. `superpowers`, `frontend-design`). Skip the step or substitute inline — don't halt the workflow.
+7. **Renaming a command ships a deprecated alias.** Plugins have no alias mechanism, so leave a thin file under the old name: a description that says "Deprecated alias for /pell:<new>", a body that prints one rename line and forwards `$ARGUMENTS` verbatim to the new command via the Skill tool, and no logic of its own. Keep it a release or two, then delete it under the removal rules in Housekeeping. If the command posts a marker that another command matches by literal text, the matcher accepts both the old and new strings. `three-pass-review` → `four-pass-review` is the first instance (architecture spec §11).
 
 ## Conventions when adding an agent
 
