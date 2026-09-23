@@ -265,7 +265,9 @@ Field rules:
 
 ## 9. Merge, verdicts, drafts (inline)
 
-**Collision dedup.** Two `collision` findings are the same when their `related_tickets` point at each other and their `evidence` shares a file. Keep the higher severity and the longer `code_note`; the finding appears under both tickets, each naming the other.
+**Collision dedup.** Two `collision` findings are the same when their `related_tickets` point at each other and their `evidence` shares a file. Keep the higher severity, the longer `code_note`, and the kept side's `question`.
+
+**Collision pairs.** After dedup, every remaining collision finding — merged, or one-sided because only one auditor flagged it — yields one unordered pair per ticket in its `related_tickets`: the owning ticket and the related ticket. `collision_pairs` is those pairs de-duplicated as unordered pairs, each keeping a reference to its finding (the higher-severity one when two findings produce the same pair). Each pair renders once under Collisions, appears in both tickets' "Collides with" cells, and feeds both tickets' drafts, each naming the other ticket. In a ticket's own draft the collision uses that ticket's own auditor's `thread_status`, or `new` when its auditor did not flag it.
 
 **Open findings** = `thread_status` of `new` or `asked`. `answered` findings are counted, not rendered in full.
 
@@ -352,7 +354,7 @@ Post one at a time. The comment tool differs by connection shape: `addOrEditJira
 
 ### 11.1 Linking collided tickets
 
-Runs after the comment step, whether or not any comment was posted. **Candidate pairs** are the merged collision findings from Section 9, one pair each. A pair is **already linked** when either ticket's `issuelinks` (fetched in Section 5) names the other, in any link type; those are skipped with one line: `Already linked, skipped: RRS-12 / RRS-20.`
+Runs after the comment step, whether or not any comment was posted. **Candidate pairs** are `collision_pairs` from Section 9 — every collision, merged or one-sided, one entry per unordered pair. A pair is **already linked** when either ticket's `issuelinks` (fetched in Section 5) names the other, in any link type; those are skipped with one line: `Already linked, skipped: RRS-12 / RRS-20.`
 
 Skipped silently when there are no candidate pairs, and under `--dry-run` (print `--dry-run: links not offered.`).
 
