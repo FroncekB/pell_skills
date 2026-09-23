@@ -58,7 +58,7 @@ Finding PRs to review:
 | `/pell:related [KEY]` | Show a ticket's connection graph (links, subtasks, PRs). Read-only. |
 | `/pell:precheck [KEY \| idea]` | Check if work is already filed / built / in-flight — similar tickets, repo impl, open PRs, merged commits. Gated link/comment. Read-only by default. |
 | `/pell:scope [KEY \| PROJECT]` | Place a ticket in a synthesized project SOW (cached at `docs/pell/sow-<PROJECT>.md`) and run a Definition-of-Ready check. Gated "questions for the reporter" comment. Read-only by default. |
-| `/pell:groom [EPIC-KEY \| KEYS \| PROJECT-KEY \| jql]` | Audit a batch of tickets against the code as a technical architect and business analyst — requirement gaps, code conflicts, blast radius, cross-ticket collisions, better approaches, missed business requirements — with `file:line` or quoted-ticket evidence. Renders every draft, then posts split questions/code-notes comments (marked as Claude-generated) only to the tickets you pick, and offers `relates to` links between collided tickets. |
+| `/pell:groom [EPIC-KEY \| KEYS \| PROJECT-KEY \| jql]` | Audit a batch of tickets against the code as a technical architect and business analyst — requirement gaps, code conflicts, blast radius, cross-ticket collisions, better approaches, missed business requirements — with `file:line` or quoted-ticket evidence. Renders every draft, then posts comments split into questions, a suggested approach, and code notes (marked as Claude-generated) only to the tickets you pick, and offers `relates to` links between collided tickets. |
 | `/pell:start-work <KEY>` | Fetch a ticket, create a branch, optionally assign / transition. |
 | `/pell:finish-work` | Open a Bitbucket PR; optionally transition Jira + comment the PR link. |
 
@@ -101,7 +101,7 @@ Repo mapper (dispatched by `/pell:map-repo`):
 Ticket groomers (dispatched by `/pell:groom`):
 
 - `ticket-code-mapper` — returns `{areas, unmapped, summary}` rather than findings; it maps the code a cluster of tickets touches, not a review.
-- `ticket-code-auditor` — returns findings tagged `requirement-gap / code-conflict / blast-radius / collision / approach / business-gap` with `blocker / major / minor / nit` severity, each grounded in `file:line` evidence, plus a `thread_status` for questions already on the ticket.
+- `ticket-code-auditor` — returns findings tagged `requirement-gap / code-conflict / blast-radius / collision / approach / business-gap` with `blocker / major / minor / nit` severity, each grounded in `file:line` evidence (business gaps may quote the ticket instead), plus a `thread_status` for questions already on the ticket.
 
 The reviewers return structured JSON: `{findings: [{severity, file, line, finding, fix}], summary}`. The repo-based reviewers may add an optional `also_in` array on a finding to list other locations where the same issue recurs.
 

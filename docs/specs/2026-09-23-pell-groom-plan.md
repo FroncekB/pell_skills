@@ -724,3 +724,15 @@ Spec coverage, section by section:
 | §17 Out of scope | nothing built; Task 8 row 12 confirms no file writes |
 
 Placeholder scan: no TBD/TODO; every file has frontmatter or exact row text; agent contracts are copied in full. Name consistency: `ticket-code-mapper`, `ticket-code-auditor`, `thread_status`, `thread_read`, `map_slice`, `unmapped_reason`, `neighbors`, `skip_collisions`, and the marker line `Posted from /pell:groom.` match across Tasks 2–7 and the spec.
+
+---
+
+**Status note (2026-09-23, final-review fix wave).** This plan is a point-in-time record; the shipped command, the two agents, and the design spec are the current truth. Changes made during and after the build supersede plan text that still reads the old way: collision linking (`Relates` links offered after the comments), the AI disclaimer line above the marker, the technical-architect and business-analyst lenses (`approach` and `business-gap`, the `suggestion` field, the Suggested approach section), and the final-review fixes — collision text that names both tickets, re-runs that treat every finding a prior groom comment carried (question, suggestion, or code note) as `asked`, the auditor's `thread_overlaps` field, a read-only rule for the auditor, a 26-per-page fetch with `more than 25` as the found count, epic-expansion de-duplication, JQL captured before modifiers, future-only sprint grouping, the checkout check before any prompt, detached-HEAD handling, `Not assessed` rendering, and simplified collision pairing with no evidence-matching merge. Superseded examples include the Global Constraints line that calls comments and links "the only writes" (Step 2 may also cache `jira.cloud_id` in `~/.claude/pell-config.json`), the header line and Task 4 opening paragraph that call Jira comments the command's only write, and the old flag example in Task 2's mapper contract (`"flag: EnableGuestCheckout"` with no `file:line`; the shipped mapper requires one on every `rules` entry).
+
+Additional Task 8 verification rows:
+
+| # | Invocation | Expected |
+|-|-|-|
+| 17 | Rerun a one-sided collision (only one ticket's auditor flags the other) after posting both tickets' drafts | Neither ticket's new draft repeats the overlap: the flagging side's collision comes back `asked`, and the other side's `thread_overlaps` marks it `asked` |
+| 18 | Rerun a ticket after posting its draft | Its questions, suggestions, and code notes return as `asked`, count in "Already on the thread", and are absent from the new draft |
+| 19 | `/pell:groom <EPIC-KEY> <CHILD-KEY> --dry-run`, where the child belongs to the epic | The child appears once in the table and the found count |

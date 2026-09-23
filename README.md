@@ -260,9 +260,9 @@ Before a sprint starts, check a batch of tickets against the code they will touc
 /pell:groom                                   # menu of the four ticket sets
 ```
 
-**Output:** a summary table (verdict and finding counts per ticket, collisions), then per ticket: findings by severity (`blocker / major / minor / nit`) with `file:line` evidence, and a draft comment split into plain-language **Questions** for the reporter, a **Suggested approach** for the team, and **Code notes** for whoever picks it up. Questions already asked or answered on the ticket's comment thread are not repeated, so a re-run adds only what is new.
+**Output:** a summary table (verdict and finding counts per ticket, collisions), then per ticket: findings by severity (`blocker / major / minor / nit`) with `file:line` evidence, and a draft comment split into plain-language **Questions** for the reporter, a **Suggested approach** for the team, and **Code notes** for whoever picks it up. Anything already raised on the ticket's comment thread is not repeated — including every question, suggested approach, code note, and overlap an earlier `groom` comment posted — so a re-run adds only what is new.
 
-**Side-effects:** after the full report renders, Jira comments (`Post to which? (all / 1,4,7 / none)`) and `relates to` links between collided tickets that aren't already linked (`Link which? (all / 1,2 / none)`). Every comment ends with a line saying Claude generated it. Runs of more than five tickets are `(y/n)`-gated before any agent starts, with the agent count stated. Never transitions, edits fields, creates other link types, or writes files. Reads the local checkout — run it from the target repo; findings reflect the checked-out branch. For description and acceptance-criteria readiness, use `/pell:scope`.
+**Side-effects:** after the full report renders, Jira comments (`Post to which? (all / 1,4,7 / none)`) and `relates to` links between collided tickets that aren't already linked (`Link which? (all / 1,2 / none)`). Every comment carries a line saying Claude generated it, directly above the `Posted from /pell:groom.` marker that ends it. Runs of more than five tickets are `(y/n)`-gated before any agent starts, with the agent count stated. Never transitions, edits fields, or creates other link types, and writes no file beyond caching the Jira cloud id in `~/.claude/pell-config.json`, as `/pell:scope` does. Reads the local checkout — run it from the target repo; findings reflect the checked-out branch. For description and acceptance-criteria readiness, use `/pell:scope`.
 
 ### `/pell:start-work <KEY>`
 
@@ -613,7 +613,7 @@ The reviewers are also exposed as composable agents — any current or future co
 | Repo security reviewer | `repo-security-reviewer` | Same shape |
 | Repo mapper | `repo-mapper` | `{coordinates, low_confidence, gaps, summary}` — not findings; produces the repo's Jira/Confluence/Drive/Bitbucket coordinates, not a review |
 | Ticket code mapper | `ticket-code-mapper` | `{areas, unmapped, summary}` — not findings; maps the code a cluster of tickets touches, for `/pell:groom` |
-| Ticket code auditor | `ticket-code-auditor` | `{findings: [{category, severity, title, evidence, question, code_note, suggestion, related_tickets, thread_status}], touched, thread_read, summary}` |
+| Ticket code auditor | `ticket-code-auditor` | `{findings: [{category, severity, title, evidence, question, code_note, suggestion, related_tickets, thread_status}], touched, thread_read, thread_overlaps, summary}` |
 
 This is the foundation of the workflow composers: commands like `/pell:wrap-up` dispatch these without re-implementing review logic.
 
