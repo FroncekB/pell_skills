@@ -44,8 +44,9 @@ Never write to `context.md`. If a live call later contradicts it, use the live v
 Call `mcp__plugin_atlassian_atlassian__getJiraIssue` with:
 - `cloudId`: from Step 2
 - `issueIdOrKey`: `ticket_key`
-- `fields`: `["summary", "status", "issuetype", "priority", "assignee", "reporter", "issuelinks", "subtasks", "parent", "labels"]`
+- `fields`: `["summary", "status", "issuetype", "priority", "assignee", "reporter", "creator", "issuelinks", "subtasks", "parent", "labels"]`
 - `responseContentFormat`: `"markdown"`
+- `view`: `"full"` — required. The default `compact` view drops `issuelinks`, `subtasks`, `parent`, `issuetype`, and `labels` even when they are listed in `fields`, so every section below would render empty. `full` still honours the `fields` list.
 
 If the call returns 404 → exit with: "`<ticket_key>` doesn't exist in Jira (or you don't have access)."
 
@@ -79,7 +80,7 @@ If the MCP returns an error, render the PR section with `_Bitbucket query failed
 ## <ticket_key> — <summary>
 
 **Status:** <status.name>  ·  **Type:** <issuetype.name>  ·  **Priority:** <priority.name or —>
-**Assignee:** <assignee.displayName or "unassigned">  ·  **Reporter:** <reporter.displayName or "unknown">
+**Assignee:** <assignee.displayName or "unassigned">  ·  **Reporter:** <reporter.displayName, else creator.displayName + " (creator)", else "unknown">
 **Labels:** <comma-joined labels>     ← omit this entire line when labels is empty/missing
 
 ### Parent / Subtasks
@@ -143,4 +144,4 @@ End the response. Do NOT offer to act on any linked issue or PR. This command is
 - If the user passes both an explicit key and is on a branch with a different key, the explicit arg wins. Don't second-guess.
 - For tickets with very large `issuelinks` arrays (>30 links), render all of them — truncation hides important context. The list is still scannable.
 - If `getJiraIssue` succeeds but `responseContentFormat: "markdown"` isn't honored by this MCP build, the response should still have the structured fields we need. Don't fall back; just parse the structured response.
-- The Atlassian MCP sometimes omits `reporter` from the response even when requested in `fields` (observed against real tickets). Always use the `or "unknown"` fallback rather than assuming it's present.
+- The `plugin:atlassian:atlassian` connection never returns `reporter`, in any view, even on tickets where JQL `reporter is not EMPTY` matches. It does return `creator`, and Jira sets the reporter to the creator unless someone changes it. Keep requesting `reporter` so a connection that returns it wins, and fall back to `creator` labelled as such.

@@ -116,6 +116,8 @@ Each shipped command inserts this verbatim immediately after its existing `pell-
 
 Any call outside the primary set names **both** shapes inline, by role — "The tool differs by connection shape — name both, by role, and use whichever the session exposes: …" — with the params for each, since those can differ too (`linkType` vs `type`). Classic names are written bare; their prefix is install-specific. Naming one shape fails silently and nothing validates it, so confirm every new name with `discover` before merging. The verified pairs are in architecture spec §4.4; like the other conventions here, shipped bodies restate them inline rather than pointing at this file or the spec.
 
+**Read views.** `getJiraIssue` and `searchJiraIssuesUsingJql` default to `view: "compact"`, which returns only `summary`, `description`, `status.name`, `assignee.displayName`, `priority`, and `updated`, and drops everything else even when it is listed in `fields` (`parent`, `issuetype`, `issuelinks`, `subtasks`, `labels`, `components`, `created`, `project`, `status.statusCategory.key`, `assignee.accountId`). A call that reads any dropped field passes `view: "full"` with a one-line inline note saying which fields it needs; `full` still honours `fields`, so keep the list explicit to bound the payload. Calls that read only compact fields stay on the default. `reporter` never comes back on the plugin connection in any view: request `creator` alongside it and fall back to `creator`, labelled as such.
+
 ## Shared config
 
 Per-user preferences (Jira project transitions, GitFlow defaults, etc.) live in `~/.claude/pell-config.json`. Schema sketched in the architecture spec §5. **No secrets** — those stay in MCP config.

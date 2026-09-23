@@ -56,6 +56,7 @@ Call `mcp__plugin_atlassian_atlassian__searchJiraIssuesUsingJql` with:
 - `jql`: the assembled string
 - `fields`: `["summary", "status", "issuetype", "priority", "updated"]`
 - `maxResults`: 25
+- `view`: `"full"` — required. The default `compact` view drops `issuetype` and `status.statusCategory.key` even when `status` and `issuetype` are listed in `fields`, which breaks the category sort in Step 5 and empties the type tag. `full` still honours the `fields` list.
 
 If the call fails with a JQL syntax error → exit with: "Jira rejected that filter — `<error message>`. Try again without the status filter, or use a simpler one (`in progress`, `to do`, `blocked`)."
 

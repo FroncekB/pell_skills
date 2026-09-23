@@ -60,6 +60,7 @@ Call `mcp__plugin_atlassian_atlassian__searchJiraIssuesUsingJql` with:
 - `jql`: assembled string
 - `fields`: `["summary", "status", "issuetype", "priority", "created", "assignee"]`
 - `maxResults`: 30
+- `view`: `"full"` — required. The default `compact` view drops `issuetype` and `created` even when they are listed in `fields`, which empties the `[<type>]` tag and the age on every row. `full` still honours the `fields` list.
 
 If the call fails with a JQL syntax error → exit with: "Jira rejected that filter — `<error>`. Try `/pell:triage <KEY>` with no extra filters."
 
@@ -135,7 +136,7 @@ Behavior per choice:
 
 - **`d` (design)** — first claim (same as `c`, with the same y/n gate unless pre-authorized), then invoke `/pell:from-ticket RRS-1041` with any leftover freeform context from Step 1 appended. from-ticket creates the branch via start-work and then runs the brainstorm → plan workflow (notify-don't-force if superpowers is absent).
 
-- **`v` (view)** — call `mcp__plugin_atlassian_atlassian__getJiraIssue` with `cloudId`, `issueIdOrKey: "RRS-1041"`, `fields: ["summary", "description", "status", "issuetype", "priority", "reporter", "created", "labels"]`, `responseContentFormat: "markdown"`. Print: summary, status, type, reporter, labels, description (truncated to 1500 chars if longer with `…[truncated]`). Then return to the action menu for the same ticket.
+- **`v` (view)** — call `mcp__plugin_atlassian_atlassian__getJiraIssue` with `cloudId`, `issueIdOrKey: "RRS-1041"`, `fields: ["summary", "description", "status", "issuetype", "priority", "reporter", "creator", "created", "labels"]`, `responseContentFormat: "markdown"`, `view: "full"` (the default `compact` view drops `issuetype`, `created`, and `labels` even when listed). Print: summary, status, type, reporter (`reporter.displayName`, else `creator.displayName (creator)` — the `plugin:atlassian:atlassian` connection never returns `reporter`), labels, description (truncated to 1500 chars if longer with `…[truncated]`). Then return to the action menu for the same ticket.
 
 - **`n` (next)** — return to Step 6 list prompt (don't re-render the list — keep numbering).
 

@@ -45,8 +45,9 @@ Read `~/.claude/pell-config.json` (treat missing as `{}`).
 1. `mcp__plugin_atlassian_atlassian__getJiraIssue` with:
    - `cloudId`
    - `issueIdOrKey`: `<KEY>`
-   - `fields`: `["summary", "description", "status", "issuetype", "priority", "assignee", "reporter", "labels", "issuelinks", "subtasks", "parent"]`
+   - `fields`: `["summary", "description", "status", "issuetype", "priority", "assignee", "reporter", "creator", "labels", "issuelinks", "subtasks", "parent"]`
    - `responseContentFormat`: `"markdown"`
+   - `view`: `"full"` — required. The default `compact` view drops `issuetype`, `labels`, `issuelinks`, `subtasks`, and `parent` even when they are listed in `fields`, which leaves the seed with no type and no relationships. `full` still honours the `fields` list.
 
 2. The ticket's remote issue links. The tool differs by connection shape — name both, by role, and use whichever the session exposes: `listJiraIssueRemoteIssueLinks` on `plugin:atlassian:atlassian`, which is not a primary tool there — reach it through `discover`, then run `executeRead({name: "listJiraIssueRemoteIssueLinks", cloudId, inputs: {issueIdOrKey: <KEY>}})` with `cloudId` top-level, never inside `inputs`; `getJiraIssueRemoteIssueLinks` on the classic connection, called directly with `cloudId` and `issueIdOrKey: <KEY>`.
 
@@ -59,7 +60,7 @@ Read `~/.claude/pell-config.json` (treat missing as `{}`).
 **Capture for later stages:**
 - `summary`, `description` (full markdown, no truncation)
 - `status.name`, `issuetype.name`, `priority.name`, `labels`
-- `assignee.displayName` (default `"unassigned"`), `reporter.displayName` (default `"unknown"` — Atlassian MCP sometimes omits this even when requested)
+- `assignee.displayName` (default `"unassigned"`), `reporter.displayName`, else `creator.displayName` + `" (creator)"`, else `"unknown"` — the `plugin:atlassian:atlassian` connection never returns `reporter`, in any view, but does return `creator`, which Jira uses as the reporter unless someone changes it
 - `parent` (key + summary + status), `subtasks` (key + summary + status list), `issuelinks` (relationship + key + summary + status list)
 - Remote links (title + url + application.name)
 
