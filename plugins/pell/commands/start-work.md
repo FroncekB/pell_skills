@@ -41,7 +41,9 @@ Read `~/.claude/pell-config.json` (use the Read tool; if the file doesn't exist,
 Call `mcp__plugin_atlassian_atlassian__getJiraIssue` with:
 - `cloudId`: the resolved value above
 - `issueIdOrKey`: the parsed `<KEY>`
+- `fields`: `["summary", "issuetype", "status", "assignee", "description"]`
 - `responseContentFormat`: `"markdown"`
+- `view`: `"full"` — required. The default `compact` view drops `issuetype` and trims `assignee` to `displayName` (no `accountId`); `full` returns both and still honours the `fields` list.
 
 Capture these fields for later steps:
 - `summary` (string)

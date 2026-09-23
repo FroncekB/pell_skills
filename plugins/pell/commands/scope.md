@@ -105,15 +105,15 @@ Always fetch live, even when the SOW came from cache, so the assessed ticket is 
 Call `mcp__plugin_atlassian_atlassian__getJiraIssue` with:
 - `cloudId`
 - `issueIdOrKey`: `ticket_key`
-- `fields`: `["summary", "description", "status", "issuetype", "priority", "assignee", "reporter", "labels", "components", "parent", "subtasks", "issuelinks", "created", "updated"]`
+- `fields`: `["summary", "description", "status", "issuetype", "priority", "assignee", "reporter", "creator", "labels", "components", "parent", "subtasks", "issuelinks", "created", "updated"]`
 - `responseContentFormat`: `"markdown"`
-- `view`: `"full"` — required. The tool's default `compact` view silently drops `parent`, `issuetype`, `issuelinks`, `subtasks`, `reporter`, `labels`, `components`, and `created` even when they are listed in `fields` (verified against a live ticket 2026-09-17; `fieldsByKeys: true` does not help). Without it every ticket looks unparented, the epic case in Step 6 can never fire, and the Blocked and Unlinked-dependency rows in Step 7 never see a link.
+- `view`: `"full"` — required. The tool's default `compact` view silently drops `parent`, `issuetype`, `issuelinks`, `subtasks`, `labels`, `components`, and `created` even when they are listed in `fields` (verified against a live ticket 2026-09-17; `fieldsByKeys: true` does not help). Without it every ticket looks unparented, the epic case in Step 6 can never fire, and the Blocked and Unlinked-dependency rows in Step 7 never see a link.
 
 On 404 exit with: "`<ticket_key>` doesn't exist in Jira (or you don't have access)."
 
 Then fetch the ticket's remote issue links. The tool differs by connection shape — name both, by role, and use whichever the session exposes: `listJiraIssueRemoteIssueLinks` on `plugin:atlassian:atlassian`, which is not a primary tool there — reach it through `discover`, then run `executeRead({name: "listJiraIssueRemoteIssueLinks", cloudId, inputs: {issueIdOrKey: ticket_key}})` with `cloudId` top-level, never inside `inputs`; `getJiraIssueRemoteIssueLinks` on the classic connection, called directly with `cloudId` and `issueIdOrKey: ticket_key`. A 404 or empty response is fine. Capture each returned link's title and url as `ticket_links` for Step 8.
 
-Use `assignee.displayName or "unassigned"` and `reporter.displayName or "unknown"` — `reporter` can still be absent on tickets that never had one set.
+Use `assignee.displayName or "unassigned"`. For the reporter use `reporter.displayName`, else `creator.displayName` + `" (creator)"`, else `"unknown"` — the `plugin:atlassian:atlassian` connection never returns `reporter`, in any view, but does return `creator`, which Jira uses as the reporter unless someone changes it.
 
 ## Step 6 — Place the ticket in the SOW
 
