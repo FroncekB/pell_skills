@@ -575,7 +575,7 @@ In `plugins/pell/.claude-plugin/plugin.json`, set `"version": "0.20.0"`.
 3. After the `### /pell:scope` section and before `### /pell:start-work`, insert:
 
 ````markdown
-### `/pell:groom [EPIC-KEY || `/pell:groom [EPIC | KEYS | PROJECT [sprint] | jql]` | Audit a batch of tickets against the code as a technical architect and business analyst — requirement gaps, code conflicts, blast radius, cross-ticket collisions, better approaches, missed business requirements — with `file:line` or quoted-ticket evidence.| PROJECT-KEY | jql]`
+### `/pell:groom [EPIC-KEY | KEYS | PROJECT-KEY | jql]`
 
 Before a sprint starts, check a batch of tickets against the code they will touch. `groom` resolves a ticket set — an epic's open children, the active or next sprint, a JQL query or key list, or the backlog — maps the code those tickets reach (entry points, rules, state, consumers), then audits each ticket for **requirement gaps** (a case the code has that the ticket skips), **code conflicts** (the ticket asks for something existing code contradicts), **blast radius** (reports, integrations, jobs, and shared components the change ripples into), and **collisions** with other tickets in the batch. It also reviews as a technical architect — **better approaches**, such as extending an existing service instead of building a new module — and as a business analyst — **missed business requirements** such as roles, notifications, audit history, refunds, or existing customers. Code findings cite `file:line`; business gaps quote the ticket text they follow from. Verdict per ticket is **Ready / Ready with questions / Not ready**.
 
