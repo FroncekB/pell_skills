@@ -25,10 +25,10 @@ Pell Software's Claude Code toolkit. One plugin, many skills. Install once, get 
 
 | Command | What it does |
 |-|-|
-| `/pell:three-pass-review <PR>` | All reviewers in parallel against a Bitbucket PR with Jira context; offers a run-marker comment, then inline PR comments. |
+| `/pell:four-pass-review <PR>` | All reviewers in parallel against a Bitbucket PR with Jira context; offers a run-marker comment, then inline PR comments. |
 | `/pell:local-review` | All reviewers against local uncommitted changes; offers in-place fixes. |
 
-Both composites can add a test-coverage pass — pass `with tests` to enable it (off by default).
+Both composites run all four reviewers by default — correctness, quality, security, and test coverage — so expect four reviewer subagents per run. Pass `skip tests` to drop the test-coverage pass. `/pell:three-pass-review` remains as a deprecated alias that prints a rename notice and forwards to `/pell:four-pass-review`; it will be removed in a future release.
 
 The receiving end of review:
 
@@ -114,8 +114,8 @@ Each dimension uses its own scale; reviewers surface everything (no pre-filterin
 
 **MCP servers:**
 
-- **Bitbucket MCP** (`atlassian-bitbucket`, API-token auth) — any PR-mode review, `three-pass-review`, `finish-work`, `related`.
-- **Jira MCP** (`plugin:atlassian:atlassian`, OAuth) — all Jira-ops commands and Jira context in `three-pass-review`.
+- **Bitbucket MCP** (`atlassian-bitbucket`, API-token auth) — any PR-mode review, `four-pass-review`, `finish-work`, `related`.
+- **Jira MCP** (`plugin:atlassian:atlassian`, OAuth) — all Jira-ops commands and Jira context in `four-pass-review`.
 
 See the [marketplace root README](../../README.md) for the dual-connection setup.
 

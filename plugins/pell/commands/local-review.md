@@ -1,5 +1,5 @@
 ---
-description: Three-pass review of local uncommitted changes — dispatches correctness, quality, and security reviewers that respect CLAUDE.md and surrounding code conventions; add "with tests" for an optional fourth test-coverage pass. Optionally applies suggested fixes.
+description: Four-pass review of local uncommitted changes — dispatches correctness, quality, security, and test-coverage reviewers that respect CLAUDE.md and surrounding code conventions; add "skip tests" to drop the test-coverage pass. Optionally applies suggested fixes.
 argument-hint: [--staged | --uncommitted | --range <a>..<b> | <path>]
 ---
 
@@ -18,7 +18,7 @@ Parse `$ARGUMENTS`:
 
 Honor any freeform context (e.g. "ignore the test files", "focus on the new module").
 
-**Test pass:** off by default. If `$ARGUMENTS` contains `with tests`, `include tests`, or `+tests` → also dispatch the test-coverage reviewer in Step 2.
+**Test pass:** on by default. If `$ARGUMENTS` contains `skip tests`, `no tests`, or `-tests` → do not dispatch the test-coverage reviewer in Step 2, and omit the Test Coverage section and its count line downstream. `with tests`, `include tests`, and `+tests` are accepted as no-ops — the pass already runs.
 
 Run the appropriate `git diff`. If empty, tell the user "No changes to review." and stop.
 
@@ -26,14 +26,14 @@ Also capture:
 - `git status --short` — modified vs new files
 - `git rev-parse --show-toplevel` — the repo root
 
-## Step 2 — Dispatch the three reviewers in parallel
+## Step 2 — Dispatch the four reviewers in parallel
 
-In a **single assistant message**, make the reviewer `Agent` tool calls — the three core reviewers, plus `test-reviewer` only if the test pass was enabled in Step 1:
+In a **single assistant message**, make the reviewer `Agent` tool calls — all four reviewers, unless the test pass was skipped in Step 1:
 
 1. `subagent_type="correctness-reviewer"`
 2. `subagent_type="quality-reviewer"`
 3. `subagent_type="security-reviewer"`
-4. `subagent_type="test-reviewer"` (include only if `with tests` / `include tests` / `+tests` was passed)
+4. `subagent_type="test-reviewer"` (omit only if `skip tests` / `no tests` / `-tests` was passed)
 
 Each agent gets:
 
@@ -79,13 +79,13 @@ Render this report:
 **Major:** _None._  |  **Minor:** _None._  |  **Nits:** _None._
 - ...
 
-(Include the **Test Coverage** section only if the test pass was enabled via `with tests`.)
+(Omit the **Test Coverage** section only if the test pass was skipped via `skip tests`.)
 
 ### Counts
 - Correctness: <blocker> blocker, <major> major, <minor> minor, <nit> nits
 - Quality: <major> major, <minor> minor, <nit> nits
 - Security: <critical> critical, <high> high, <medium> medium, <low> low, <nit> nits
-- Test Coverage: <major> major, <minor> minor, <nit> nits   (include only if test pass enabled)
+- Test Coverage: <major> major, <minor> minor, <nit> nits   (omit only if test pass skipped)
 - **Total:** <N findings>
 
 ### Verdict

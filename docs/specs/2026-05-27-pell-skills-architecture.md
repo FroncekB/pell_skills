@@ -35,7 +35,8 @@ The plugin is named `pell`; each command file inside `commands/` is named after 
 | `commands/correctness-review.md` | `/pell:correctness-review <PR-or-local>` |
 | `commands/quality-review.md` | `/pell:quality-review <PR-or-local>` |
 | `commands/security-review.md` | `/pell:security-review <PR-or-local>` |
-| `commands/three-pass-review.md` | `/pell:three-pass-review <PR>` |
+| `commands/four-pass-review.md` | `/pell:four-pass-review <PR>` |
+| `commands/three-pass-review.md` | `/pell:three-pass-review <PR>` — deprecated alias, forwards to `four-pass-review` |
 | `commands/local-review.md` | `/pell:local-review` |
 | `commands/from-ticket.md` | `/pell:from-ticket RRS-1020` |
 | `commands/wrap-up.md` | `/pell:wrap-up` |
@@ -46,7 +47,7 @@ Skills (auto-invoked) live in `skills/<name>/SKILL.md`. Agents (composable) live
 
 The current `three-pass-review` and `local-review` plugins get **merged into `pell`** rather than renamed independently. Concretely:
 
-1. Their command bodies move to `plugins/pell/commands/three-pass-review.md` and `commands/local-review.md`
+1. Their command bodies move to `plugins/pell/commands/three-pass-review.md` and `commands/local-review.md` (the PR composite has since been renamed `four-pass-review`; see §8 and §11)
 2. Their agents move to `plugins/pell/agents/` (deduplicated — one unified version per dimension)
 3. The standalone `plugins/three-pass-review/` and `plugins/local-review/` directories are deleted
 4. The marketplace.json entries collapse into a single entry for `pell`
@@ -168,7 +169,7 @@ Each review dimension is a sibling in the one `pell` plugin, exposed as both a u
 | Security | `/pell:security-review` | `security-reviewer` |
 | Test coverage | `/pell:test-review` | `test-reviewer` |
 
-Composites (`/pell:three-pass-review`, `/pell:local-review`) do NOT reimplement review logic. They dispatch the agents above as parallel sub-agents and act on the aggregated findings. The same pattern extends to the repo-wide audits (`repo-quality-reviewer`, `repo-security-reviewer`).
+Composites (`/pell:four-pass-review`, `/pell:local-review`) do NOT reimplement review logic. They dispatch the agents above as parallel sub-agents and act on the aggregated findings. The same pattern extends to the repo-wide audits (`repo-quality-reviewer`, `repo-security-reviewer`).
 
 ### Reviewer responsibilities (uniform contract)
 
@@ -221,11 +222,11 @@ Reviewers must use the appropriate severity word for their dimension (e.g. secur
 Composites are thin orchestrators that:
 
 1. Resolve the input scope (PR or local) and gather any context the reviewers can't (Jira ticket, GitFlow base branch, etc.)
-2. Dispatch the reviewer agents in parallel with shared context — correctness, quality and security by default, plus `test-reviewer` when `with tests` is passed
+2. Dispatch the reviewer agents in parallel with shared context — correctness, quality, security, and test coverage by default; `skip tests` (or `no tests` / `-tests`) drops `test-reviewer` from the run
 3. Aggregate findings into a unified report, **grouped by severity** — render nits in a collapsed/separate section so they don't drown the signal
 4. Decide on **side effects** based on the composite's purpose:
-   - `/pell:three-pass-review` (PR context) → ask the user which severity threshold to post (e.g. "post blockers + major only? all? selected?"). Never post nits by default
-   - `/pell:three-pass-review` also offers a run-marker comment — one general PR comment listing the passes run and per-dimension counts, no verdict — gated on a default-yes prompt. `skip marker` suppresses the offer; `--dry-run` suppresses the post
+   - `/pell:four-pass-review` (PR context) → ask the user which severity threshold to post (e.g. "post blockers + major only? all? selected?"). Never post nits by default
+   - `/pell:four-pass-review` also offers a run-marker comment — one general PR comment listing the passes run and per-dimension counts, no verdict — gated on a default-yes prompt. `skip marker` suppresses the offer; `--dry-run` suppresses the post
    - `/pell:local-review` (local context) → same selection model for fixes
 5. Gate every side effect on user confirmation
 
@@ -233,7 +234,7 @@ Composites are thin orchestrators that:
 
 - **Reuse:** one reviewer prompt, many consumers
 - **Composability:** future workflows (e.g. `pell-feature:wrap-up`) can pick which reviewers to run
-- **Direct user access:** a user who just wants a quick security pass can run `/pell:security-review` without invoking the full three-pass machinery
+- **Direct user access:** a user who just wants a quick security pass can run `/pell:security-review` without invoking the full four-pass machinery
 - **Cleaner mental model:** reviewers report, orchestrators act
 
 ## 9. Repo layout
@@ -255,7 +256,8 @@ pell_skills/
         │   ├── security-review.md
         │   ├── test-review.md
         │   # Review composites
-        │   ├── three-pass-review.md         # PR + Jira context → run marker + optional inline comments
+        │   ├── four-pass-review.md          # PR + Jira context → run marker + optional inline comments
+        │   ├── three-pass-review.md         # deprecated alias → forwards to four-pass-review
         │   ├── local-review.md              # working tree → optional in-place fixes
         │   # PR review ops
         │   ├── review-queue.md              # open PRs awaiting your review → chain into a review
@@ -345,12 +347,13 @@ All previously-open questions are now resolved:
 - ✅ **Direct-invoke output mode** — pretty markdown when invoked via slash command, raw JSON when dispatched via `Agent` tool. Reviewer detects mode and adapts (§8)
 - ✅ **Meta-plugin** — `pell-everything` to be added after `pell` is stable (§9)
 - ✅ **Agent model pinning** — `model: inherit` stays the default. A mechanical agent (paginate, group, summarize into a fixed template) may pin `model: sonnet` with a rationale paragraph in its body; `sow-builder` is the first and, so far, only instance (2026-09-17, GitHub issue #7). The expensive `sow-builder` walk is also `(y/n)`-gated in `/pell:scope` before dispatch, and `/pell:scope` searches Confluence and Google Drive for an existing SOW before synthesizing one (§7)
+- ✅ **Test pass default-on and command-rename policy** — the test-coverage reviewer is a default member of both composites (`skip tests` / `no tests` / `-tests` opts out; the old `with tests` phrases are accepted as no-ops), so the PR composite is `/pell:four-pass-review`. A renamed command ships with a thin deprecated-alias file under the old name that prints a one-line notice and forwards `$ARGUMENTS` verbatim, kept for a release or two, then deleted. `address-review` matches both the old and the new run-marker strings so pre-rename markers on open PRs stay hidden (2026-09-22, GitHub issue #12) (§8)
 
 ## 12. Implementation status
 
 The conventions above are stable and the bulk of the roadmap shipped:
 
-- **Built:** all four review primitives (`correctness`, `quality`, `security`, `test`) + both composites; the PR review ops (`review-queue`, `address-review`); both repo-wide audits (`repo-review`, `repo-security-review`) with their `repo-*-reviewer` agents; Jira ops (`my-tickets`, `triage`, `related`, `precheck`, `scope` + its `sow-builder` agent, `start-work`, `finish-work`); composers (`from-ticket`, `wrap-up`); repo setup (`map-repo` + its `repo-mapper` agent, mapping a repo's Jira/Confluence/Drive/Bitbucket coordinates into `docs/pell/context.md`, consumed by nine existing commands); the `frontend-router` skill; and the `visual-scratchpad` skill + `/pell:visualize` command (a surface not anticipated in the original build order).
+- **Built:** all four review primitives (`correctness`, `quality`, `security`, `test`) + both composites (`four-pass-review`, `local-review`, each running all four by default; `three-pass-review` survives as a deprecated alias); the PR review ops (`review-queue`, `address-review`); both repo-wide audits (`repo-review`, `repo-security-review`) with their `repo-*-reviewer` agents; Jira ops (`my-tickets`, `triage`, `related`, `precheck`, `scope` + its `sow-builder` agent, `start-work`, `finish-work`); composers (`from-ticket`, `wrap-up`); repo setup (`map-repo` + its `repo-mapper` agent, mapping a repo's Jira/Confluence/Drive/Bitbucket coordinates into `docs/pell/context.md`, consumed by nine existing commands); the `frontend-router` skill; and the `visual-scratchpad` skill + `/pell:visualize` command (a surface not anticipated in the original build order).
 - **Conductor subsystem:** the `coordinate-agents` lead skill, the `fan-and-critic` review-loop skill, the five `autonomous-build*` session skills, and the five `conductor-*` worker agents — a faithful port of Tom Neyland's `conductor`, folded into `pell` (see [`2026-07-13-conductor-port-design.md`](2026-07-13-conductor-port-design.md)). These agents deliberately deviate from §8's JSON-output contract; the exception is documented there.
 - **Not yet built:** `claude-md-init` (§10.6), second-tier composers (e.g. standup, release-notes), and the optional `pell-everything` meta-plugin (§9).
 - **Open work** is tracked in [`2026-05-28-pell-toolkit-improvements-plan.md`](2026-05-28-pell-toolkit-improvements-plan.md).

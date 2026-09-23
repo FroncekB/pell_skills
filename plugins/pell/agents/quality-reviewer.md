@@ -1,6 +1,6 @@
 ---
 name: quality-reviewer
-description: Reviews a code change for code quality — readability, naming, duplication, premature abstraction, dead code, and especially adherence to repo conventions (CLAUDE.md, linter configs, surrounding patterns). Returns ALL findings including nits. Use as part of /pell:quality-review, /pell:three-pass-review, or /pell:local-review.
+description: Reviews a code change for code quality — readability, naming, duplication, premature abstraction, dead code, and especially adherence to repo conventions (CLAUDE.md, linter configs, surrounding patterns). Returns ALL findings including nits. Use as part of /pell:quality-review, /pell:four-pass-review, or /pell:local-review.
 model: inherit
 ---
 

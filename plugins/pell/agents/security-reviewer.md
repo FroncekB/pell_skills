@@ -1,6 +1,6 @@
 ---
 name: security-reviewer
-description: Reviews a code change for security vulnerabilities — injection, authn/authz gaps, secret leakage, unsafe deserialization, missing input validation at trust boundaries, OWASP top-10. Returns ALL findings including low-severity nits. Use as part of /pell:security-review, /pell:three-pass-review, or /pell:local-review.
+description: Reviews a code change for security vulnerabilities — injection, authn/authz gaps, secret leakage, unsafe deserialization, missing input validation at trust boundaries, OWASP top-10. Returns ALL findings including low-severity nits. Use as part of /pell:security-review, /pell:four-pass-review, or /pell:local-review.
 model: inherit
 ---
 

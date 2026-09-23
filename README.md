@@ -32,8 +32,8 @@ Most commands need at least one of these two Atlassian MCP servers connected to 
 
 | Server | Auth | Required for |
 |-|-|-|
-| `atlassian-bitbucket` | API token (Basic auth) | Any PR-mode review (`/pell:correctness-review`, `/pell:quality-review`, `/pell:security-review` against a PR), `/pell:three-pass-review`, `/pell:address-review`, `/pell:review-queue`, future Bitbucket-aware commands |
-| `plugin:atlassian:atlassian` | OAuth | Jira ticket context in `/pell:three-pass-review`, your identity for `/pell:review-queue`, future Jira-ops commands |
+| `atlassian-bitbucket` | API token (Basic auth) | Any PR-mode review (`/pell:correctness-review`, `/pell:quality-review`, `/pell:security-review` against a PR), `/pell:four-pass-review`, `/pell:address-review`, `/pell:review-queue`, future Bitbucket-aware commands |
+| `plugin:atlassian:atlassian` | OAuth | Jira ticket context in `/pell:four-pass-review`, your identity for `/pell:review-queue`, future Jira-ops commands |
 
 ### Setting up the Atlassian MCPs
 
@@ -85,13 +85,13 @@ claude mcp add-json atlassian-bitbucket '{
 
 ## Commands
 
-Twenty-one commands, grouped by where they fall in a ticket's lifecycle — pick up work, review it, audit broadly, ship it. Driving a large build is now the [conductor subsystem](#conductor-subsystem) — a skill family, not a command.
+Twenty-one commands (plus one deprecated alias, `/pell:three-pass-review`), grouped by where they fall in a ticket's lifecycle — pick up work, review it, audit broadly, ship it. Driving a large build is now the [conductor subsystem](#conductor-subsystem) — a skill family, not a command.
 
 | Stage | Commands |
 |-|-|
 | **Repo setup** | [`map-repo`](#pellmap-repo-refresh--verify--with-sow--skip-sow--project-key--url----dry-run----verbose) |
 | **Starting work** | [`my-tickets`](#pellmy-tickets) · [`triage`](#pelltriage-key) · [`related`](#pellrelated-key) · [`precheck`](#pellprecheck-key--idea) · [`scope`](#pellscope-key--project-key) · [`start-work`](#pellstart-work-key) · [`from-ticket`](#pellfrom-ticket-jira-key-freeform-context) |
-| **Reviewing code** | [`correctness-review`](#pellcorrectness-review) · [`quality-review`](#pellquality-review) · [`security-review`](#pellsecurity-review) · [`test-review`](#pelltest-review) · [`local-review`](#pelllocal-review) · [`three-pass-review`](#pellthree-pass-review-pr) · [`address-review`](#pelladdress-review-pr) · [`review-queue`](#pellreview-queue-repo-) |
+| **Reviewing code** | [`correctness-review`](#pellcorrectness-review) · [`quality-review`](#pellquality-review) · [`security-review`](#pellsecurity-review) · [`test-review`](#pelltest-review) · [`local-review`](#pelllocal-review) · [`four-pass-review`](#pellfour-pass-review-pr) · [`address-review`](#pelladdress-review-pr) · [`review-queue`](#pellreview-queue-repo-) |
 | **Auditing a whole repo** | [`repo-review`](#pellrepo-review) · [`repo-security-review`](#pellrepo-security-review) |
 | **Finishing up** | [`finish-work`](#pellfinish-work) · [`wrap-up`](#pellwrap-up-freeform-context) |
 | **Visual scratchpad** | [`visualize`](#pellvisualize-concept--no-watch--watch--stop-watch--stop--clear) |
@@ -293,7 +293,7 @@ Composes the full pre-implementation workflow in one command: fetches the Jira t
 
 ## Reviewing code
 
-The single-dimension reviewers (`correctness`, `quality`, `security`, `test`) share one usage shape and run against either local changes or a Bitbucket PR. The composites (`local-review`, `three-pass-review`) run several at once.
+The single-dimension reviewers (`correctness`, `quality`, `security`, `test`) share one usage shape and run against either local changes or a Bitbucket PR. The composites (`local-review`, `four-pass-review`) run all four at once. Expect four reviewer subagents per composite run, each at the orchestrator's model; pass `skip tests` to drop the test-coverage pass and run three.
 
 ### `/pell:correctness-review`
 
@@ -338,7 +338,7 @@ Single-dimension review for test adequacy. Judges the *tests*, not the productio
 
 ### `/pell:local-review`
 
-Composite — runs the correctness, quality, and security reviewers against local uncommitted changes (add `with tests` for a fourth test-coverage pass). Each reviewer reads `CLAUDE.md` and convention files to ground findings in the repo's actual style. Offers to apply suggested fixes in-place.
+Composite — runs the correctness, quality, security, and test-coverage reviewers against local uncommitted changes (add `skip tests` to drop the test-coverage pass). Each reviewer reads `CLAUDE.md` and convention files to ground findings in the repo's actual style. Offers to apply suggested fixes in-place.
 
 **Usage:**
 
@@ -348,34 +348,36 @@ Composite — runs the correctness, quality, and security reviewers against loca
 /pell:local-review --uncommitted            # unstaged only
 /pell:local-review --range main..HEAD       # changes between two refs
 /pell:local-review src/components/          # restrict to a path
-/pell:local-review with tests               # add the optional test-coverage pass
+/pell:local-review skip tests               # drop the test-coverage pass
 /pell:local-review focus on the new auth module
 ```
 
 **Behavior:**
 
 1. Resolves the diff scope from `$ARGUMENTS`
-2. Dispatches the reviewer agents in parallel — correctness, quality, security, and (opt-in via `with tests`) test-coverage — each discovers CLAUDE.md and conventions on its own
+2. Dispatches the reviewer agents in parallel — correctness, quality, security, and test-coverage (opt out via `skip tests`) — each discovers CLAUDE.md and conventions on its own
 3. Renders a unified report grouped by dimension and severity
-4. Asks which severity threshold to apply as fixes: same selection menu as `/pell:three-pass-review`
+4. Asks which severity threshold to apply as fixes: same selection menu as `/pell:four-pass-review`
 
 **Output:** markdown report + optional in-place file edits. Never commits.
 
-### `/pell:three-pass-review <PR>`
+### `/pell:four-pass-review <PR>`
 
-Composite — runs the correctness, quality, and security reviewers in parallel against a Bitbucket PR with linked Jira context (add `with tests` for a fourth test-coverage pass). Aggregates findings into a unified report. Offers a run-marker comment on the PR — one general comment naming the passes that ran and the per-dimension counts, no verdict — then offers to post each finding as an inline comment.
+Composite — runs the correctness, quality, security, and test-coverage reviewers in parallel against a Bitbucket PR with linked Jira context (add `skip tests` to drop the test-coverage pass). Aggregates findings into a unified report. Offers a run-marker comment on the PR — one general comment naming the passes that ran and the per-dimension counts, no verdict — then offers to post each finding as an inline comment.
+
+`/pell:three-pass-review` still works as a deprecated alias: it prints a rename notice and forwards its arguments to this command. It will be removed in a future release.
 
 **Usage:**
 
 ```
-/pell:three-pass-review vrs_default#42
-/pell:three-pass-review https://bitbucket.org/pellsoftware/vrs_default/pull-requests/42
-/pell:three-pass-review 42                                       # if cwd is the target repo's checkout
-/pell:three-pass-review 42 skip jira                             # don't prompt for Jira if no key found
-/pell:three-pass-review 42 with tests                            # add the optional test-coverage pass
-/pell:three-pass-review 42 use bitbucket                         # fetch surrounding context via MCP instead of local FS
-/pell:three-pass-review 42 skip marker                           # don't offer the run-marker comment
-/pell:three-pass-review 42 --dry-run                             # render everything, post nothing
+/pell:four-pass-review vrs_default#42
+/pell:four-pass-review https://bitbucket.org/pellsoftware/vrs_default/pull-requests/42
+/pell:four-pass-review 42                                       # if cwd is the target repo's checkout
+/pell:four-pass-review 42 skip jira                             # don't prompt for Jira if no key found
+/pell:four-pass-review 42 skip tests                            # drop the test-coverage pass
+/pell:four-pass-review 42 use bitbucket                         # fetch surrounding context via MCP instead of local FS
+/pell:four-pass-review 42 skip marker                           # don't offer the run-marker comment
+/pell:four-pass-review 42 --dry-run                             # render everything, post nothing
 ```
 
 **Behavior:**
@@ -385,7 +387,7 @@ Composite — runs the correctness, quality, and security reviewers in parallel 
 3. Searches PR title, source branch (GitFlow-aware), and description for a Jira key. Prompts the user if none found
 4. Fetches the linked Jira ticket
 5. Detects WIP/draft PRs and asks for confirmation before proceeding
-6. Dispatches the reviewer agents in parallel — correctness, quality, security, and (opt-in via `with tests`) test-coverage
+6. Dispatches the reviewer agents in parallel — correctness, quality, security, and test-coverage (opt out via `skip tests`)
 7. Renders a unified report grouped by dimension and severity
 8. Offers a run-marker comment on the PR, default yes — passes run plus per-dimension counts, no verdict and no finding text. `skip marker` suppresses the offer; `post marker` posts without asking
 9. Asks which severity threshold (if any) to post as inline comments: `blockers-only`, `major+`, `minor+` (default), `all`, `select`, or `no`
@@ -394,7 +396,7 @@ Composite — runs the correctness, quality, and security reviewers in parallel 
 
 ### `/pell:address-review <PR>`
 
-The receiving end of `/pell:three-pass-review`. Pulls the review comments back off one of your Bitbucket PRs so you can triage and respond to each. Lists inline + general comments grouped by file, then walks each through apply-a-fix / reply / skip — reusing `/pell:local-review`'s fix-application discipline. Never commits, never pushes, never resolves threads.
+The receiving end of `/pell:four-pass-review`. Pulls the review comments back off one of your Bitbucket PRs so you can triage and respond to each. Lists inline + general comments grouped by file, then walks each through apply-a-fix / reply / skip — reusing `/pell:local-review`'s fix-application discipline. Never commits, never pushes, never resolves threads.
 
 **Usage:**
 
@@ -413,7 +415,7 @@ The receiving end of `/pell:three-pass-review`. Pulls the review comments back o
 
 1. Resolves the PR identifier + context source
 2. Fetches PR metadata + all comment pages from Bitbucket
-3. Drops deleted/draft comments and `/pell:three-pass-review` run markers; groups the rest by file (inline) plus a General bucket. Default scope is **all comments**, narrowable client-side (`unresolved`, `since last push`, `from <name>`)
+3. Drops deleted/draft comments and `/pell:four-pass-review` run markers; groups the rest by file (inline) plus a General bucket. Default scope is **all comments**, narrowable client-side (`unresolved`, `since last push`, `from <name>`)
 4. Per-comment triage — you drive `fix` / `reply` / `skip` (or a bulk verb like `all fix`)
 5. Applies only concrete, mechanical fixes to the working tree (never weakens tests, never guesses); drafts thread replies for confirmation before posting
 
@@ -442,7 +444,7 @@ Find the open Bitbucket PRs where you're a requested reviewer, then jump straigh
 2. Resolves the repo set — your args, or every repo in the workspace
 3. Queries each repo server-side for OPEN PRs where you're a reviewer (`q=reviewers.account_id`, parallel batches)
 4. Renders a numbered list grouped by repo, oldest-waiting first; drafts marked `[draft]`
-5. Reply with a number to chain into `/pell:three-pass-review` (or `<n> correctness|quality|security|test` for a lighter single-dimension pass)
+5. Reply with a number to chain into `/pell:four-pass-review` (or `<n> correctness|quality|security|test` for a lighter single-dimension pass)
 
 **Output:** numbered PR list. **Side-effects:** read-only except the chained review you pick (plus the account-id cache write). Needs both the Bitbucket MCP and the Atlassian OAuth connection (for identity).
 
@@ -531,7 +533,7 @@ Closes out a branch in one command: runs `/pell:local-review` on the working tre
 
 **Side effects:** all delegated to the dispatched stages, with one exception: the commit gate between review and finish-work is gated on a y/n prompt (or pre-auth via `auto-commit`). `wrap-up` itself never mutates Jira, pushes, opens PRs, or modifies the working tree beyond the staged commit.
 
-**Skip flags:** `skip review` / `already reviewed` / `no review` skips Stage A.
+**Skip flags:** `skip review` / `already reviewed` / `no review` skips Stage A. `skip tests` is forwarded to Stage A and drops the test-coverage pass there.
 
 ---
 
@@ -602,7 +604,7 @@ The full architecture spec lives at [`docs/specs/2026-05-27-pell-skills-architec
 - **Skills as building blocks.** Single-dimension reviewers are independent commands AND composable agents. Composites are thin orchestrators on top
 - **Reviewers surface everything.** No pre-filtering. Findings come with severity; the consumer (a human, or an orchestrating composite) decides what's actionable
 - **Read-only by default.** Every side effect — modifying files, posting comments, transitioning tickets, creating branches — is gated on a `(y/n)` prompt that names exactly what will change
-- **Freeform context wins.** `$ARGUMENTS` is parsed as natural language. `/pell:three-pass-review 42 use bitbucket not LFS` works because the command reads intent, not flags
+- **Freeform context wins.** `$ARGUMENTS` is parsed as natural language. `/pell:four-pass-review 42 use bitbucket not LFS` works because the command reads intent, not flags
 - **Notify, don't force, for external dependencies.** When a Pell skill wants to invoke `superpowers:brainstorming` or `frontend-design:frontend-design` and they're not installed, the user is told — never forced
 - **Local FS by default for context.** Reviewers assume you're working in a checkout of the target repo. The `use bitbucket` override flips to remote fetch when needed
 
