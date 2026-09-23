@@ -7,7 +7,7 @@
 
 ## Purpose
 
-`/pell:groom` walks a set of Jira tickets, reads the code each one would touch, and flags the places where *the code makes the ticket harder than it reads*: a second entry point the ticket never mentions, a validation rule it contradicts, a report or integration it silently ripples into, another ticket in the same batch that rewrites the same method a different way. It drafts one comment per ticket — plain-language questions for the reporter, then code notes for whoever picks it up — and posts the ones the user selects.
+`/pell:groom` walks a set of Jira tickets, reads the code each one would touch, and flags the places where *the code makes the ticket harder than it reads*: a second entry point the ticket never mentions, a validation rule it contradicts, a report or integration it silently ripples into, another ticket in the same batch that rewrites the same method a different way. It also reads each ticket as a technical architect (could existing code be extended instead of building something new?) and as a business analyst (which business case — roles, notifications, audit, refunds, existing customers — did the ticket never consider?). It drafts one comment per ticket — plain-language questions for the reporter, suggested approaches for the team, then code notes for whoever picks it up — and posts the ones the user selects.
 
 It complements `/pell:scope` rather than overlapping it. Scope reads a ticket against the **project** (SOW placement, acceptance criteria, sibling overlap from ticket text). Groom reads a batch of tickets against the **code**. The groom rubric deliberately omits every check scope already makes, and the report footer points there.
 
@@ -208,12 +208,18 @@ neighbors: <JSON array of {key, summary, description, shared: [area ids and file
 | `code-conflict` | The ticket asks for behavior existing code contradicts: a validation, a constant, a business rule elsewhere, an enum it does not account for |
 | `blast-radius` | A consumer the change ripples into: report, export, integration, job, public API, shared component, a state transition other flows depend on |
 | `collision` | Against `neighbors`: contradictory requirements, an ordering dependency, the same method rewritten two ways |
+| `approach` | A better way to build it in this codebase, read as a technical architect: an existing module, service, or component that already does part of what the ticket asks and could be extended instead of building something new; a pattern the codebase already uses that the ticket's implied design would diverge from; a simpler path with less blast radius |
+| `business-gap` | A business requirement the ticket does not address, whether or not the code shows it, read as a business analyst: who may do this (roles, approvals), who is told (notifications), what is recorded (audit trail, history), reporting and exports, existing customers or records, reversal paths (cancel, refund, undo), dates and time zones, money and rounding, compliance or retention |
 
-When `map_slice` is empty the auditor locates the code itself — the fallback when a mapper failed. When `unmapped_reason` says greenfield, report one `requirement-gap` finding at `minor` noting no existing code was found, and look for adjacent code the new feature will have to integrate with.
+When `map_slice` is empty the auditor locates the code itself — the fallback when a mapper failed. When `unmapped_reason` says greenfield, report one `requirement-gap` finding at `minor` noting no existing code was found, look for adjacent code the new feature will have to integrate with, and look for existing code that already does part of what the ticket asks — the strongest source of `approach` findings.
 
-**Out of rubric:** description quality, acceptance criteria, epic placement, sibling overlap from ticket text. Those are `/pell:scope`.
+**Out of rubric:** description quality, acceptance criteria, epic placement, sibling overlap from ticket text. Those are `/pell:scope`. A `business-gap` is not a missing-acceptance-criteria finding: scope asks whether criteria exist; groom asks which business case the ticket never considered.
 
-**Grounding rule.** Every finding cites code the auditor read in this run — `file:line` in `evidence`. The map is a pointer, not evidence. A suspicion it could not ground in code is not a finding. The greenfield finding is the one exception; its evidence is the searches that came back empty.
+**Grounding rule.** Every finding cites code the auditor read in this run — `file:line` in `evidence`. The map is a pointer, not evidence. A suspicion it could not ground in code is not a finding. Two exceptions:
+- The greenfield finding; its evidence is the searches that came back empty.
+- `business-gap`, whose evidence may instead be a quoted fragment of the ticket or a related ticket that the missing requirement follows from — for example `ticket: "Customers can cancel an order" — says nothing about refunds`. A business gap needs that anchor in this ticket or this code; a generic checklist item with no anchor is not a finding.
+
+An `approach` finding always cites the existing code it proposes extending or reusing.
 
 **Severity** (correctness scale):
 
@@ -223,6 +229,8 @@ When `map_slice` is empty the auditor locates the code itself — the fallback w
 | `major` | Likely rework or a shipped bug if nobody answers it |
 | `minor` | The developer should know; resolvable without the reporter |
 | `nit` | FYI |
+
+`approach` findings are never `blocker`: `major` when the ticket as written would duplicate a capability the codebase already has, otherwise `minor`. `business-gap` uses the full scale.
 
 **Thread status.** For each finding: `new`, `asked` (raised on the thread, unanswered), or `answered` (raised and resolved on the thread). Report every finding regardless — the orchestrator decides what reaches the comment. A prior groom comment ends with `Posted from /pell:groom.`; treat its questions as `asked` unless a later comment answers them.
 
@@ -237,6 +245,7 @@ When `map_slice` is empty the auditor locates the code itself — the fallback w
     "evidence": ["Validators/OrderValidator.cs:31 MaxLineItems = 50", "Integrations/Netsuite/OrderExport.cs:12 same cap"],
     "question": "Should the 50-item limit rise for everyone, or only this customer? The NetSuite export enforces the same cap.",
     "code_note": "Cap duplicated in OrderValidator.cs:31 and OrderExport.cs:12; NetSuite may reject >50 server-side.",
+    "suggestion": null,
     "related_tickets": [],
     "thread_status": "new"
   }],
@@ -246,7 +255,13 @@ When `map_slice` is empty the auditor locates the code itself — the fallback w
 }
 ```
 
-`question` is required for `blocker` and `major`, plain language, no file paths, answerable by the reporter. `code_note` is required at every severity and may cite paths. `related_tickets` is required for `collision`.
+`category` is one of `requirement-gap`, `code-conflict`, `blast-radius`, `collision`, `approach`, `business-gap`.
+
+Field rules:
+- `question` — plain language, no file paths, answerable by the reporter. Required for `blocker` and `major`, and for `business-gap` at every severity. Optional for `approach`.
+- `suggestion` — plain language, may name components but no file paths, written for the team rather than the reporter (for example "Extend the existing order notification service rather than building a new notifications module"). Required for `approach`; `null` otherwise.
+- `code_note` — may cite paths. Required at every severity, except a `business-gap` with no code touchpoint, where it is `""`.
+- `related_tickets` — required for `collision`.
 
 ## 9. Merge, verdicts, drafts (inline)
 
@@ -262,10 +277,13 @@ When `map_slice` is empty the auditor locates the code itself — the fallback w
 Pre-work code check on this ticket. A few questions before it starts:
 
 Questions
-1. <question from each new blocker, then each new major>
+1. <question from each new blocker, then each new major, then each new minor business-gap>
+
+Suggested approach
+- <suggestion from each new approach finding>
 
 Code notes (for whoever picks this up)
-- <code_note from each new blocker, major, and minor>
+- <non-empty code_note from each new blocker, major, and minor>
 - Overlaps with <KEY>: <collision code_note>
 
 Generated by Claude (AI) from a read of the code on <branch> @ <head>. Verify before acting.
@@ -274,7 +292,7 @@ Posted from /pell:groom.
 
 The disclaimer line appears on every draft, directly above the marker. `Posted from /pell:groom.` stays the last line — auditors match it to recognize prior groom comments on a re-run.
 
-Omit the Questions section when there are no new blocker/major findings, and open with `Pre-work code check on this ticket. Notes for whoever picks it up:` instead. Omit the draft entirely when both sections would be empty. Nits never reach the comment. No severities, no verdict in the comment.
+Omit any section that would be empty. When the Questions section is omitted, open with `Pre-work code check on this ticket. Notes for whoever picks it up:` instead. Omit the draft entirely when all three sections would be empty. Nits never reach the comment, in any category. No severities, no verdict in the comment.
 
 ## 10. Render
 
@@ -397,6 +415,7 @@ Nothing else. No transitions, field edits, other link types, file writes, or com
 | Code source | Local checkout only | Matches the reviewer default; a Bitbucket source is deferred |
 | Name | `groom` | Backlog grooming is the moment it serves |
 | Linking (added mid-build) | Offer `Relates` links for collision pairs, gated, after comments | Makes collisions visible on the Jira board, not only in comment text; `Blocks` needs a direction auditors cannot reliably give |
+| Architect and business lenses (added mid-build) | New `approach` and `business-gap` categories; a `Suggested approach` comment section | The team wanted "extend x, y, z instead of a new module" suggestions and missed business requirements, not only code-evidenced gaps. `business-gap` may ground in quoted ticket text, so it relaxes the code-only grounding rule for that one category and always carries a question |
 | AI disclaimer (added mid-build) | One line above the marker on every comment | Readers should know the comment is machine-generated and verify it; the marker stays last so re-run detection is unchanged |
 
 ## 16. Delivery checklist
@@ -404,7 +423,7 @@ Nothing else. No transitions, field edits, other link types, file writes, or com
 - Verify live via ToolSearch before writing the agents: `listJiraIssueComments` input shape and paging on `plugin:atlassian:atlassian`; the classic `getJiraIssue` `comment` field; `addOrEditJiraIssueComment` parameters; the Sprint field name under `view: "evidence"`; the issue-link tools (`createJiraIssueLink` via `executeWrite` on the plugin server, `createIssueLink` on the classic connection) and that the site has a `Relates` link type
 - `plugins/pell/commands/groom.md` — new command (Sections 1–6, 7.1, 7.3, 9–13, including 11.1)
 - `plugins/pell/agents/ticket-code-mapper.md` — new agent (Section 7.2)
-- `plugins/pell/agents/ticket-code-auditor.md` — new agent (Section 8)
+- `plugins/pell/agents/ticket-code-auditor.md` — new agent (Section 8), including the `approach` and `business-gap` categories and the `suggestion` field
 - `plugins/pell/.claude-plugin/plugin.json` — minor bump to `0.20.0` (main is `0.18.0`; `0.19.0` is taken by the in-flight `four-pass-review` branch)
 - `plugins/pell/README.md` — command list and agent list
 - `README.md` — commands table and count, `### /pell:groom` section, sub-agent list
