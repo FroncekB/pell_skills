@@ -23,13 +23,13 @@ Work through `$ARGUMENTS` in this order. Strip each recognized piece before the 
 
 **Mode, from what is left:**
 
-1. `jql "<query>"` (single or double quotes) → `mode = jql`, `jql = <captured text>`. Strip the whole token before the checks below — a JQL string contains keys that would otherwise match.
-2. Otherwise `next sprint` → `mode = sprint`, `sprint_target = next`; otherwise `sprint` → `mode = sprint`, `sprint_target = active`.
-3. Otherwise every match of `\b[A-Z][A-Z0-9]+-\d+\b` → `keys` (a list). One or more matches → `mode = keys` for now; Step 5 fetches them and resolves this to `epic` (a lone Epic) or `key_list` (expanding any Epics among several).
-4. Otherwise the first match of `\b[A-Z][A-Z0-9]+\b` → `project_key`, `mode = backlog`.
-5. Otherwise → `mode = menu`.
+1. `jql "<query>"` (single or double quotes) → `mode = jql`, `jql = <captured text>`. Strip the whole token — a JQL string contains keys that would otherwise match. Mode resolution stops here; skip the rest.
+2. Otherwise `next sprint` → `mode = sprint`, `sprint_target = next`; otherwise `sprint` → `mode = sprint`, `sprint_target = active`. Strip the matched phrase either way, then keep going — the sprint keyword only fixes `sprint_target`; it does not consume the project key, so `RRS next sprint` must still yield `project_key = RRS` in the next step, not fall through to the branch/context default.
+3. Every match of `\b[A-Z][A-Z0-9]+-\d+\b` in what's left → `keys` (a list).
+4. Otherwise, only when step 3 found no keys, the first match of `\b[A-Z][A-Z0-9]+\b` → `project_key`.
+5. When `mode` is still unset (step 2 found no sprint keyword): `keys` non-empty → `mode = keys` for now — Step 5 fetches them and resolves this to `epic` (a lone Epic) or `key_list` (expanding any Epics among several); otherwise `project_key` set → `mode = backlog`; otherwise → `mode = menu`.
 
-Keys win over a bare project token — check them first. Sprint mode with no `project_key` left in the text resolves the project the same way as the menu, below. No keys, no project key, no JQL, no sprint word → the menu.
+Keys win over a bare project token — step 4 only runs when step 3 found none. Sprint mode (`mode` already set by step 2) uses whatever `project_key` step 4 found in the remaining text; when step 4 found none, resolve the project the same way as the menu, below. No keys, no project key, no JQL, no sprint word → the menu.
 
 **Resolving a project key without one in the text** (sprint mode and the menu): `docs/pell/context.md`'s `project_key` or default project, else the project prefix of the branch key (`git branch --show-current`, matched against `\b[A-Z][A-Z0-9]+-\d+\b`), else ask. Step 3 loads `docs/pell/context.md` formally for the rest of the run; reading it here too, if it's needed this early, is fine.
 
@@ -87,7 +87,7 @@ Collect whatever prints into `preflight_lines` for the report header.
 | Mode | JQL |
 |-|-|
 | `epic` | `parent = <keys[0]> AND statusCategory != Done AND issuetype not in subTaskIssueTypes() ORDER BY Rank ASC` |
-| `keys` (key list) | `key in (<keys, comma-separated>)` |
+| `keys` (key list) | `key in (<keys, comma-separated>) ORDER BY Rank ASC` |
 | `sprint` (active) | `project = <project_key> AND sprint in openSprints() AND statusCategory != Done AND issuetype not in subTaskIssueTypes() AND issuetype != Epic ORDER BY Rank ASC` |
 | `sprint` (next) | `project = <project_key> AND sprint = "<sprint name>" AND statusCategory != Done AND issuetype not in subTaskIssueTypes() AND issuetype != Epic ORDER BY Rank ASC` |
 | `backlog` | `project = <project_key> AND statusCategory = "To Do" AND issuetype not in subTaskIssueTypes() AND issuetype != Epic ORDER BY Rank ASC` |
@@ -97,7 +97,7 @@ Collect whatever prints into `preflight_lines` for the report header.
 
 **Fetch.** `searchJiraIssuesUsingJql` with `cloudId`, the mode's JQL, `maxResults: 100`, `view: "full"`, `responseContentFormat: "markdown"`, `fields: ["summary", "description", "status", "issuetype", "priority", "labels", "components", "parent", "issuelinks"]`. `view: "full"` is required — the default `compact` view drops `parent`, `issuetype`, and `issuelinks` even when listed. Page with `nextPageToken` until `isLast`; unless `all`, stop requesting further pages once more than 25 tickets have accumulated. `total_found` = the number of tickets accumulated when paging stops. `tickets` = the first 25 of them in query order, unless `all` (then all of them), each reduced to `{key, summary, description, type: issuetype.name, status: status.name, priority: priority.name or null, labels, components, parent, issuelinks}`.
 
-**Keys path** (`mode` starts as `keys`). Run the Fetch above with JQL `key in (<keys>)`.
+**Keys path** (`mode` starts as `keys`). Run the Fetch above with JQL `key in (<keys>) ORDER BY Rank ASC`.
 - Exactly one key, and its `type = "Epic"` → discard this result; `mode = epic`; rerun the Fetch with the `epic` JQL above, using that key as `<keys[0]>`.
 - Otherwise → `mode = key_list`. For each returned ticket whose `type = "Epic"`, run one more Fetch with the `epic` JQL for that key and fold its tickets into the set in place of the Epic itself — an Epic is never graded, only its children are.
 
