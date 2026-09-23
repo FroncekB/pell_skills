@@ -85,12 +85,12 @@ claude mcp add-json atlassian-bitbucket '{
 
 ## Commands
 
-Twenty-one commands (plus one deprecated alias, `/pell:three-pass-review`), grouped by where they fall in a ticket's lifecycle — pick up work, review it, audit broadly, ship it. Driving a large build is now the [conductor subsystem](#conductor-subsystem) — a skill family, not a command.
+Twenty-two commands (plus one deprecated alias, `/pell:three-pass-review`), grouped by where they fall in a ticket's lifecycle — pick up work, review it, audit broadly, ship it. Driving a large build is now the [conductor subsystem](#conductor-subsystem) — a skill family, not a command.
 
 | Stage | Commands |
 |-|-|
 | **Repo setup** | [`map-repo`](#pellmap-repo-refresh--verify--with-sow--skip-sow--project-key--url----dry-run----verbose) |
-| **Starting work** | [`my-tickets`](#pellmy-tickets) · [`triage`](#pelltriage-key) · [`related`](#pellrelated-key) · [`precheck`](#pellprecheck-key--idea) · [`scope`](#pellscope-key--project-key) · [`start-work`](#pellstart-work-key) · [`from-ticket`](#pellfrom-ticket-jira-key-freeform-context) |
+| **Starting work** | [`my-tickets`](#pellmy-tickets) · [`triage`](#pelltriage-key) · [`related`](#pellrelated-key) · [`precheck`](#pellprecheck-key--idea) · [`scope`](#pellscope-key--project-key) · [`groom`](#pellgroom-epic-key--keys--project-key--jql) · [`start-work`](#pellstart-work-key) · [`from-ticket`](#pellfrom-ticket-jira-key-freeform-context) |
 | **Reviewing code** | [`correctness-review`](#pellcorrectness-review) · [`quality-review`](#pellquality-review) · [`security-review`](#pellsecurity-review) · [`test-review`](#pelltest-review) · [`local-review`](#pelllocal-review) · [`four-pass-review`](#pellfour-pass-review-pr) · [`address-review`](#pelladdress-review-pr) · [`review-queue`](#pellreview-queue-repo-) |
 | **Auditing a whole repo** | [`repo-review`](#pellrepo-review) · [`repo-security-review`](#pellrepo-security-review) |
 | **Finishing up** | [`finish-work`](#pellfinish-work) · [`wrap-up`](#pellwrap-up-freeform-context) |
@@ -243,6 +243,26 @@ Before anyone starts a ticket, see where it fits in the whole project and whethe
 **Output:** "Where it fits" (home epic, scope statement, sibling status counts, cross-epic dependencies, scope docs), then findings by severity (`blocker / major / minor / nit`) and a verdict. A drift line reports how many tickets changed since the cache was built; after 14 days the command offers a rebuild rather than running one unasked.
 
 **Side-effects:** building the SOW (`(y/n)`-gated before the expensive Jira walk starts; the command first searches Confluence and Google Drive for an existing SOW and offers to use it), writing the SOW cache file (`(y/n)`-gated; never committed for you) and, when the verdict isn't `Ready`, a comment on the ticket phrased as numbered questions to the reporter (`(y/n)`-gated, full text shown first). Never transitions, edits fields, or links issues. `/pell:from-ticket` runs this check automatically with the comment suppressed; pass `skip scope` to bypass.
+
+### `/pell:groom [EPIC-KEY | KEYS | PROJECT-KEY | jql]`
+
+Before a sprint starts, check a batch of tickets against the code they will touch. `groom` resolves a ticket set — an epic's open children, the active or next sprint, a JQL query or key list, or the backlog — maps the code those tickets reach (entry points, rules, state, consumers), then audits each ticket for **requirement gaps** (a case the code has that the ticket skips), **code conflicts** (the ticket asks for something existing code contradicts), **blast radius** (reports, integrations, jobs, and shared components the change ripples into), and **collisions** with other tickets in the batch. It also reviews as a technical architect — **better approaches**, such as extending an existing service instead of building a new module — and as a business analyst — **missed business requirements** such as roles, notifications, audit history, refunds, or existing customers. Code findings cite `file:line`; business gaps quote the ticket text they follow from. Verdict per ticket is **Ready / Ready with questions / Not ready**.
+
+**Usage:**
+
+```
+/pell:groom RRS-500                           # an epic's open children
+/pell:groom RRS sprint                        # the active sprint (or: next sprint)
+/pell:groom RRS                               # the backlog, top 25 by rank ("all" lifts the cap)
+/pell:groom jql "project = RRS AND labels = checkout"
+/pell:groom RRS-12 RRS-20                     # specific tickets
+/pell:groom RRS-500 --dry-run                 # full report, never offers to post
+/pell:groom                                   # menu of the four ticket sets
+```
+
+**Output:** a summary table (verdict and finding counts per ticket, collisions), then per ticket: findings by severity (`blocker / major / minor / nit`) with `file:line` evidence, and a draft comment split into plain-language **Questions** for the reporter, a **Suggested approach** for the team, and **Code notes** for whoever picks it up. Anything already raised on the ticket's comment thread is not repeated — including every question, suggested approach, code note, and overlap an earlier `groom` comment posted — so a re-run adds only what is new.
+
+**Side-effects:** after the full report renders, Jira comments (`Post to which? (all / 1,4,7 / none)`) and `relates to` links between collided tickets that aren't already linked (`Link which? (all / 1,2 / none)`). Every comment carries a line saying Claude generated it, directly above the `Posted from /pell:groom.` marker that ends it. Runs of more than five tickets are `(y/n)`-gated before any agent starts, with the agent count stated. Never transitions, edits fields, or creates other link types, and writes no file beyond caching the Jira cloud id in `~/.claude/pell-config.json`, as `/pell:scope` does. Reads the local checkout — run it from the target repo; findings reflect the checked-out branch. For description and acceptance-criteria readiness, use `/pell:scope`.
 
 ### `/pell:start-work <KEY>`
 
@@ -592,6 +612,8 @@ The reviewers are also exposed as composable agents — any current or future co
 | Repo quality reviewer | `repo-quality-reviewer` | Same shape, with optional `also_in` for cross-file findings within a chunk |
 | Repo security reviewer | `repo-security-reviewer` | Same shape |
 | Repo mapper | `repo-mapper` | `{coordinates, low_confidence, gaps, summary}` — not findings; produces the repo's Jira/Confluence/Drive/Bitbucket coordinates, not a review |
+| Ticket code mapper | `ticket-code-mapper` | `{areas, unmapped, summary}` — not findings; maps the code a cluster of tickets touches, for `/pell:groom` |
+| Ticket code auditor | `ticket-code-auditor` | `{findings: [{category, severity, title, evidence, question, code_note, suggestion, related_tickets, thread_status}], touched, thread_read, thread_overlaps, summary}` |
 
 This is the foundation of the workflow composers: commands like `/pell:wrap-up` dispatch these without re-implementing review logic.
 
