@@ -51,7 +51,7 @@ If the call returns 404 → exit with: "`<ticket_key>` doesn't exist in Jira (or
 
 ## Step 5 — Fetch remote links
 
-Call `mcp__plugin_atlassian_atlassian__getJiraIssueRemoteIssueLinks` with:
+The tool differs by connection shape — name both, by role, and use whichever the session exposes: `listJiraIssueRemoteIssueLinks` on `plugin:atlassian:atlassian`, which is not a primary tool there — reach it through `discover`, then run `executeRead({name: "listJiraIssueRemoteIssueLinks", cloudId, inputs: {issueIdOrKey: ticket_key}})` with `cloudId` top-level, never inside `inputs`; `getJiraIssueRemoteIssueLinks` on the classic connection, called directly. Either way the arguments are:
 - `cloudId`: from Step 2
 - `issueIdOrKey`: `ticket_key`
 
@@ -111,7 +111,7 @@ If the list is empty, render: `### Linked Issues\n_None._`
 - ...
 ```
 
-From `getJiraIssueRemoteIssueLinks` response. Each entry has `object.title`, `object.url`, `application.name`. If empty, render: `### External Links\n_None._`
+From the Step 5 remote-links response. Each entry has `object.title`, `object.url`, `application.name`. If empty, render: `### External Links\n_None._`
 
 ```
 ### Bitbucket PRs

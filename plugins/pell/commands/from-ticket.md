@@ -48,7 +48,7 @@ Read `~/.claude/pell-config.json` (treat missing as `{}`).
    - `fields`: `["summary", "description", "status", "issuetype", "priority", "assignee", "reporter", "labels", "issuelinks", "subtasks", "parent"]`
    - `responseContentFormat`: `"markdown"`
 
-2. `mcp__plugin_atlassian_atlassian__getJiraIssueRemoteIssueLinks` with `cloudId` and `issueIdOrKey: <KEY>`.
+2. The ticket's remote issue links. The tool differs by connection shape — name both, by role, and use whichever the session exposes: `listJiraIssueRemoteIssueLinks` on `plugin:atlassian:atlassian`, which is not a primary tool there — reach it through `discover`, then run `executeRead({name: "listJiraIssueRemoteIssueLinks", cloudId, inputs: {issueIdOrKey: <KEY>}})` with `cloudId` top-level, never inside `inputs`; `getJiraIssueRemoteIssueLinks` on the classic connection, called directly with `cloudId` and `issueIdOrKey: <KEY>`.
 
 **Failure handling:**
 - Ticket 404 → exit: "`<KEY>` doesn't exist in Jira (or you don't have access)."

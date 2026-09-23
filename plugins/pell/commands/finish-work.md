@@ -177,9 +177,9 @@ If `$ARGUMENTS` contained `--reset`, clear `pell-config.json:jira.transitions[<p
 Look up `pell-config.json:jira.transitions[<projectKey>].in_review`:
 
 - **Cached and the ticket's current `status.name` matches it (case-insensitive)** → skip Step 8a entirely. Print: "Ticket already in `<status.name>` — skipping transition."
-- **Cached but the ticket is NOT in that status** → use the cached transition name. Skip discovery.
+- **Cached but the ticket is NOT in that status** → use the cached transition name. Run discovery step 1 below to fetch the live `{id, name}` list — the transition call needs a live `id`, and the spelling check below matches against this list — then skip steps 2–6. If the cached name matches no live name, even case-insensitively or through the recorded spelling below, the cache is stale: print `Cached transition <name> is not available on <KEY> — choosing again.` and run steps 2–6 against the list you just fetched.
 - **Not cached** → run discovery:
-  1. Call `mcp__plugin_atlassian_atlassian__getTransitionsForJiraIssue` with `cloudId` and `issueIdOrKey: <KEY>`. Capture `{id, name}` for each transition
+  1. Fetch the live transitions. The tool differs by connection shape — name both, by role, and use whichever the session exposes: `listJiraIssueTransitions` on `plugin:atlassian:atlassian`, which is not a primary tool there — reach it through `discover`, then run `executeRead({name: "listJiraIssueTransitions", cloudId, inputs: {issueIdOrKey: <KEY>}})` with `cloudId` top-level, never inside `inputs`; `getTransitionsForJiraIssue` on the classic connection, called directly with `cloudId` and `issueIdOrKey: <KEY>`. Capture `{id, name}` for each transition
   2. Score candidates — favor names containing (case-insensitive) any of: `in review`, `code review`, `review`, `ready for review`, `qa`, `testing`. Push these to the top of the list
   3. Filter out names that match (case-insensitive) any of: `done`, `closed`, `resolved`, `won't do`, `wont do`, `cancelled`, `canceled`, `rejected`, `to do`, `backlog`, `in progress`. None of these are "in review" candidates
   4. If 0 candidates remain → exit with: "No 'in review' transitions available for `<KEY>`. Available transitions: `<comma-separated list of all names from the unfiltered response>`. Pass one explicitly with `move it to <name>` to bypass discovery."
@@ -223,7 +223,7 @@ Otherwise ask:
 
 > Want me to add a comment to `<KEY>` with the PR link?
 
-On `y`, call `mcp__plugin_atlassian_atlassian__addCommentToJiraIssue` with:
+On `y`, post the comment. The tool differs by connection shape — name both, by role, and use whichever the session exposes: `mcp__plugin_atlassian_atlassian__addOrEditJiraIssueComment` on `plugin:atlassian:atlassian` (omit `commentId` — with it the tool edits an existing comment instead of adding one); `addCommentToJiraIssue` on the classic connection. Both take:
 - `cloudId`
 - `issueIdOrKey`: `<KEY>`
 - `commentBody`: `PR opened: <PR URL>`
