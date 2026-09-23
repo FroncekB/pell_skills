@@ -336,7 +336,6 @@ Point the user at `/pell:scope <KEY>` for description and acceptance-criteria re
 - Comment bodies containing @mentions come back as HTML (`appliedContentFormat: "html"`) even when markdown is requested; auditors read either format.
 - Strip modifiers and the `jql "..."` string before key detection — `TODO`, `SOW`, and keys inside JQL would otherwise match.
 - Every JQL call passes `view: "full"` (or `"evidence"` for the next-sprint grouping). The default `compact` view silently drops `parent`, `issuetype`, and `issuelinks`.
-- Comments and the comment-post tool differ between Atlassian connection shapes; name both per role, as map-repo §5.0 does for its collection operations.
+- Comments and the comment-post tool differ between Atlassian connection shapes; name both per role.
 - Dispatch each phase's agents in a single message per batch so they run concurrently: up to 4 mappers, up to 6 auditors.
 - Say what is happening before each phase (`Mapping 4 clusters...`, `Auditing 25 tickets...`); do not sit silent through a long run.
-- Both agents start at `model: inherit`. Per `CLAUDE.md`'s mechanical-agent exception, reconsider pinning `ticket-code-mapper` to Sonnet only after spot-checking real runs; the auditor makes judgment calls and stays `inherit`.
