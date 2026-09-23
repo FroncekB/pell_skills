@@ -1,9 +1,9 @@
 ---
-description: Walk a set of Jira tickets (an epic's open children, a sprint, a JQL query or key list, or the backlog), map the code they touch, and flag requirement gaps, code conflicts, blast radius, and cross-ticket collisions. Renders every draft comment first, then posts only to the tickets you pick and offers relates-to links between collided tickets. Read-only until then.
+description: Walk a set of Jira tickets (an epic's open children, a sprint, a JQL query or key list, or the backlog), map the code they touch, and review each as a technical architect and business analyst — requirement gaps, code conflicts, blast radius, cross-ticket collisions, better approaches, and missed business requirements. Renders every draft comment first, then posts only to the tickets you pick and offers relates-to links between collided tickets. Read-only until then.
 argument-hint: "[EPIC-KEY | KEY... | PROJECT-KEY [sprint | next sprint] | jql \"<query>\"] [all | skip collisions | --dry-run | --verbose]"
 ---
 
-You are running **`/pell:groom`**. Walk a set of Jira tickets, read the code each one would touch, and flag where the code makes the ticket harder than it reads — a second entry point the ticket never mentions, a validation rule it contradicts, a report or integration it silently ripples into, another ticket in the same batch that rewrites the same method a different way. Draft one comment per ticket — plain-language questions for the reporter, then code notes for whoever picks it up — and post only the ones selected. Read-only against Jira and the repo: the only writes are Jira comments to the tickets selected and `Relates` links between the collision pairs selected, both offered after the full report renders; `--dry-run` suppresses both offers.
+You are running **`/pell:groom`**. Walk a set of Jira tickets, read the code each one would touch, and flag where the code makes the ticket harder than it reads — a second entry point the ticket never mentions, a validation rule it contradicts, a report or integration it silently ripples into, another ticket in the same batch that rewrites the same method a different way. It also reads each ticket as a technical architect and a business analyst, surfacing better approaches the codebase already supports and business requirements the ticket never considered. Draft one comment per ticket — plain-language questions for the reporter, suggested approaches for the team, then code notes for whoever picks it up — and post only the ones selected. Read-only against Jira and the repo: the only writes are Jira comments to the tickets selected and `Relates` links between the collision pairs selected, both offered after the full report renders; `--dry-run` suppresses both offers.
 
 The user passed: `$ARGUMENTS`
 
@@ -134,3 +134,141 @@ Proceed? (y/n)
 `<cap note>` = ` (capped at 25 by rank; say "all" for every one)` when `tickets` was capped (`total_found > len(tickets)`); omit it (and the parenthesis) otherwise.
 
 On `n`, exit: `Not run.`
+
+## Step 8 — Map the code
+
+Print `Mapping <n> cluster(s)...` (`n = len(clusters)`).
+
+For each cluster, build its dispatch `tickets` array as `{key, summary, description, components, labels}` from that cluster's entries in `tickets`. Jira returns `components` as objects (`{name, id, ...}`); for this payload only, reduce `components` and `labels` to plain arrays of their name strings — the mapper never needs the ids.
+
+Dispatch one `ticket-code-mapper` agent per cluster via the Agent tool (`subagent_type="ticket-code-mapper"`), all agents for a batch of up to 4 clusters in a single message so they run concurrently; a fifth cluster and beyond wait for the next batch. Dispatch prompt, labeled lines:
+
+```
+repo_root: <repo_root>
+branch: <branch> @ <head>
+tickets: <JSON array of {key, summary, description, components, labels} for this cluster>
+```
+
+Parse the trailing JSON from each agent's response. On failure or unparseable JSON, print `Mapping failed for <keys>: <error> — auditors will locate code themselves.` (`<keys>` = that cluster's ticket keys, comma-separated) and treat the cluster's result as `{areas: [], unmapped: []}` — its tickets carry an empty map slice into Step 10 and each auditor locates the code itself.
+
+## Step 9 — Merge the map and find collision candidates
+
+Concatenate every cluster's `areas` and `unmapped` from Step 8 into one merged map. Namespace each area's `id` by its cluster (`c<n>/<id>`, `n` = the cluster's 1-based position in `clusters`) so two mappers' ids never collide.
+
+Build `file_index: file → set(tickets)` from every area's `files` plus the file part of each `entry_points` and `rules` entry. A file is **broad** when the run has at least 6 tickets and the file maps to more than half of them (a DbContext, a base controller); broad files stay in the index but do not create candidates on their own.
+
+**Collision candidates** — unordered ticket pairs that share an area id or a non-broad file. For each ticket, keep at most 5 neighbors, those sharing the most files first. `skip_collisions` → no candidates.
+
+When `verbose`, print the merged map.
+
+## Step 10 — Audit each ticket
+
+Print `Auditing <n> ticket(s)...` (`n = len(tickets)`).
+
+Dispatch one `ticket-code-auditor` agent per ticket via the Agent tool (`subagent_type="ticket-code-auditor"`), all agents for a batch of up to 6 tickets in a single message so they run concurrently. Dispatch prompt, labeled lines:
+
+```
+cloudId: <cloudId>
+repo_root: <repo_root>
+branch: <branch> @ <head>
+ticket: <JSON — key, summary, description, type, status, labels, components, parent {key, summary}, issuelinks>
+map_slice: <JSON array of the full area objects (from Step 9's merged map) that list this ticket; [] if none>
+unmapped_reason: <this ticket's reason from the merged unmapped list, or none>
+neighbors: <JSON array of {key, summary, description, shared: [area ids and files]} for this ticket's collision candidates; [] under skip_collisions>
+```
+
+`ticket` is this ticket's own entry from `tickets` (Step 5's shape), unreduced — unlike Step 8's mapper payload, `components` and `labels` pass through as Jira returned them.
+
+Parse the trailing JSON from each agent's response. On failure or unparseable JSON, that ticket's verdict is `Not assessed: <error>`, with no draft — it still gets a table row and a `#`, but no findings sections.
+
+When `verbose`, print each auditor's `summary`.
+
+## Step 11 — Merge findings, verdicts, drafts
+
+**Collision dedup.** Two `collision` findings (from different tickets' auditors) are the same when their `related_tickets` point at each other and their `evidence` shares a file. Keep the higher severity and the longer `code_note`; the finding appears under both tickets, each naming the other. `collision_pairs` = one `[<A>, <B>]` entry per merged collision finding (`A`, `B` = the two ticket keys) — carried into Step 12's Collisions section and reused, unchanged, by Step 13.
+
+**Open findings** = findings with `thread_status` of `new` or `asked`. `answered` findings are counted, not rendered in full.
+
+**Verdict** per ticket, from its open findings, in `/pell:scope`'s wording: `Not ready` if any is `blocker`; else `Ready with questions` if any is `major`; else `Ready`. A ticket whose auditor failed (Step 10) keeps `Not assessed: <error>` instead.
+
+**Draft comment** per ticket, built from `new` findings only (never `asked` or `answered` — those already had their turn):
+
+```
+Pre-work code check on this ticket. A few questions before it starts:
+
+Questions
+1. <question from each new blocker, then each new major, then each new minor business-gap>
+
+Suggested approach
+- <suggestion from each new approach finding>
+
+Code notes (for whoever picks this up)
+- <non-empty code_note from each new blocker, major, and minor>
+- Overlaps with <KEY>: <collision code_note>
+
+Generated by Claude (AI) from a read of the code on <branch> @ <head>. Verify before acting.
+Posted from /pell:groom.
+```
+
+Section contents:
+- **Questions** — the `question` from every new `blocker` and `major` finding (any category), then the `question` from every new `minor` `business-gap` finding, in that order, numbered.
+- **Suggested approach** — the `suggestion` from every new `approach` finding, one bullet each.
+- **Code notes** — one bullet per non-empty `code_note` among new `blocker`, `major`, and `minor` findings; a `collision` finding among them bullets as `Overlaps with <KEY>: <code_note>` instead of the plain form, where `<KEY>` is the first entry in its `related_tickets`.
+
+The disclaimer line (`Generated by Claude (AI) from a read of the code on <branch> @ <head>. Verify before acting.`) appears on every draft, directly above the marker. `Posted from /pell:groom.` stays the very last line — auditors match it to recognize prior groom comments on a re-run.
+
+Omit any section that would be empty. When the Questions section is omitted, open with `Pre-work code check on this ticket. Notes for whoever picks it up:` instead of the two-sentence opening above. Omit the draft entirely when all three sections would be empty — no disclaimer, no marker, nothing to post. Nits never reach the comment, in any category, and neither do `answered` or `asked` findings. No severities and no verdict appear in the comment.
+
+## Step 12 — Render
+
+Sort tickets by verdict — `Not ready`, `Ready with questions`, `Not assessed`, `Ready`, in that order — then by query order within each verdict. The `#` column numbers this order; `rows` = the resulting list, one entry per ticket as `{#, key, verdict, draft}` (`draft` = the ticket's draft text, or none) — carried into Step 13 for the posting prompt.
+
+```
+## Groom — <set_description> (<len(tickets)> of <total_found>) — <branch> @ <head>
+<preflight_lines, when any>
+
+| # | Ticket | Verdict | Blk | Maj | Min | Nit | Collides with |
+|-|-|-|-|-|-|-|-|
+| 1 | RRS-12 Raise line-item cap | Not ready | 1 | 2 | 0 | 1 | RRS-20 |
+| 2 | RRS-14 Guest checkout email | Ready | 0 | 0 | 1 | 0 | — |
+
+### Collisions
+- RRS-12 x RRS-20 [blocker] — both rewrite OrderService.Submit; RRS-12 assumes synchronous submit, RRS-20 moves it to a queue.
+_None._ when empty; omitted under skip_collisions
+
+### Unmapped
+- RRS-31 — no existing code found; reads as greenfield.
+(omitted when empty)
+
+### 1. RRS-12 — Raise line-item cap
+Verdict: Not ready  ·  Areas: Checkout submit, NetSuite export
+#### Blockers
+- <title>. <evidence>.
+  Question: <question>
+_None._ when empty
+#### Major
+#### Minor
+#### Nits
+Already on the thread: <n> (<a> answered, <b> asked, not repeated).   (omit when 0)
+Thread not read — questions may repeat earlier comments.                (only when thread_read = false)
+
+Draft comment:
+<draft, or "Nothing to post.">
+
+---
+Description and acceptance-criteria readiness: /pell:scope <KEY>. Start one: /pell:from-ticket <KEY>.
+<Not assessed: rerun with /pell:groom <keys> when any auditor failed>
+```
+
+Detail per section:
+- **Header.** `<set_description>` and `<total_found>` come from Step 5, `<branch> @ <head>` and `<preflight_lines>` from Step 4.
+- **Table.** One row per `rows` entry, in that order. `Blk`/`Maj`/`Min`/`Nit` are open-finding counts (Step 11) for that ticket, by severity, regardless of category. `Collides with` lists every other ticket key paired with this one in `collision_pairs`, comma-separated, or `—` when none.
+- **Collisions.** One line per entry in `collision_pairs`: `<A> x <B> [<severity>] — <code_note>` using the kept (deduped) finding. `_None._` when `collision_pairs` is empty; the whole section is omitted under `skip_collisions` instead.
+- **Unmapped.** One line per entry in the merged `unmapped` list (Step 9): `<key> — <reason>`. Omit the whole section when that list is empty.
+- **Per-ticket sections**, one per `rows` entry, in table order, headed `### <#>. <key> — <summary>`. Next line: `Verdict: <verdict>  ·  Areas: <names of the areas in this ticket's map_slice (Step 10), comma-separated>` — drop the `· Areas: ...` clause when the ticket has no mapped areas.
+- **Severity subsections** (`#### Blockers`, `#### Major`, `#### Minor`, `#### Nits`) list this ticket's *open* findings (Step 11) of that severity, in the order the auditor returned them. Each bullet: `<title>. <evidence, joined by "; ">.`; when `question` is set, an indented `Question: <question>` line follows. `_None._` when a subsection is empty.
+- **Thread lines.** `n` = this ticket's findings with `thread_status` of `answered` or `asked`; `a` = the `answered` count, `b` = the `asked` count. Print `Already on the thread: <n> (<a> answered, <b> asked, not repeated).` unless `n` is 0. Print `Thread not read — questions may repeat earlier comments.` when this ticket's auditor returned `thread_read: false`.
+- **Draft comment.** The Step 11 draft, or `Nothing to post.` when there is none.
+- **Footer**, printed once at the very end, after every ticket section: `---` then `Description and acceptance-criteria readiness: /pell:scope <KEY>. Start one: /pell:from-ticket <KEY>.` (literal `<KEY>` — a generic pointer, not a specific ticket). When any ticket's verdict is `Not assessed`, append a line: `Not assessed: rerun with /pell:groom <keys>` where `<keys>` lists those tickets' keys, space-separated.
+
+Plain text only — no emoji or glyphs. Never truncate the table, regardless of ticket count.
