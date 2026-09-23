@@ -90,7 +90,7 @@ Override is triggered by freeform `$ARGUMENTS` phrases: `use bitbucket`, `use mc
 
 ## Repo context convention
 
-This section is the **maintainer's reference** for the repo-context read that nine consumer commands perform (`finish-work`, `from-ticket`, `my-tickets`, `precheck`, `related`, `review-queue`, `scope`, `start-work`, `triage`). Note: the plugin ships as `plugins/pell/` only — this `CLAUDE.md` is **not** installed, so command bodies **cannot** reference it at runtime (a bare "see CLAUDE.md" in a shipped body would resolve to the *user's own* project file). Shipped bodies must restate the block below inline and be kept in sync with the canonical wording here.
+This section is the **maintainer's reference** for the repo-context read that ten consumer commands perform (`finish-work`, `from-ticket`, `groom`, `my-tickets`, `precheck`, `related`, `review-queue`, `scope`, `start-work`, `triage`). Note: the plugin ships as `plugins/pell/` only — this `CLAUDE.md` is **not** installed, so command bodies **cannot** reference it at runtime (a bare "see CLAUDE.md" in a shipped body would resolve to the *user's own* project file). Shipped bodies must restate the block below inline and be kept in sync with the canonical wording here.
 
 ```markdown
 ## Step N — Load repo context
