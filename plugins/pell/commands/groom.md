@@ -278,3 +278,65 @@ Detail per section:
 - **Footer**, printed once at the very end, after every ticket section: `---` then `Description and acceptance-criteria readiness: /pell:scope <KEY>. Start one: /pell:from-ticket <KEY>.` (literal `<KEY>` — a generic pointer, not a specific ticket). When any ticket's verdict is `Not assessed`, append a line: `Not assessed: rerun with /pell:groom <keys>` where `<keys>` lists those tickets' keys, space-separated.
 
 Plain text only — no emoji or glyphs. Never truncate the table, regardless of ticket count.
+
+## Step 13 — Offer to post
+
+Skip under `dry_run`: print `--dry-run: comments not offered.` Skip when no entry in `rows` has a draft: print `No comments to post.`
+
+List every row with a draft, in table order, then prompt:
+
+```
+Draft comments for <n> of <total> tickets: <#> <KEY>, <#> <KEY>, ...
+Post to which? (all / 1,4,7 / none)
+```
+
+`<n>` = the count of `rows` entries with a draft; `<total>` = `len(rows)`.
+
+Accept `all`; `none` or `n`; a comma- or space-separated list of `#` numbers. Anything else → re-prompt once; if the retry is also none of these, treat it as `none`. A number naming a row with no draft is ignored; print one line for it: `<#> has no draft, skipped.`
+
+Echo before any write: `Posting <n> comments: <KEY>, <KEY>.`
+
+Post one at a time. The comment tool differs by connection shape — name both, by role: `addOrEditJiraIssueComment` on `plugin:atlassian:atlassian` (omit `commentId` to add a new comment); `addCommentToJiraIssue` on the classic connection. Both take `cloudId`, `issueIdOrKey`, `commentBody`, `contentFormat: "markdown"` — the classic tool has no `html` option, so `markdown` is the only choice either way. `commentBody` is the ticket's draft (Step 11) exactly as rendered — it already carries the AI disclaimer line and the marker line; do not add or strip lines before posting.
+
+Print `<KEY>: Commented.` or `<KEY>: Failed: <error>` per ticket, continuing past failures. `none` → print `Not posted.`
+
+## Step 14 — Offer to link collided tickets
+
+Runs after Step 13, whether or not any comment was posted. Candidate pairs = `collision_pairs` (Step 11) — every collision, merged or one-sided, one entry per unordered pair.
+
+Skip a pair already linked — either ticket's `issuelinks` (Step 5) names the other, in any link type — with one line: `Already linked, skipped: <A> / <B>.` Skip silently, no prompt, when no candidate pairs remain after that filter. Under `dry_run`, print `--dry-run: links not offered.` instead of filtering or prompting.
+
+List each remaining pair, one numbered line, then prompt:
+
+```
+Link collided tickets as "relates to"?
+1 <A> relates to <B>
+2 <A> relates to <B>
+Link which? (all / 1,2 / none)
+```
+
+Input handling matches Step 13: `all`; `none`/`n`; a comma- or space-separated list of `#` numbers; anything else → re-prompt once, then treat as `none`.
+
+Echo before any write: `Linking <n> pairs: <A> relates to <B>, <A> relates to <B>.`
+
+Link one pair at a time, type `Relates`, `inwardIssue` = the pair's first key, `outwardIssue` = the second — `Relates` is symmetric, so the order carries no meaning. The link tool differs by connection shape — name both, by role: `createJiraIssueLink` on `plugin:atlassian:atlassian`, called via `executeWrite({name: "createJiraIssueLink", cloudId, inputs: {linkType: "Relates", inwardIssue, outwardIssue}})` — `cloudId` is a top-level argument to `executeWrite`, not nested in `inputs`; `createIssueLink` on the classic connection, with `cloudId`, `type: "Relates"`, `inwardIssue`, `outwardIssue`. The link-type parameter's name differs between the two: `linkType` on the plugin tool, `type` on the classic tool. Never pass either tool's optional `comment`. Never propose `Blocks` or any other link type — auditors do not reliably state which ticket must land first, so an ordering dependency stays in the comment text, not a link.
+
+Print `<A> relates to <B>: Linked.` or `<A> relates to <B>: Failed: <error>` per pair, continuing past failures. `none` → print `Not linked.`
+
+## Step 15 — Exit
+
+End the response here. Do not transition any ticket, edit any field, create any link other than the `Relates` pairs selected in Step 14, write files, or commit.
+
+Point the user at `/pell:scope <KEY>` for description and acceptance-criteria readiness, and `/pell:from-ticket <KEY>` to start work on one.
+
+## Operator notes
+
+- Read-only except the selected comments (Step 13) and the selected `Relates` links (Step 14) — those are the only writes this command performs; no transitions, field edits, other link types, file writes, or commits.
+- Comment and link tools differ between Atlassian connection shapes, and so do their parameter names (`linkType` on the plugin's `createJiraIssueLink`, `type` on the classic `createIssueLink`). Name both per role.
+- Comment bodies containing @mentions come back as HTML (`appliedContentFormat: "html"`) even when markdown is requested; auditors read either format.
+- Strip modifiers and the `jql "..."` string before key detection — `TODO`, `SOW`, and keys inside JQL would otherwise match.
+- Every JQL call passes `view: "full"` (or `"evidence"` for the next-sprint grouping). The default `compact` view silently drops `parent`, `issuetype`, and `issuelinks`.
+- Comments and the comment-post tool differ between Atlassian connection shapes; name both per role, as map-repo §5.0 does for its collection operations.
+- Dispatch each phase's agents in a single message per batch so they run concurrently: up to 4 mappers, up to 6 auditors.
+- Say what is happening before each phase (`Mapping 4 clusters...`, `Auditing 25 tickets...`); do not sit silent through a long run.
+- Both agents start at `model: inherit`. Per `CLAUDE.md`'s mechanical-agent exception, reconsider pinning `ticket-code-mapper` to Sonnet only after spot-checking real runs; the auditor makes judgment calls and stays `inherit`.
