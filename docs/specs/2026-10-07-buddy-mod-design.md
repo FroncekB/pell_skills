@@ -1,6 +1,6 @@
 # `buddy` mod — Design Spec
 
-**Status:** shipped as a personal mod, 2026-10-07. Plan: [`2026-10-07-buddy-mod-plan.md`](2026-10-07-buddy-mod-plan.md); its "Deliberate deviations" section lists six small departures from this spec. Changes made during the build: `$`-taking helpers live at module top level of `register.tsx` (the engine loader requires it); `wrap` returns nothing for a width or line count under 1; `/buddy` subcommands read the session's `$.state` record before the store, so a failed save keeps the buddy alive (section 9); the tool-call tally skips subagent calls (section 6).
+**Status:** built 2026-10-07; live check pending. Plan: [`2026-10-07-buddy-mod-plan.md`](2026-10-07-buddy-mod-plan.md); its "Deliberate deviations" section lists six small departures from this spec. Changes made during the build: `$`-taking helpers live at module top level of `register.tsx` (the engine loader requires it); `wrap` returns nothing for a width or line count under 1; a failed save keeps the buddy alive in `$.state` (an `unsaved` flag) while another session's newer record still wins (section 9); the tool-call tally skips subagent calls (section 6); names that read as prompt openers are rejected at hatch (section 7).
 **Author:** Brandon Froncek + Claude
 **Date:** 2026-10-07
 **Scope:** personal Claude Code mod. Not part of the `pell` plugin; this spec lives here only because this repo keeps dated specs.
