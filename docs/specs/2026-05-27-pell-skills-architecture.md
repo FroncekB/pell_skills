@@ -293,7 +293,6 @@ pell_skills/
     └── pell/                                # ONE plugin containing everything
         ├── .claude-plugin/plugin.json
         ├── README.md                        # thin index → defers to root README
-        ├── hooks/hooks.json                 # UserPromptSubmit: surfaces scratchpad clicks
         ├── commands/
         │   # Reviewer primitives (single-dimension, read-only)
         │   ├── correctness-review.md
@@ -320,13 +319,10 @@ pell_skills/
         │   ├── finish-work.md
         │   # Bucket 3: composers
         │   ├── from-ticket.md
-        │   ├── wrap-up.md
-        │   # Visual
-        │   └── visualize.md
+        │   └── wrap-up.md
         ├── skills/
         │   # Bucket 2: house-style guidance (auto-invoked)
         │   ├── frontend-router/SKILL.md     # nudges toward /frontend-design
-        │   ├── visual-scratchpad/           # SKILL.md + server.py + viewer.html + tests
         │   # Conductor subsystem (see 2026-07-13-conductor-port-design.md)
         │   ├── coordinate-agents/           # SKILL.md + references/ — the lead's playbook
         │   ├── fan-and-critic/SKILL.md      # outside eyes on each change in long sessions
@@ -396,12 +392,13 @@ All previously-open questions are now resolved:
 - ✅ **Atlassian tool naming** — every Atlassian call outside the `plugin:atlassian:atlassian` primary set names both connection shapes inline, by role; the verified pairs live in §4.4. Twelve call sites named tools that do not exist on that server, including `getConfluencePage`, which silently emptied the Confluence half of every SOW, and `addCommentToJiraIssue`, whose plugin-server name is `addOrEditJiraIssueComment`. The cached-transition path in `start-work` and `finish-work` now always fetches live transitions, since the transition call needs a live `id` (2026-09-23, GitHub issue #14) (§4.4)
 - ✅ **Atlassian read views** — every `getJiraIssue` / `searchJiraIssuesUsingJql` call that reads a field the default `compact` view drops passes `view: "full"` with an inline note. Compact had been silently stripping `parent`, `issuetype`, `issuelinks`, and `statusCategory.key`, so `/pell:related` rendered no relationships, `/pell:my-tickets` could not sort by category, and `/pell:start-work` had no issue type or assignee `accountId`. The "sometimes omits `reporter`" notes were wrong: the plugin connection never returns `reporter`, so bodies fall back to `creator` (2026-09-23, GitHub issues #15 and #16) (§4.4)
 - ✅ **Bitbucket on the v2 connection** — every Bitbucket call runs on `plugin:atlassian:atlassian` against `https://mcp.atlassian.com/v2/mcp`; the API-token `atlassian-bitbucket` connection and the `?c=bb` dual-connection workaround are retired (2026-10-12, plugin 0.21.0). Bitbucket names one shape, not two, since nothing is left to fall back to. The operations and their read-view rule are in §4.4. `/pell:review-queue` moved from a per-repo scan (one repo listing plus one PR query per repo) to a single `listMyBitbucketReviewRequests` call, which also carries approval state, so `unapproved` no longer needs a per-PR get
+- ✅ **Visual scratchpad removed** — the `/pell:visualize` command, the auto-invoked `visual-scratchpad` skill, and the `UserPromptSubmit` hook that surfaced its click events are gone (2026-10-12, plugin 0.22.0). The surface was no longer needed. With the hook gone, the plugin ships no `hooks/` directory. The design and plan stay in `docs/specs/` as history
 
 ## 12. Implementation status
 
 The conventions above are stable and the bulk of the roadmap shipped:
 
-- **Built:** all four review primitives (`correctness`, `quality`, `security`, `test`) + both composites (`four-pass-review`, `local-review`, each running all four by default; `three-pass-review` survives as a deprecated alias); the PR review ops (`review-queue`, `address-review`); both repo-wide audits (`repo-review`, `repo-security-review`) with their `repo-*-reviewer` agents; Jira ops (`my-tickets`, `triage`, `related`, `precheck`, `scope` + its `sow-builder` agent, `groom` + its `ticket-code-mapper` and `ticket-code-auditor` agents, `start-work`, `finish-work`); composers (`from-ticket`, `wrap-up`); repo setup (`map-repo` + its `repo-mapper` agent, mapping a repo's Jira/Confluence/Drive/Bitbucket coordinates into `docs/pell/context.md`, consumed by ten commands); the `frontend-router` skill; and the `visual-scratchpad` skill + `/pell:visualize` command (a surface not anticipated in the original build order).
+- **Built:** all four review primitives (`correctness`, `quality`, `security`, `test`) + both composites (`four-pass-review`, `local-review`, each running all four by default; `three-pass-review` survives as a deprecated alias); the PR review ops (`review-queue`, `address-review`); both repo-wide audits (`repo-review`, `repo-security-review`) with their `repo-*-reviewer` agents; Jira ops (`my-tickets`, `triage`, `related`, `precheck`, `scope` + its `sow-builder` agent, `groom` + its `ticket-code-mapper` and `ticket-code-auditor` agents, `start-work`, `finish-work`); composers (`from-ticket`, `wrap-up`); repo setup (`map-repo` + its `repo-mapper` agent, mapping a repo's Jira/Confluence/Drive/Bitbucket coordinates into `docs/pell/context.md`, consumed by ten commands); and the `frontend-router` skill.
 - **Conductor subsystem:** the `coordinate-agents` lead skill, the `fan-and-critic` review-loop skill, the five `autonomous-build*` session skills, and the five `conductor-*` worker agents — a faithful port of Tom Neyland's `conductor`, folded into `pell` (see [`2026-07-13-conductor-port-design.md`](2026-07-13-conductor-port-design.md)). These agents deliberately deviate from §8's JSON-output contract; the exception is documented there.
 - **Not yet built:** `claude-md-init` (§10.6), second-tier composers (e.g. standup, release-notes), and the optional `pell-everything` meta-plugin (§9).
 - **Open work** is tracked in [`2026-05-28-pell-toolkit-improvements-plan.md`](2026-05-28-pell-toolkit-improvements-plan.md).

@@ -77,7 +77,7 @@ Toolkit versions before 0.21.0 needed a second, API-token connection named `atla
 
 ## Commands
 
-Twenty-two commands (plus one deprecated alias, `/pell:three-pass-review`), grouped by where they fall in a ticket's lifecycle — pick up work, review it, audit broadly, ship it. Driving a large build is now the [conductor subsystem](#conductor-subsystem) — a skill family, not a command.
+Twenty-one commands (plus one deprecated alias, `/pell:three-pass-review`), grouped by where they fall in a ticket's lifecycle — pick up work, review it, audit broadly, ship it. Driving a large build is now the [conductor subsystem](#conductor-subsystem) — a skill family, not a command.
 
 | Stage | Commands |
 |-|-|
@@ -86,7 +86,6 @@ Twenty-two commands (plus one deprecated alias, `/pell:three-pass-review`), grou
 | **Reviewing code** | [`correctness-review`](#pellcorrectness-review) · [`quality-review`](#pellquality-review) · [`security-review`](#pellsecurity-review) · [`test-review`](#pelltest-review) · [`local-review`](#pelllocal-review) · [`four-pass-review`](#pellfour-pass-review-pr) · [`address-review`](#pelladdress-review-pr) · [`review-queue`](#pellreview-queue-repo-) |
 | **Auditing a whole repo** | [`repo-review`](#pellrepo-review) · [`repo-security-review`](#pellrepo-security-review) |
 | **Finishing up** | [`finish-work`](#pellfinish-work) · [`wrap-up`](#pellwrap-up-freeform-context) |
-| **Visual scratchpad** | [`visualize`](#pellvisualize-concept--no-watch--watch--stop-watch--stop--clear) |
 
 Everything is **read-only by default** — every side effect is gated on a `(y/n)` prompt that names exactly what will change. See [Design principles](#design-principles) for the full policy.
 
@@ -546,30 +545,6 @@ Closes out a branch in one command: runs `/pell:local-review` on the working tre
 **Side effects:** all delegated to the dispatched stages, with one exception: the commit gate between review and finish-work is gated on a y/n prompt (or pre-auth via `auto-commit`). `wrap-up` itself never mutates Jira, pushes, opens PRs, or modifies the working tree beyond the staged commit.
 
 **Skip flags:** `skip review` / `already reviewed` / `no review` skips Stage A. `skip tests` is forwarded to Stage A and drops the test-coverage pass there.
-
----
-
-## Visual scratchpad
-
-### `/pell:visualize [concept | no-watch | watch | stop-watch | stop | clear]`
-
-Opens a live browser "second screen" Claude can draw to. A zero-dependency local server (Python stdlib, `127.0.0.1` only) serves a page that live-renders a file Claude writes to — diagrams, SVG, tables, before/after comparisons — over Server-Sent Events.
-
-```
-/pell:visualize                        # start server, print URL, begin watching
-/pell:visualize "auth flow"            # start server and render a fragment for that concept
-/pell:visualize no-watch               # open/draw without arming the click watcher
-/pell:visualize watch                  # re-arm the watcher (only needed after stop-watch)
-/pell:visualize stop-watch             # stop the watcher, keep the server
-/pell:visualize stop                   # shut down server
-/pell:visualize clear                  # blank the pad
-```
-
-**Bidirectional, live by default:** pages can call `pellSend(payload)` (e.g. on a button click) to POST events to an inbox. Watch mode is on by default — a zero-token shell watcher (`tail -F` via the Monitor tool, one per session) makes Claude react to clicks in near-real-time; pass `no-watch` to opt out. Either way a bundled `UserPromptSubmit` hook surfaces clicks to Claude on its next turn, so nothing is lost. Claude can render clickable options and read your choice back without a text prompt.
-
-**Auto-invoked:** the `visual-scratchpad` skill fires proactively when Claude is about to explain something inherently visual (architecture diagrams, data flows, comparison tables), and also arms watch mode by default. Requires `python3`; degrades gracefully to a terminal explanation if absent.
-
-**Side effects:** starts a local process on `127.0.0.1`. `stop` kills it. No network exposure; no files written outside the repo's scratch path.
 
 ---
 

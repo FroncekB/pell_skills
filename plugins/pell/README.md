@@ -69,16 +69,9 @@ Finding PRs to review:
 | `/pell:from-ticket <KEY>` | Ticket → branch → brainstorm → plan (via superpowers, with inline fallback). |
 | `/pell:wrap-up` | local-review → commit gate → finish-work. |
 
-### Visual
-
-| Command | What it does |
-|-|-|
-| `/pell:visualize [concept]` | Live browser scratchpad Claude can draw to; bidirectional click events. |
-
 ## Auto-invoked skills (description-matched)
 
 - `frontend-router` — routes UI work to `frontend-design` (notify-don't-force).
-- `visual-scratchpad` — fires when a rendered view beats terminal prose; arms the scratchpad.
 
 ## Agents (composable building blocks)
 
