@@ -162,3 +162,7 @@ The server serves `viewer.html` / `marked.min.js` from its own directory and wat
 - **Instant reaction to a click while Claude is fully idle** — clicks surface on the next turn (passive hook) or, with the default watcher running, as near-real-time Monitor events (confirmed working in smoke testing). The watcher requires an open session; it is not a wake-from-cold mechanism.
 - **A component framework or persistent canvas history** — the pad shows the latest fragment; Claude authors raw HTML/Markdown. No widget library, no scrollback.
 - **Recurring LLM polling of any kind** — explicitly forbidden for cost reasons (§1).
+
+---
+
+**Status note (2026-10-12):** Removed in plugin 0.22.0. The `/pell:visualize` command, the `visual-scratchpad` skill, and the `UserPromptSubmit` hook this spec designs no longer ship; see [architecture spec §11](2026-05-27-pell-skills-architecture.md). This document is kept as history.

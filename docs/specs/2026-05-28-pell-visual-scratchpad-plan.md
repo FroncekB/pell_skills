@@ -940,3 +940,7 @@ Run `/pell:visualize` twice → confirm only one server process (`pgrep -af serv
 - **Spec coverage:** §1 tiers → Tasks 2 (SSE/output), 4–5 (passive hook), 6 §4 (watch). §2 components → Tasks 1–8 (every file). §3 server → Task 2. §4 viewer → Task 3. §5 command → Task 6. §6 skill → Task 7. §7 asset paths → Task 6 (`${CLAUDE_PLUGIN_ROOT}`) + Task 7 (`${CLAUDE_SKILL_DIR}`). §8 security → loopback bind (Task 2), trusted-innerHTML (Task 3). §9 degradation → Task 6 Step 2 + Task 7 (python3-or-terminal; Node fallback descoped, flagged above). §10 verify items → resolved in planning (hook format, asset paths) or covered by Task 10 smoke (wake immediacy, Monitor). §11 out-of-scope → respected (one global pad, no auto-open, no auth, no recurring LLM poll).
 - **Placeholder scan:** none — every code step has complete content; the Node fallback is an explicit descope, not a TODO.
 - **Type consistency:** `sse_encode`, `read_new_events(inbox_path, offset) -> (events, new_offset)`, `format_context(events)`, the `hookSpecificOutput.additionalContext` envelope, `~/.claude/pell-visual/{scratch.html,inbox.jsonl,inbox.offset,server.pid,server.port}`, and port default `7654` are used consistently across server.py, inbox_check.py, hooks.json, the command, and the skill.
+
+---
+
+**Status note (2026-10-12):** Removed in plugin 0.22.0. The `/pell:visualize` command, the `visual-scratchpad` skill, and the `UserPromptSubmit` hook this spec designs no longer ship; see [architecture spec §11](2026-05-27-pell-skills-architecture.md). This document is kept as history.
