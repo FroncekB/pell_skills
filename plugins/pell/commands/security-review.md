@@ -26,9 +26,9 @@ Honor any other freeform context.
 
 ## Step 2 — Gather inputs
 
-**PR mode:** in parallel, call:
-- `mcp__atlassian-bitbucket__bitbucketPullRequest` with `action=get`
-- `mcp__atlassian-bitbucket__bitbucketPullRequest` with `action=diff`
+**PR mode:** in parallel, call these two `plugin:atlassian:atlassian` operations. Neither is a primary tool: reach each through `discover`, then run it with `executeRead({name, inputs, responseFields})`, with `responseFields` beside `inputs`, never inside it. Bitbucket operations take no `cloudId`.
+- `getBitbucketRepoPullRequest` with `inputs: {workspaceId, repoId, prId}` and `responseFields: ["title", "description", "state", "author.display_name", "source.branch.name", "destination.branch.name"]` (the default view leaves out `description`)
+- `getBitbucketRepoPullRequestDiff` with `inputs: {workspaceId, repoId, prId}`
 
 Security review does not need Jira context.
 

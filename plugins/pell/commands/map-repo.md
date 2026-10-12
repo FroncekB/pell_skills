@@ -395,7 +395,7 @@ Two failure classes govern this command. A **per-source** failure degrades to a 
 | No issue keys in 200 commits or branch names | Ask for the project key outright, or record the gap |
 | Atlassian MCP absent or unauthenticated | Skip Jira and Confluence, record under `## Gaps`, continue |
 | Drive MCP absent | Skip Drive, record under `## Gaps`, continue |
-| Bitbucket MCP absent | Not needed — the `## Repository` section comes from local git |
+| Bitbucket unreachable | Not needed — the `## Repository` section comes from local git |
 | A Jira project key resolves to nothing | Record under `## Gaps`, continue with the other keys |
 | SOW build fails or returns empty | `context.md` is already written and stays intact; record the failure under `## Gaps` (Step 6); continue to the next project |
 | Unknown `schema:` in an existing `context.md` | Print `context.md is schema <n>; this build writes schema 1 — rebuilding.` and treat the file as missing (Step 2) |

@@ -14,9 +14,9 @@ Parse `$ARGUMENTS`:
 - `<repo>#<n>` — workspace defaults to `pellsoftware`
 - Bare number — resolve repo from `git remote get-url origin`. If origin isn't Bitbucket, ask the user for a full URL
 
-**Context source** (governs *fix-application* reads only — comment fetching always uses the Bitbucket MCP):
+**Context source** (governs *fix-application* reads only — comments are always fetched from Bitbucket):
 - Default `local` — assume a local checkout; read surrounding code with `Read`/`Grep`/`Glob` against `<repo_root>` (`git rev-parse --show-toplevel`)
-- If `$ARGUMENTS` contains `use bitbucket`, `use mcp`, `use remote`, `fetch via bitbucket`, `not LFS`, or `not local` → `bitbucket`: read via `mcp__atlassian-bitbucket__bitbucketRepoContent` (action `files.get`) against the PR's source branch
+- If `$ARGUMENTS` contains `use bitbucket`, `use mcp`, `use remote`, `fetch via bitbucket`, `not LFS`, or `not local` → `bitbucket`: read via `getBitbucketRepoFileContent` (`executeRead` on `plugin:atlassian:atlassian`) against the PR's source branch
 
 **Scope filters** (default is **all comments**; these narrow client-side, and compose):
 - `unresolved` / `open only` → hide resolved threads
@@ -28,9 +28,9 @@ Parse `$ARGUMENTS`:
 
 ## Step 2 — Fetch PR metadata and comments
 
-Call **in parallel**:
-- `mcp__atlassian-bitbucket__bitbucketPullRequest` `action=get` — capture title, source branch, destination branch, `comment_count`
-- `mcp__atlassian-bitbucket__bitbucketPullRequest` `action=comments` with `pagelen=100`
+Call **in parallel** these two `plugin:atlassian:atlassian` operations. Neither is a primary tool: reach each through `discover`, then run it with `executeRead({name, inputs, responseFields})`. Bitbucket operations take no `cloudId`. Both default views leave out fields this command reads, so pass `responseFields` as given:
+- `getBitbucketRepoPullRequest`, `inputs: {workspaceId, repoId, prId}`, `responseFields: ["title", "source.branch.name", "destination.branch.name", "comment_count"]` — capture title, source branch, destination branch, `comment_count`
+- `listBitbucketRepoPullRequestComments`, `inputs: {workspaceId, repoId, prId, pagelen: 100}`, `responseFields: ["values.id", "values.user.display_name", "values.inline", "values.content.raw", "values.parent.id", "values.resolution", "values.deleted", "values.pending", "values.created_on", "values.updated_on"]`
 
 If `comment_count` (or the first comments page) indicates more than one page, paginate (`page=2,3,…`) until a page returns fewer than `pagelen` results.
 
@@ -91,7 +91,7 @@ Process the map in list order.
 
 Reuse the `/pell:local-review` discipline:
 
-1. **Re-locate the target by content**, not by the comment's stored line — the line may have shifted, and `[outdated]` comments are expected to have moved. Read the file (or fetch via `bitbucketRepoContent` in `bitbucket` mode) and find the code by content
+1. **Re-locate the target by content**, not by the comment's stored line — the line may have shifted, and `[outdated]` comments are expected to have moved. Read the file (or fetch via `getBitbucketRepoFileContent` in `bitbucket` mode) and find the code by content
 2. Apply with `Edit` (or `MultiEdit` for several fixes in one file)
 3. **Only concrete, mechanical changes.** If the comment is a question, a discussion, or a non-mechanical ask ("consider rethinking this abstraction"), do **not** edit — skip it with a note and surface it as a reply candidate instead. Never guess
 4. **Never weaken or delete a test or assertion** to satisfy a comment — no exceptions, even when the comment explicitly asks for it. A reviewer who thinks a test is wrong is starting a discussion, not requesting a mechanical fix; reply, don't edit. For *other* weakening (loosening a type, suppressing a warning), only do it when the comment explicitly and unambiguously asks for exactly that
@@ -105,9 +105,9 @@ After all fixes:
 
 1. Draft the reply text. If this comment was also `fix`ed, default the draft to `Addressed — <one-line summary of the edit>`; otherwise use the user's inline text from Step 4 or ask what to say
 2. **Show the draft and confirm before posting**
-3. Post via `mcp__atlassian-bitbucket__bitbucketPullRequest` `action=comment`, `prId`, `workspaceId`, `repoId`, `parentCommentId=<thread root id>`, `content=<reply>`. Run sequentially (rate limits)
+3. Post via `addBitbucketRepoPullRequestComment` on `plugin:atlassian:atlassian` — reach it through `discover`, then run `executeWrite({name: "addBitbucketRepoPullRequestComment", inputs: {prId, workspaceId, repoId, parentCommentId: <thread root id>, content: <reply>}})` with no `cloudId`. Run sequentially (rate limits)
 
-**A reply does not resolve the thread** — the Bitbucket MCP has no resolve action, so resolving stays a manual step in the Bitbucket UI. Say so; don't imply a reply closes the thread.
+**A reply does not resolve the thread**, and this command never resolves one, even though the connection can. Resolving stays a manual step in the Bitbucket UI, after the author has checked each fix. Say so; don't imply a reply closes the thread.
 
 ### Final report
 
@@ -126,6 +126,6 @@ If the user picks `skip`/`no` for everything, exit cleanly.
 - **Never** post a reply or apply a fix without explicit confirmation
 - **Never** commit or push — working-tree edits only; pushing is `/pell:finish-work`'s job
 - **Never** weaken or delete tests/assertions to satisfy a comment
-- Authorship is **not** enforced — the command assumes it's your PR but can't verify it (no Bitbucket current-user identity); it operates on whatever PR you pass
-- If `action=comments` returns malformed/partial entries, still list them (under General if the anchor is missing) rather than dropping them silently
-- Comment fetching always uses the Bitbucket MCP; `context_source` only governs fix-application reads
+- Authorship is **not** enforced — the command assumes it's your PR but doesn't verify it; it operates on whatever PR you pass
+- If the comments listing returns malformed/partial entries, still list them (under General if the anchor is missing) rather than dropping them silently
+- Comments are always fetched from Bitbucket; `context_source` only governs fix-application reads

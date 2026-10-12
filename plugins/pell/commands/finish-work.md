@@ -103,12 +103,13 @@ Otherwise, ask:
 
 Resolve the workspace and repo. Run `git remote get-url origin` and parse the Bitbucket URL — expect `git@bitbucket.org:<workspace>/<repo>.git` or `https://bitbucket.org/<workspace>/<repo>.git`. If parsing fails → ask the user for the workspace/repo. Cache nothing.
 
-Call `mcp__atlassian-bitbucket__bitbucketPullRequest` with:
-- `action`: `list`
+Run `listBitbucketRepoPullRequests` on `plugin:atlassian:atlassian`. It is not a primary tool: reach it through `discover`, then call `executeRead({name: "listBitbucketRepoPullRequests", inputs, responseFields})` with no `cloudId` (Bitbucket operations don't take one). Inputs:
 - `workspaceId`: `<workspace>`
 - `repoId`: `<repo>`
 - `state`: `OPEN`
 - `q`: `source.branch.name="<branch>"` (Bitbucket's BBQL filter syntax)
+
+Pass `responseFields: ["values.id", "values.links.html.href"]` — the default view leaves out the PR URL.
 
 The response is paginated; pagelen defaults are fine for this check (we expect 0 or 1 result).
 
@@ -147,8 +148,7 @@ Print:
 
 This prompt is required even when the user passed pre-authorizations elsewhere — PR creation is the one side-effect that's always explicitly confirmed.
 
-On `y`, call `mcp__atlassian-bitbucket__bitbucketPullRequest` with:
-- `action`: `create`
+On `y`, run `createBitbucketRepoPullRequest` on `plugin:atlassian:atlassian` — reach it through `discover`, then call `executeWrite({name: "createBitbucketRepoPullRequest", inputs})` with no `cloudId`. Inputs:
 - `workspaceId`: `<workspace>`
 - `repoId`: `<repo>`
 - `sourceBranch`: `<branch>`
@@ -156,7 +156,7 @@ On `y`, call `mcp__atlassian-bitbucket__bitbucketPullRequest` with:
 - `title`: the assembled title
 - `description`: the assembled description
 
-Capture the new PR's URL and ID from the response.
+Capture the new PR's ID (`id`) and URL (`links.html.href`) from the response. If the URL is missing, build it as `https://bitbucket.org/<workspace>/<repo>/pull-requests/<id>`.
 
 On `n`, exit cleanly: "Cancelled. No PR opened, no Jira changes made."
 

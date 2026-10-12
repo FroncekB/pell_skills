@@ -165,3 +165,7 @@ Each write is independent and individually gated. No pre-authorization shortcut 
 - Confluence/doc duplicate detection.
 - Auto-resolving or auto-transitioning detected duplicates.
 - Pre-authorization flags for the link/comment writes.
+
+---
+
+**Status note (2026-10-12):** Bitbucket calls in this spec name the retired API-token `atlassian-bitbucket` connection. Since plugin 0.21.0 (2026-10-12) they run on `plugin:atlassian:atlassian` against the v2 endpoint; the current operation names are in [architecture spec §4.4](2026-05-27-pell-skills-architecture.md).

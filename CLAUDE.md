@@ -80,11 +80,11 @@ pell_skills/
 
 ## Context source convention (reviewer agents)
 
-This section is the **maintainer's reference** for the context-source override. Note: the plugin ships as `plugins/pell/` only — this `CLAUDE.md` is **not** installed, so command and agent bodies **cannot** reference it at runtime (a bare "see CLAUDE.md" in a shipped body would resolve to the *user's own* project file). Shipped bodies must restate the trigger phrases and `bitbucketRepoContent` call shape inline and be kept in sync with the canonical wording below.
+This section is the **maintainer's reference** for the context-source override. Note: the plugin ships as `plugins/pell/` only — this `CLAUDE.md` is **not** installed, so command and agent bodies **cannot** reference it at runtime (a bare "see CLAUDE.md" in a shipped body would resolve to the *user's own* project file). Shipped bodies must restate the trigger phrases and `getBitbucketRepoFileContent` call shape inline and be kept in sync with the canonical wording below.
 
 Reviewers read surrounding code from one of two sources:
 - **`local` (default)** — `Read`/`Grep`/`Glob` against `<repo_root>` (the user's working dir, assumed to be a checkout of the target repo).
-- **`bitbucket` (override)** — `mcp__atlassian-bitbucket__bitbucketRepoContent` against the PR's source branch. Canonical call shape: `action="files.get"`, `workspaceId=<workspace>`, `repoId=<repo>`, `referenceOrSha=<branch>`, `path=<file>`.
+- **`bitbucket` (override)** — `getBitbucketRepoFileContent` on `plugin:atlassian:atlassian` against the PR's source branch. It is not a primary tool: reach it through `discover`, then `executeRead({name: "getBitbucketRepoFileContent", inputs: {workspaceId: <workspace>, repoId: <repo>, referenceOrSha: <branch>, path: <file>}})`, with no `cloudId`. Always pass `path`: a repo-root read with `path` omitted returned 404 in testing.
 
 Override is triggered by freeform `$ARGUMENTS` phrases: `use bitbucket`, `use mcp`, `use remote`, `fetch via bitbucket`, `not LFS`, `not local`.
 
@@ -114,9 +114,13 @@ Each shipped command inserts this verbatim immediately after its existing `pell-
 
 `plugin:atlassian:atlassian` is canonical, but only a small set of its tools are primary: `getAccessibleAtlassianResources`, `atlassianUserInfo`, `getJiraIssue`, `searchJiraIssuesUsingJql`, `editJiraIssue`, `transitionJiraIssue`, `createJiraIssue`, `addOrEditJiraIssueComment`, `getConfluenceContent`, `searchConfluence`, `search`, `createConfluenceContent`, `updateConfluenceContent`. Everything else is reached through `discover`, then `executeRead` / `executeWrite` with `cloudId` top-level, under a name that differs from the classic connection's direct tool (`listJiraIssueTransitions` vs `getTransitionsForJiraIssue`, `addOrEditJiraIssueComment` vs `addCommentToJiraIssue`).
 
-Any call outside the primary set names **both** shapes inline, by role — "The tool differs by connection shape — name both, by role, and use whichever the session exposes: …" — with the params for each, since those can differ too (`linkType` vs `type`). Classic names are written bare; their prefix is install-specific. Naming one shape fails silently and nothing validates it, so confirm every new name with `discover` before merging. The verified pairs are in architecture spec §4.4; like the other conventions here, shipped bodies restate them inline rather than pointing at this file or the spec.
+Any Jira or Confluence call outside the primary set names **both** shapes inline, by role — "The tool differs by connection shape — name both, by role, and use whichever the session exposes: …" — with the params for each, since those can differ too (`linkType` vs `type`). Classic names are written bare; their prefix is install-specific. Naming one shape fails silently and nothing validates it, so confirm every new name with `discover` before merging. The verified pairs are in architecture spec §4.4; like the other conventions here, shipped bodies restate them inline rather than pointing at this file or the spec.
 
 **Read views.** `getJiraIssue` and `searchJiraIssuesUsingJql` default to `view: "compact"`, which returns only `summary`, `description`, `status.name`, `assignee.displayName`, `priority`, and `updated`, and drops everything else even when it is listed in `fields` (`parent`, `issuetype`, `issuelinks`, `subtasks`, `labels`, `components`, `created`, `project`, `status.statusCategory.key`, `assignee.accountId`). A call that reads any dropped field passes `view: "full"` with a one-line inline note saying which fields it needs; `full` still honours `fields`, so keep the list explicit to bound the payload. Calls that read only compact fields stay on the default. `reporter` never comes back on the plugin connection in any view: request `creator` alongside it and fall back to `creator`, labelled as such.
+
+**Bitbucket.** Bitbucket has one shape: every call goes through `plugin:atlassian:atlassian` on the v2 endpoint. The separate API-token `atlassian-bitbucket` connection and its `bitbucketPullRequest` / `bitbucketRepoContent` tools are retired; don't name them. No Bitbucket operation is primary, so each call site names the v2 operation, says to reach it through `discover`, and runs it with `executeRead` or `executeWrite` with no `cloudId`, since Bitbucket operations ignore it. The verified operations are in architecture spec §4.4.
+
+Bitbucket reads also default to a reduced view, and nothing warns about the missing fields. A PR list returns only `id`, `title`, `state`, `author.display_name`, and the source and destination branch names. A PR get adds `created_on`, `updated_on`, `links.html.href`, and the description as `summary.raw`. `listMyBitbucketReviewRequests` returns empty `source` / `destination` objects in every view. A call that reads anything else (`comment_count`, `participants`, `draft`, `description`, a list's `links.html.href`) passes `responseFields` listing every field it reads. `responseFields` returns only what it lists.
 
 ## Shared config
 
@@ -145,7 +149,7 @@ Docs here are load-bearing. `README.md` is how Pell engineers discover commands,
 
 - This `CLAUDE.md`. The conventions sections are the contract for the next session; a deliberate exception gets written down as an exception (see the `conductor-*` note above), not left for someone to "fix"
 - `docs/specs/2026-05-27-pell-skills-architecture.md` — the architecture spec is the source of truth. Update the relevant numbered section, and add to §11 when you resolve an open decision
-- Cross-check the copies that ship: the context-source trigger phrases and the `bitbucketRepoContent` call shape are restated inline in every reviewer command and agent, because `CLAUDE.md` isn't installed. Change one, grep for the rest
+- Cross-check the copies that ship: the context-source trigger phrases and the `getBitbucketRepoFileContent` call shape are restated inline in every reviewer command and agent, because `CLAUDE.md` isn't installed. Change one, grep for the rest
 
 **Dated specs (`docs/specs/<date>-*-design.md`, `-plan.md`) are point-in-time records, not living docs.** Don't rewrite one to match a later change — append a short status note ("superseded by ...", "shipped as ...") and put the current truth in the architecture spec or the README.
 
@@ -183,7 +187,6 @@ Then invoke the affected command.
 
 ## MCP servers used
 
-- `atlassian-bitbucket` (API token, see repo README) — PR data, diffs, file content, inline comments
-- `plugin:atlassian:atlassian` (OAuth) — Jira issue lookup, transitions
+- `plugin:atlassian:atlassian` (OAuth, `https://mcp.atlassian.com/v2/mcp`, installed by the `atlassian@claude-plugins-official` plugin): Jira, Confluence, and Bitbucket on one connection. That covers PR data, diffs, file content, comments, PR creation, issue lookup, and transitions.
 
-Both must coexist via the dual-connection workaround (both on the `mcp.atlassian.com/v1/mcp/authv2` endpoint, distinguished by a throwaway query param on the Bitbucket entry so Claude Code doesn't collapse them onto one session) — see the README setup section and the user's `~/.claude/projects/.../memory/atlassian-mcp-setup.md`.
+The old dual-connection workaround is retired. It used a second, API-token `atlassian-bitbucket` entry on `…/v1/mcp/authv2?c=bb`, because v1 served Bitbucket only over an API token. Don't reintroduce it. The README's migration section covers removing it.

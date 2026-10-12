@@ -26,7 +26,7 @@ The default assumption is that you're working from a local checkout of the repo 
 2. **Identify the test framework and where tests live** so you can tell whether a test exists. Common shapes: .NET `*Tests.cs` / `*.Tests` projects (xUnit/NUnit/MSTest); JS/TS `*.test.ts` / `*.spec.ts` (Jest/Vitest); Python `test_*.py` / `*_test.py` (pytest); Go `*_test.go`
 3. **Before claiming something is untested, `Grep` for existing tests** of the changed symbol — a test may live outside the diff. Cite it if found (then it's not a finding)
 
-**If `context_source: bitbucket`:** fetch the same files via `mcp__atlassian-bitbucket__bitbucketRepoContent` with `action="files.get"`, `workspaceId=<workspace>`, `repoId=<repo>`, `referenceOrSha=<branch>`, `path=<file>`. Use this when the dispatcher tells you the local checkout isn't trustworthy.
+**If `context_source: bitbucket`:** fetch the same files via `getBitbucketRepoFileContent` on `plugin:atlassian:atlassian` — not a primary tool, so reach it through `discover`, then run `executeRead({name: "getBitbucketRepoFileContent", inputs: {workspaceId: <workspace>, repoId: <repo>, referenceOrSha: <branch>, path: <file>}})`. Bitbucket operations take no `cloudId`. Use this when the dispatcher tells you the local checkout isn't trustworthy.
 
 ## What you look for
 

@@ -223,3 +223,7 @@ Confirmed from the `bitbucketPullRequest` tool schema (no live call needed):
 - **Multi-PR batches** — one PR per invocation.
 - **A review-feedback composer** — deferred until the standalone command proves out.
 - **Jira side effects** — none; this command touches Bitbucket + the working tree only.
+
+---
+
+**Status note (2026-10-12):** Bitbucket calls in this spec name the retired API-token `atlassian-bitbucket` connection. Since plugin 0.21.0 (2026-10-12) they run on `plugin:atlassian:atlassian` against the v2 endpoint; the current operation names are in [architecture spec §4.4](2026-05-27-pell-skills-architecture.md).

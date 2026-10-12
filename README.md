@@ -22,64 +22,56 @@ Three goals drive everything in this repo:
 /reload-plugins
 ```
 
-That's it for the toolkit itself. Some commands need additional MCP servers configured — see the next section.
+That's it for the toolkit itself. Most commands also need the Atlassian MCP server — see the next section.
 
 ---
 
 ## Prerequisites
 
-Most commands need at least one of these two Atlassian MCP servers connected to your Claude Code session.
+Most commands need the Atlassian MCP server connected to your Claude Code session. One OAuth connection on Atlassian's v2 endpoint covers Jira, Confluence, and Bitbucket.
 
 | Server | Auth | Required for |
 |-|-|-|
-| `atlassian-bitbucket` | API token (Basic auth) | Any PR-mode review (`/pell:correctness-review`, `/pell:quality-review`, `/pell:security-review` against a PR), `/pell:four-pass-review`, `/pell:address-review`, `/pell:review-queue`, future Bitbucket-aware commands |
-| `plugin:atlassian:atlassian` | OAuth | Jira ticket context in `/pell:four-pass-review`, your identity for `/pell:review-queue`, future Jira-ops commands |
+| `plugin:atlassian:atlassian` (`https://mcp.atlassian.com/v2/mcp`) | OAuth | Every Jira-ops command; any PR-mode review (`/pell:correctness-review`, `/pell:quality-review`, `/pell:security-review`, `/pell:test-review` against a PR); `/pell:four-pass-review`, `/pell:address-review`, `/pell:review-queue`, `/pell:finish-work`, `/pell:related`, `/pell:precheck` |
 
-### Setting up the Atlassian MCPs
+### Setting up the Atlassian MCP
 
-The Atlassian Rovo MCP server exposes different tools depending on the auth method (OAuth -> Jira/Confluence; API token -> Bitbucket), and Claude Code keys MCP connections by their URL string — two entries with an identical URL collapse onto one session, so the second connection's tools never surface. This means you need **two parallel connections** to the same backing server on URL strings that *differ*. The OAuth plugin connects on `https://mcp.atlassian.com/v1/mcp/authv2`; you register the Bitbucket connection on that same working endpoint plus a throwaway query param (`?c=bb`) so the string is distinct. Here's the full setup:
-
-**1. Install the Atlassian OAuth plugin** (for Jira/Confluence):
+**1. Install the Atlassian plugin:**
 
 ```
 /plugin install atlassian@claude-plugins-official
 ```
 
-It auto-prompts for OAuth on first use. Sign in with your Pell Atlassian account.
+It connects to `https://mcp.atlassian.com/v2/mcp` and prompts for OAuth on first use. Sign in with your Pell Atlassian account. If the sign-in asks which Bitbucket workspace to allow, pick `pellsoftware`.
 
-**2. Create a scoped Bitbucket API token** at `id.atlassian.com/manage-profile/security/api-tokens`. Required scopes:
+**2. Restart Claude Code**, then run `/mcp`. `plugin:atlassian:atlassian` should show as connected.
 
-- `read:user:bitbucket`
-- `read:workspace:bitbucket`
-- `read:repository:bitbucket`
-- `read:pullrequest:bitbucket`
-- `write:pullrequest:bitbucket` (only if you want comment posting)
+**3. Check Bitbucket access** by asking Claude to "list my Bitbucket workspaces". The answer should include `pellsoftware`.
 
-**3. Base64-encode your credentials:**
-
-```bash
-echo -n "your.email@pellsoftware.com:YOUR_API_TOKEN" | base64
-```
-
-**4. Register the Bitbucket connection on the `authv2` endpoint with a distinguishing query param** (this is the key step — the OAuth plugin already uses `…/v1/mcp/authv2`, so registering Bitbucket on the bare URL collapses it onto the OAuth session and surfaces zero Bitbucket tools. The `?c=bb` suffix routes identically at Atlassian but reads as a distinct server to Claude Code. Do **not** use the bare `…/v1/mcp` path — it no longer serves Bitbucket tools):
-
-```bash
-claude mcp add-json atlassian-bitbucket '{
-  "type": "http",
-  "url": "https://mcp.atlassian.com/v1/mcp/authv2?c=bb",
-  "headers": {
-    "Authorization": "Basic <YOUR_BASE64_STRING>"
-  }
-}'
-```
-
-**5. Restart Claude Code** so both MCPs come up. This step is required, not optional — Claude Code snapshots its tool registry at session start, so the Bitbucket tools won't appear until you restart even though `/mcp` may already show the server as connected.
-
-**6. Verify both are connected** with `/mcp` — you should see `atlassian-bitbucket: ✓ Connected` and the Atlassian plugin's tools available.
+You won't see any `bitbucket*` tools in `/mcp`. On v2, Bitbucket operations aren't primary tools: commands find them with `discover` and run them through `executeRead` / `executeWrite`.
 
 **Troubleshooting:**
-- *Connected but no Bitbucket tools* — you skipped the restart (step 5); the registry only refreshes at session start. If a restart doesn't fix it, the URL likely collided with the OAuth connection: confirm the `?c=bb` suffix is present and that it differs from the OAuth plugin's URL.
-- *403 errors* — the API token is missing a scope; re-check the list in step 2.
+- *Bitbucket calls fail, or `pellsoftware` is missing* — v2 only serves Bitbucket workspaces linked to an Atlassian organization, and only those you allowed at sign-in. Clear the server's authentication from `/mcp` and sign in again.
+- *Sign-in loops after the move from v1* — same fix: clear the server's authentication from `/mcp` and sign in again.
+
+### Migrating from the two-connection setup
+
+Toolkit versions before 0.21.0 needed a second, API-token connection named `atlassian-bitbucket` on `https://mcp.atlassian.com/v1/mcp/authv2?c=bb`, because v1 only served Bitbucket over an API token. v2 serves Bitbucket over the plugin's OAuth connection, and the toolkit no longer calls the old tools. To clean up:
+
+1. Update the toolkit: `/plugin marketplace update pell-skills`, then `/reload-plugins`
+2. Remove the old connection. The original setup command didn't pass a scope, so the entry is usually local (tied to the project you ran it in), but it may be user-wide. Check first:
+
+   ```bash
+   claude mcp get atlassian-bitbucket
+   ```
+
+   Then remove it with the scope that printed, `local` or `user`:
+
+   ```bash
+   claude mcp remove atlassian-bitbucket -s local
+   ```
+
+3. Revoke the Bitbucket API token you made for it at `id.atlassian.com/manage-profile/security/api-tokens`
 
 ---
 
@@ -439,19 +431,19 @@ The receiving end of `/pell:four-pass-review`. Pulls the review comments back of
 4. Per-comment triage — you drive `fix` / `reply` / `skip` (or a bulk verb like `all fix`)
 5. Applies only concrete, mechanical fixes to the working tree (never weakens tests, never guesses); drafts thread replies for confirmation before posting
 
-**Output:** grouped comment list + optional working-tree edits + optional inline replies. A reply does **not** resolve the thread — the Bitbucket API has no resolve action, so that stays a manual UI step.
+**Output:** grouped comment list + optional working-tree edits + optional inline replies. A reply does **not** resolve the thread, and the command never resolves one; that stays a manual UI step.
 
-**Side-effects:** fixes touch the working tree only (never commits/pushes — that's `/pell:finish-work`); replies post only on per-comment confirmation. Authorship isn't enforced (no Bitbucket current-user identity).
+**Side-effects:** fixes touch the working tree only (never commits/pushes — that's `/pell:finish-work`); replies post only on per-comment confirmation. Authorship isn't enforced.
 
 ### `/pell:review-queue [repo …]`
 
-Find the open Bitbucket PRs where you're a requested reviewer, then jump straight into reviewing one — the reviewer-role mirror of `/pell:my-tickets` (list, then chain). Pass one or more repos to scan just those; pass nothing to scan the whole workspace. Read-only: picking a PR hands off to a review command.
+Find the open Bitbucket PRs where you're a requested reviewer, then jump straight into reviewing one — the reviewer-role mirror of `/pell:my-tickets` (list, then chain). Pass one or more repos to narrow the list to those; pass nothing to see the whole workspace. Read-only: picking a PR hands off to a review command.
 
 **Usage:**
 
 ```
-/pell:review-queue                          # scan the whole pellsoftware workspace
-/pell:review-queue atlasviewapp             # just one repo (fast)
+/pell:review-queue                          # the whole pellsoftware workspace
+/pell:review-queue atlasviewapp             # just one repo
 /pell:review-queue atlasviewapp rrs-web     # a couple of repos
 /pell:review-queue unapproved               # hide PRs you've already approved
 /pell:review-queue newest first             # flip the default oldest-first ordering
@@ -460,13 +452,13 @@ Find the open Bitbucket PRs where you're a requested reviewer, then jump straigh
 
 **Behavior:**
 
-1. Resolves your identity via `atlassianUserInfo` (account id cached in `pell-config.json`)
-2. Resolves the repo set — your args, or every repo in the workspace
-3. Queries each repo server-side for OPEN PRs where you're a reviewer (`q=reviewers.account_id`, parallel batches)
+1. Lists every OPEN PR in the workspace where you're a reviewer in one paginated call (`listMyBitbucketReviewRequests`), then narrows to the repos you passed, if any
+2. Applies `from <name>` and `unapproved` client-side; `unapproved` reads approval state from the same listing, using your account id from `atlassianUserInfo` (cached in `pell-config.json`)
+3. Fetches each remaining PR's source and target branch (parallel batches), since the listing omits them
 4. Renders a numbered list grouped by repo, oldest-waiting first; drafts marked `[draft]`
 5. Reply with a number to chain into `/pell:four-pass-review` (or `<n> correctness|quality|security|test` for a lighter single-dimension pass)
 
-**Output:** numbered PR list. **Side-effects:** read-only except the chained review you pick (plus the account-id cache write). Needs both the Bitbucket MCP and the Atlassian OAuth connection (for identity).
+**Output:** numbered PR list. **Side-effects:** read-only except the chained review you pick (plus the account-id cache write). Needs the Atlassian plugin connection.
 
 ---
 
@@ -533,7 +525,7 @@ Close out a branch by opening a Bitbucket PR and (only on explicit consent) tran
 2. Resolves the Jira key from `$ARGUMENTS` or the current branch name (`<KEY>-*` shape from `/pell:start-work`)
 3. Fetches the ticket + resolves the base branch (`git symbolic-ref refs/remotes/origin/HEAD` → config → ask)
 4. Pre-flight: offers to push if the branch has unpushed commits or no upstream; detects an already-open PR for the source branch and offers to skip create
-5. Creates the PR via Bitbucket MCP after a confirmation that names the title, source, and target — **always** confirmed, even with pre-auth
+5. Creates the Bitbucket PR after a confirmation that names the title, source, and target — **always** confirmed, even with pre-auth
 6. Optionally transitions the ticket to the project's "in review" status (discovered + cached on first use per project, like `/pell:start-work`)
 7. Optionally adds a comment to the ticket with the PR URL
 

@@ -11,15 +11,17 @@ The user passed: `$ARGUMENTS`
 
 From `$ARGUMENTS`, extract:
 
-- **Repo(s)** (optional) — one or more repo slugs (`atlasviewapp`) or Bitbucket repo URLs. Workspace resolves in order: a URL or `workspace <slug>` inline; else the Bitbucket workspace named in `docs/pell/context.md`'s `## Repository` section (Step 3 loads it — repo-scoped, so it wins over the hardcoded default below); else `pellsoftware`. If no repos are given, scan the whole workspace (Step 4).
+- **Repo(s)** (optional) — one or more repo slugs (`atlasviewapp`) or Bitbucket repo URLs. Workspace resolves in order: a URL or `workspace <slug>` inline; else the Bitbucket workspace named in `docs/pell/context.md`'s `## Repository` section (Step 3 loads it — repo-scoped, so it wins over the hardcoded default below); else `pellsoftware`. If no repos are given, list the whole workspace (Step 4).
 - **Filters** (optional freeform):
-  - `unapproved` / `needs review` / `not approved` → drop PRs you've already approved (opt-in; costs a per-PR `get`, Step 5).
+  - `unapproved` / `needs review` / `not approved` → drop PRs you've already approved (opt-in, Step 5).
   - `from <name>` / `by <name>` → keep only PRs whose author display name contains `<name>` (client-side).
   - `newest first` → sort newest-updated first (default is oldest-first).
   - `by age` → one flat oldest-first list, no repo grouping.
 - **`--reset`** → clear the cached `account_id` and re-resolve it (Step 2).
 
 ## Step 2 — Resolve your identity
+
+Skip this step unless the `unapproved` filter (under any of its phrasings) or `--reset` was passed. Step 4's listing identifies you on the server side; only the `unapproved` filter needs your `account_id`.
 
 Read `~/.claude/pell-config.json` (treat missing as `{}`).
 
@@ -42,27 +44,29 @@ When present, treat it as a **coordinate source only**. It holds pointers, not c
 
 Never write to `context.md`. If a live call later contradicts it, use the live value and print one line: `context.md is out of date on <field>. Run /pell:map-repo verify.`
 
-## Step 4 — Resolve the repo set
+## Step 4 — Fetch your review requests
 
-- **Repos in args** → use exactly those. Validate each as you query (Step 5); on a 404/no-access, print `(skipping <repo> — not found or no access)` and continue with the rest.
-- **No repos in args** → enumerate the workspace: `mcp__atlassian-bitbucket__bitbucketRepository` `action=list`, `workspaceId=<workspace>`, paginating until exhausted. Collect repo slugs and print `Scanning <N> repos in <workspace>…` so the user knows a no-arg run does more work.
+Run `listMyBitbucketReviewRequests` on `plugin:atlassian:atlassian`. It is not a primary tool: reach it through `discover`, then call `executeRead({name: "listMyBitbucketReviewRequests", inputs, responseFields})` with no `cloudId` (Bitbucket operations don't take one). One call covers the whole workspace, and the server works out who "you" are from the signed-in connection.
 
-## Step 5 — Query each repo
+- `inputs`: `{workspaceId: <workspace>, state: "OPEN", pagelen: 50}`
+- `responseFields`: `["values.id", "values.title", "values.author.display_name", "values.participants.user.account_id", "values.participants.approved", "values.updated_on", "values.comment_count", "values.draft", "values.links.html.href"]` — the default view leaves out `comment_count`
 
-For each repo, call `mcp__atlassian-bitbucket__bitbucketPullRequest`:
-- `action=list`, `workspaceId`, `repoId=<slug>`
-- `state=OPEN`
-- `q=reviewers.account_id="<account_id>"`
+Paginate (`page=2,3,…`) until a page returns fewer than `pagelen` results. If the call fails, exit with `Couldn't list your review requests: <error>`.
 
-Run these in **parallel batches** (≤ ~10 at a time) to stay under rate limits; on a 429, fall back to sequential. If one repo's query fails, print `(couldn't query <repo> — <error>)` and continue — a partial queue beats none.
+Tag each PR with its repo slug, parsed from `links.html.href` (`https://bitbucket.org/<workspace>/<repo>/pull-requests/<id>`).
 
-Aggregate `values`, tagging each PR with its repo. Capture per PR: `id`, `title`, `author.display_name`, `source.branch.name`, `destination.branch.name`, `updated_on`, `comment_count`, `draft`, `links.html.href`.
+- **Repos in args** → keep only PRs in those repos. For a requested repo with no matches, print `(no open review requests in <repo>)` and continue with the rest.
+- **No repos in args** → keep everything.
+
+## Step 5 — Filter, then fill in branches
 
 **`from <name>` filter** → drop PRs whose author display name doesn't match.
 
-**`unapproved` filter (only if requested)** → for each remaining PR, `action=get` and inspect `participants[]` for your `account_id`; keep it only if that entry's `approved` is false. (Approval state isn't in the list response, which is why this is opt-in.)
+**`unapproved` filter (only if requested)** → find your entry in each PR's `participants[]` by matching `user.account_id` to Step 2's `account_id`, and keep the PR only if that entry's `approved` is false. Keep it too when no entry matches: the server listed it as awaiting you, so treat it as unapproved. The listing already carries approval state, so this costs no extra calls.
 
-If nothing matches: print `No open PRs awaiting your review (scanned <N> repos).` and stop.
+If nothing matches: print `No open PRs awaiting your review in <workspace>.` and stop.
+
+**Branches.** The listing returns empty `source` and `destination` objects, so fetch them for each remaining PR: `getBitbucketRepoPullRequest` via `executeRead`, `inputs: {workspaceId, repoId: <repo>, prId: <id>}`, `responseFields: ["source.branch.name", "destination.branch.name"]`. Run these in **parallel batches** (≤ ~10 at a time) to stay under rate limits; on a 429, fall back to sequential. If one fails, render that PR without its branch segment. A partial line beats a dropped PR.
 
 ## Step 6 — Render the list
 
@@ -100,6 +104,6 @@ Hand off to the review command's normal flow — it owns WIP detection, Jira loo
 ## Operator notes
 
 - **Read-only** — the only write is the `account_id` cache in `pell-config.json`. Selecting a PR chains into a review command; this command never comments, approves, or merges.
-- Requires **both** MCPs: Bitbucket (PR + repo listing) and the Atlassian OAuth connection (`atlassianUserInfo`).
-- A no-arg workspace scan is N+1 calls; always print the repo count first and parallelize. Suggest passing a repo for speed.
-- Don't fail the whole run for one repo — skip it with a note and render what you have.
+- Requires only the Atlassian plugin connection (`plugin:atlassian:atlassian`). It serves both the Bitbucket listing and `atlassianUserInfo`.
+- Cost is one paginated listing for the whole workspace plus one `get` per listed PR for its branches. Passing repos narrows the output, not the listing.
+- Don't fail the whole run for one PR's branch fetch. Render it without branches.
