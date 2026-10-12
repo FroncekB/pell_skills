@@ -118,12 +118,11 @@ Each dimension uses its own scale; reviewers surface everything (no pre-filterin
 
 ## Prerequisites
 
-**MCP servers:**
+**MCP server:**
 
-- **Bitbucket MCP** (`atlassian-bitbucket`, API-token auth) — any PR-mode review, `four-pass-review`, `finish-work`, `related`.
-- **Jira MCP** (`plugin:atlassian:atlassian`, OAuth) — all Jira-ops commands and Jira context in `four-pass-review`.
+- **Atlassian MCP v2** (`plugin:atlassian:atlassian`, OAuth, `https://mcp.atlassian.com/v2/mcp`) — one connection for Jira, Confluence, and Bitbucket. Every Jira-ops command, every PR-mode review, `four-pass-review`, `address-review`, `review-queue`, `finish-work`, `related`, and `precheck`.
 
-See the [marketplace root README](../../README.md) for the dual-connection setup.
+Install it with `/plugin install atlassian@claude-plugins-official` and sign in once. The separate API-token `atlassian-bitbucket` connection is no longer used. See the [marketplace root README](../../README.md) for setup and migration.
 
 **Optional plugin dependencies** (notify-don't-force — the command/skill skips or substitutes inline when absent):
 

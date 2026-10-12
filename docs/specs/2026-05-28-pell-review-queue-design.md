@@ -149,3 +149,7 @@ Verified live against `pellsoftware/atlasviewapp` on 2026-05-28:
 - **Cross-workspace scanning** — one workspace per invocation (default `pellsoftware`, override via URL/`workspace`).
 - **Persisting a curated repo set** — per the design decision, repo scope is arg-driven with a workspace-wide default; no `review_repos` config list (YAGNI).
 - **Approval-state in the default view** — only the opt-in `unapproved` filter pays for per-PR `get`s.
+
+---
+
+**Status note (2026-10-12):** Bitbucket calls in this spec name the retired API-token `atlassian-bitbucket` connection. Since plugin 0.21.0 (2026-10-12) they run on `plugin:atlassian:atlassian` against the v2 endpoint; the current operation names are in [architecture spec §4.4](2026-05-27-pell-skills-architecture.md). The per-repo scan this spec designs was also superseded: the command now makes one `listMyBitbucketReviewRequests` call for the whole workspace, which carries approval state, plus a per-PR get for branch names.

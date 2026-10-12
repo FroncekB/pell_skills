@@ -26,9 +26,9 @@ Honor any other freeform context (e.g. `skip jira`).
 
 ## Step 2 — Gather inputs
 
-**PR mode:** in parallel, call:
-- `mcp__atlassian-bitbucket__bitbucketPullRequest` with `action=get`
-- `mcp__atlassian-bitbucket__bitbucketPullRequest` with `action=diff`
+**PR mode:** in parallel, call these two `plugin:atlassian:atlassian` operations. Neither is a primary tool: reach each through `discover`, then run it with `executeRead({name, inputs, responseFields})`, with `responseFields` beside `inputs`, never inside it. Bitbucket operations take no `cloudId`.
+- `getBitbucketRepoPullRequest` with `inputs: {workspaceId, repoId, prId}` and `responseFields: ["title", "description", "state", "author.display_name", "source.branch.name", "destination.branch.name"]` (the default view leaves out `description`)
+- `getBitbucketRepoPullRequestDiff` with `inputs: {workspaceId, repoId, prId}`
 
 Then look for a Jira key (regex `[A-Z][A-Z0-9]+-\d+`) in PR title, source branch (including GitFlow `feature/KEY-N-*`, `bugfix/KEY-N-*`, `hotfix/KEY-N-*` patterns), and description. If found, fetch the ticket via `mcp__plugin_atlassian_atlassian__getJiraIssue` with `responseContentFormat="markdown"` — the acceptance criteria help judge which behaviors *should* be tested. If not found, proceed without Jira context (don't prompt — this is the primitive, not the composite).
 

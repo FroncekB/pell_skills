@@ -16,7 +16,7 @@ Parse `$ARGUMENTS`:
 
 **Context source** for the reviewers' surrounding-code fetches:
 - Default: `local` — assume the user is in a local checkout of the same repo. Reviewers will use `Read`/`Grep`/`Glob` against `<repo_root>`
-- If `$ARGUMENTS` contains `use bitbucket`, `use mcp`, `use remote`, `fetch via bitbucket`, `not LFS`, or `not local` → use `bitbucket` — reviewers will fetch via `mcp__atlassian-bitbucket__bitbucketRepoContent` (action `files.get`) against the PR's source branch
+- If `$ARGUMENTS` contains `use bitbucket`, `use mcp`, `use remote`, `fetch via bitbucket`, `not LFS`, or `not local` → use `bitbucket` — reviewers will fetch via `getBitbucketRepoFileContent` (`executeRead` on `plugin:atlassian:atlassian`) against the PR's source branch
 
 **Test pass:** on by default. If `$ARGUMENTS` contains `skip tests`, `no tests`, or `-tests` → do not dispatch the test-coverage reviewer in Step 5, and omit the Test Coverage section, its count line, and its run-marker entries downstream. `with tests`, `include tests`, and `+tests` are accepted as no-ops — the pass already runs.
 
@@ -26,9 +26,9 @@ Honor other freeform context too (e.g. "skip jira", "treat as urgent").
 
 ## Step 2 — Fetch PR data
 
-Call **in parallel**:
-- `mcp__atlassian-bitbucket__bitbucketPullRequest` with `action=get`
-- `mcp__atlassian-bitbucket__bitbucketPullRequest` with `action=diff`
+Call **in parallel** these two `plugin:atlassian:atlassian` operations. Neither is a primary tool: reach each through `discover`, then run it with `executeRead({name, inputs, responseFields})`, with `responseFields` beside `inputs`, never inside it. Bitbucket operations take no `cloudId`.
+- `getBitbucketRepoPullRequest` with `inputs: {workspaceId, repoId, prId}` and `responseFields: ["title", "description", "state", "draft", "author.display_name", "source.branch.name", "destination.branch.name"]` (the default view leaves out `description` and `draft`, which Step 4 reads)
+- `getBitbucketRepoPullRequestDiff` with `inputs: {workspaceId, repoId, prId}`
 
 Capture: title, description, source branch, destination branch, author, state, full diff.
 
@@ -86,7 +86,7 @@ Jira description / acceptance criteria:
 Diff:
 <diff>
 
-Per your context discovery contract: use Read/Grep/Glob from repo_root when context_source is `local`; use mcp__atlassian-bitbucket__bitbucketRepoContent when context_source is `bitbucket`.
+Per your context discovery contract: use Read/Grep/Glob from repo_root when context_source is `local`; use getBitbucketRepoFileContent (reach it through discover, then run it with executeRead on plugin:atlassian:atlassian; no cloudId) when context_source is `bitbucket`.
 
 Return findings as JSON per your output contract.
 ```
@@ -162,8 +162,7 @@ Show the body. Then:
 
 `y`, `yes`, or an empty reply → post. `n` / `no` → print `Run marker skipped.` and continue to Step 8.
 
-To post, call `mcp__atlassian-bitbucket__bitbucketPullRequest` with:
-- `action=comment`
+To post, run `addBitbucketRepoPullRequestComment` on `plugin:atlassian:atlassian`. It is not a primary tool: reach it through `discover`, then call `executeWrite({name: "addBitbucketRepoPullRequestComment", inputs: {...}})` with no `cloudId`. Inputs:
 - `prId=<prId>`, `workspaceId=<workspace>`, `repoId=<repo>`
 - `content=<body>`
 
@@ -186,8 +185,7 @@ Ask the user which severity threshold to post:
 Default if user just says "yes": `minor+`. Never post nits by default. If `--dry-run`, list what would be posted (file, line, dimension/severity) at the chosen threshold and stop — make no calls.
 
 For each finding to post:
-1. Call `mcp__atlassian-bitbucket__bitbucketPullRequest` with:
-   - `action=comment`
+1. Call `executeWrite` with `name: "addBitbucketRepoPullRequestComment"` (the same operation as the Step 7 marker) and these inputs:
    - `prId=<prId>`, `workspaceId=<workspace>`, `repoId=<repo>`
    - `inlinePath=<file>`, `inlineToLine=<line>`
    - `content`: `**[<dimension>/<severity>]** <finding>\n\n**Suggested fix:** <fix>`

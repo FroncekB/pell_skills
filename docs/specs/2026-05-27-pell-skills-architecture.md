@@ -117,6 +117,21 @@ Nothing validates tool names in prompt bodies. Before merging a new Atlassian ca
 
 **Rule:** a call that reads a field compact drops passes `view: "full"` with a one-line inline note naming the fields; calls that read only compact fields stay on the default, which is cheaper. `reporter` is the exception to both views: the plugin connection never returns it, even on issues matching JQL `reporter is not EMPTY`, but it does return `creator`. Request both and fall back to `creator`, labelled as the creator. Verified against RRS 2026-09-17 and 2026-09-23.
 
+**Bitbucket — one shape, v2 only.** Atlassian's v2 endpoint (`https://mcp.atlassian.com/v2/mcp`) serves Bitbucket Cloud over the plugin's OAuth connection. That retired two things: the API-token `atlassian-bitbucket` connection on `…/v1/mcp/authv2?c=bb`, and the dual-connection workaround that kept it from collapsing onto the OAuth session. Bitbucket calls don't name two shapes, because no classic Bitbucket connection is left to fall back to. No Bitbucket operation is primary: each is reached through `discover` and run with an execute-family tool, and none takes `cloudId`. Verified operations (live `discover` and `executeRead` against the `pellsoftware` workspace, 2026-10-12):
+
+| Role | Operation | Execute tool | Retired `atlassian-bitbucket` call |
+|-|-|-|-|
+| Get a PR | `getBitbucketRepoPullRequest` | `executeRead` | `bitbucketPullRequest` `action=get` |
+| PR diff | `getBitbucketRepoPullRequestDiff` | `executeRead` | `bitbucketPullRequest` `action=diff` |
+| List a PR's comments | `listBitbucketRepoPullRequestComments` | `executeRead` | `bitbucketPullRequest` `action=comments` |
+| Post a PR comment: general, inline (`inlinePath` + `inlineToLine`), or reply (`parentCommentId`) | `addBitbucketRepoPullRequestComment` | `executeWrite` | `bitbucketPullRequest` `action=comment` |
+| List a repo's PRs (`state`, BBQL `q`) | `listBitbucketRepoPullRequests` | `executeRead` | `bitbucketPullRequest` `action=list` |
+| Open a PR | `createBitbucketRepoPullRequest` | `executeWrite` | `bitbucketPullRequest` `action=create` |
+| Your review requests across a workspace | `listMyBitbucketReviewRequests` | `executeRead` | `bitbucketRepository` `action=list`, then `bitbucketPullRequest` `action=list` per repo |
+| Read a file at a ref | `getBitbucketRepoFileContent` | `executeRead` | `bitbucketRepoContent` `action=files.get` |
+
+**Bitbucket read views.** Bitbucket reads return a reduced default too. A PR list returns only `id`, `title`, `state`, `author.display_name`, and the source and destination branch names. A PR get adds `created_on`, `updated_on`, `links.html.href`, and the description as `summary.raw`. A comment list returns `id`, `content.raw`, `user.display_name`, `created_on`, and `pending`. `listMyBitbucketReviewRequests` returns empty `source` and `destination` objects whatever is requested, so `/pell:review-queue` fetches branches with a per-PR get. **Rule:** a Bitbucket call that reads any other field (`comment_count`, `participants`, `draft`, `description`, a list's `links.html.href`, a comment's `inline` / `parent` / `resolution` / `deleted`) passes `responseFields` listing every field it reads, because `responseFields` returns only what it lists. A file read always passes `path`; a repo-root read without one returned 404 in testing, on both the retired and the v2 connection.
+
 ## 5. Shared configuration
 
 Several skills need to persist user-specific preferences (which Jira transition means "start work" for project RRS, which default branch base to use, etc.).
@@ -228,7 +243,7 @@ Every reviewer:
 - `use bitbucket` / `use mcp` / `fetch via bitbucket` / `use remote`
 - `not LFS` / `not local` (in context of context-fetch)
 
-…the command sets `context_source: bitbucket` in the agent's dispatching prompt. The agent then fetches surrounding files via `mcp__atlassian-bitbucket__bitbucketRepoContent(workspaceId, repoId, ref=<source branch>)` instead of the local filesystem.
+…the command sets `context_source: bitbucket` in the agent's dispatching prompt. The agent then fetches surrounding files via `getBitbucketRepoFileContent` (`discover`, then `executeRead` on `plugin:atlassian:atlassian`, with `workspaceId`, `repoId`, `referenceOrSha=<source branch>`, `path`) instead of the local filesystem.
 
 The diff itself is still resolved per scope (PR-mode diffs come from Bitbucket regardless; local-mode diffs come from `git diff`). The override only affects how *surrounding* context is fetched.
 
@@ -380,6 +395,7 @@ All previously-open questions are now resolved:
 - ✅ **Test pass default-on and command-rename policy** — the test-coverage reviewer is a default member of both composites (`skip tests` / `no tests` / `-tests` opts out; the old `with tests` phrases are accepted as no-ops), so the PR composite is `/pell:four-pass-review`. A renamed command ships with a thin deprecated-alias file under the old name that prints a one-line notice and forwards `$ARGUMENTS` verbatim, kept for a release or two, then deleted. `address-review` matches both the old and the new run-marker strings so pre-rename markers on open PRs stay hidden (2026-09-22, GitHub issue #12) (§8)
 - ✅ **Atlassian tool naming** — every Atlassian call outside the `plugin:atlassian:atlassian` primary set names both connection shapes inline, by role; the verified pairs live in §4.4. Twelve call sites named tools that do not exist on that server, including `getConfluencePage`, which silently emptied the Confluence half of every SOW, and `addCommentToJiraIssue`, whose plugin-server name is `addOrEditJiraIssueComment`. The cached-transition path in `start-work` and `finish-work` now always fetches live transitions, since the transition call needs a live `id` (2026-09-23, GitHub issue #14) (§4.4)
 - ✅ **Atlassian read views** — every `getJiraIssue` / `searchJiraIssuesUsingJql` call that reads a field the default `compact` view drops passes `view: "full"` with an inline note. Compact had been silently stripping `parent`, `issuetype`, `issuelinks`, and `statusCategory.key`, so `/pell:related` rendered no relationships, `/pell:my-tickets` could not sort by category, and `/pell:start-work` had no issue type or assignee `accountId`. The "sometimes omits `reporter`" notes were wrong: the plugin connection never returns `reporter`, so bodies fall back to `creator` (2026-09-23, GitHub issues #15 and #16) (§4.4)
+- ✅ **Bitbucket on the v2 connection** — every Bitbucket call runs on `plugin:atlassian:atlassian` against `https://mcp.atlassian.com/v2/mcp`; the API-token `atlassian-bitbucket` connection and the `?c=bb` dual-connection workaround are retired (2026-10-12, plugin 0.21.0). Bitbucket names one shape, not two, since nothing is left to fall back to. The operations and their read-view rule are in §4.4. `/pell:review-queue` moved from a per-repo scan (one repo listing plus one PR query per repo) to a single `listMyBitbucketReviewRequests` call, which also carries approval state, so `unapproved` no longer needs a per-PR get
 
 ## 12. Implementation status
 

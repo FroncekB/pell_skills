@@ -25,7 +25,7 @@ The default assumption is that you're working from a local checkout of the repo 
 2. **Identify the framework/language** from the changed files. Security pitfalls are framework-specific (ASP.NET vs Express vs Django have different injection patterns)
 3. **Check for secrets in `git status`** if local mode — any `.env`, `appsettings*`, or `secrets*` files modified/staged is a red flag
 
-**If `context_source: bitbucket`:** fetch the same files via `mcp__atlassian-bitbucket__bitbucketRepoContent` with `action="files.get"`, `workspaceId=<workspace>`, `repoId=<repo>`, `referenceOrSha=<branch>`, `path=<file>`. Use this when the dispatcher tells you the local checkout isn't trustworthy.
+**If `context_source: bitbucket`:** fetch the same files via `getBitbucketRepoFileContent` on `plugin:atlassian:atlassian` — not a primary tool, so reach it through `discover`, then run `executeRead({name: "getBitbucketRepoFileContent", inputs: {workspaceId: <workspace>, repoId: <repo>, referenceOrSha: <branch>, path: <file>}})`. Bitbucket operations take no `cloudId`. Use this when the dispatcher tells you the local checkout isn't trustworthy.
 
 ## What you look for
 
@@ -51,7 +51,7 @@ Report **everything** you observe, including low-severity findings and defensive
 
 1. Read CLAUDE.md for security rules
 2. Identify every place in the diff where data crosses a **trust boundary**: user input → server, server → client, server → DB, server → external service
-3. For each, trace whether the data is properly validated, escaped, or authorized before use. Use `Grep` to find the call chain. In PR mode use `bitbucketRepoContent` for files outside the diff
+3. For each, trace whether the data is properly validated, escaped, or authorized before use. Use `Grep` to find the call chain. In PR mode with `context_source: bitbucket`, use `getBitbucketRepoFileContent` for files outside the diff
 4. **Use severity to communicate exploit confidence.** Don't hide low-severity findings — surface them with `low` severity
 
 ## Severity scale

@@ -64,15 +64,16 @@ Skip this step if the user said `skip bitbucket` in Step 1, or if `git rev-parse
 
 Parse `git remote get-url origin` — expect `git@bitbucket.org:<workspace>/<repo>.git` or `https://bitbucket.org/<workspace>/<repo>.git`. If parsing fails (not a Bitbucket remote), skip this step silently — but **capture the detected host** (e.g. `github.com`, `gitlab.com`, or the raw URL) so the final report can name it. Note in the final report under "Bitbucket PRs" that the origin isn't Bitbucket and which host was detected.
 
-Call `mcp__atlassian-bitbucket__bitbucketPullRequest` with:
-- `action`: `list`
+Run `listBitbucketRepoPullRequests` on `plugin:atlassian:atlassian`. It is not a primary tool: reach it through `discover`, then call `executeRead({name: "listBitbucketRepoPullRequests", inputs, responseFields})` with no `cloudId` (Bitbucket operations don't take one). Inputs:
 - `workspaceId`: `<workspace>`
 - `repoId`: `<repo>`
 - `q`: `title ~ "<ticket_key>" OR source.branch.name ~ "<ticket_key>"` (BBQL contains-match)
 - `state`: `OPEN` if the user said `open only`, otherwise omit (returns all states the API surfaces by default)
 - `pagelen`: 20
 
-If the MCP returns an error, render the PR section with `_Bitbucket query failed: <error>_` instead of failing the whole command. Other sections are still useful.
+Pass `responseFields: ["values.id", "values.title", "values.state", "values.author.display_name", "values.source.branch.name", "values.destination.branch.name", "values.links.html.href"]` — the default view leaves out the PR URL that Step 7 renders.
+
+If the call returns an error, render the PR section with `_Bitbucket query failed: <error>_` instead of failing the whole command. Other sections are still useful.
 
 ## Step 7 — Render
 

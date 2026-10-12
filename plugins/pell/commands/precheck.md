@@ -82,15 +82,14 @@ Skip if `skip repo` was set or `git rev-parse --show-toplevel` fails. Extract fe
 
 ### 5c — In-flight: open PRs and branches
 
-Skip if `skip bitbucket` was set or `git rev-parse --show-toplevel` fails (not in a repo). Parse `git remote get-url origin` for a Bitbucket `<workspace>/<repo>` (expect `git@bitbucket.org:<workspace>/<repo>.git` or the https form). If origin isn't Bitbucket, note the detected host and skip the PR query. Otherwise call `mcp__atlassian-bitbucket__bitbucketPullRequest` with:
-- `action`: `list`
+Skip if `skip bitbucket` was set or `git rev-parse --show-toplevel` fails (not in a repo). Parse `git remote get-url origin` for a Bitbucket `<workspace>/<repo>` (expect `git@bitbucket.org:<workspace>/<repo>.git` or the https form). If origin isn't Bitbucket, note the detected host and skip the PR query. Otherwise run `listBitbucketRepoPullRequests` on `plugin:atlassian:atlassian` — reach it through `discover`, then call `executeRead({name: "listBitbucketRepoPullRequests", inputs, responseFields})` with no `cloudId`. Pass `responseFields: ["values.id", "values.title", "values.state", "values.author.display_name", "values.source.branch.name", "values.links.html.href"]`. The default view leaves out the PR URL, which the Step 7 comment links. Inputs:
 - `workspaceId`: `<workspace>`
 - `repoId`: `<repo>`
 - `q`: `title ~ "<terms>" OR source.branch.name ~ "<terms>"`
 - `state`: `OPEN`
 - `pagelen`: 20
 
-Separately run `git branch -a` and keep branches whose names match the terms. If the Bitbucket MCP is absent or errors, render `_Bitbucket unavailable_` and continue (notify-don't-force).
+Separately run `git branch -a` and keep branches whose names match the terms. If the Atlassian connection is absent or the Bitbucket call errors, render `_Bitbucket unavailable_` and continue (notify-don't-force).
 
 ### 5d — Merged: recent git history
 

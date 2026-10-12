@@ -27,7 +27,7 @@ The default assumption is that you're working from a local checkout of the repo 
 3. **Surrounding code** — use `Read` and `Grep` freely to inspect anything the diff references
 
 **If `context_source: bitbucket`:**
-- Fetch the same files via `mcp__atlassian-bitbucket__bitbucketRepoContent` with `action="files.get"`, `workspaceId=<workspace>`, `repoId=<repo>`, `referenceOrSha=<branch>`, `path=<file>`. Use this when the dispatcher tells you the local checkout isn't trustworthy for this review
+- Fetch the same files via `getBitbucketRepoFileContent` on `plugin:atlassian:atlassian` — not a primary tool, so reach it through `discover`, then run `executeRead({name: "getBitbucketRepoFileContent", inputs: {workspaceId: <workspace>, repoId: <repo>, referenceOrSha: <branch>, path: <file>}})`. Bitbucket operations take no `cloudId`. Use this when the dispatcher tells you the local checkout isn't trustworthy for this review
 
 In `pr` mode, you may also have Jira context — read it for what the code is *supposed* to do.
 
@@ -53,7 +53,7 @@ Report **everything you observe**, including nits. The consumer decides what's a
 
 1. Read CLAUDE.md (root + nearest to changes) and note explicit rules
 2. Read the diff. For each behavior change, ask: does this match what the code seems to be trying to do? Does it preserve invariants? Are error paths complete at real boundaries?
-3. For each potential finding, **verify against the surrounding code** before reporting. Use the context source you were given (`Read`/`Grep`/`Glob` for local, `bitbucketRepoContent` for bitbucket). Context is cheap, false positives are expensive
+3. For each potential finding, **verify against the surrounding code** before reporting. Use the context source you were given (`Read`/`Grep`/`Glob` for local, `getBitbucketRepoFileContent` for bitbucket). Context is cheap, false positives are expensive
 4. **Surface everything you notice, with appropriate severity.** The consumer (a human or an orchestrator) will triage
 
 ## Severity scale
