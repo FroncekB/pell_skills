@@ -20,7 +20,7 @@ Honor any freeform context (e.g. "ignore the test files", "focus on the new modu
 
 **Test pass:** on by default. If `$ARGUMENTS` contains `skip tests`, `no tests`, or `-tests` → do not dispatch the test-coverage reviewer in Step 2, and omit the Test Coverage section and its count line downstream. `with tests`, `include tests`, and `+tests` are accepted as no-ops — the pass already runs.
 
-Run the appropriate `git diff`. If empty, tell the user "No changes to review." and stop.
+Run the appropriate `git diff` with `--stat` added right after `diff` (e.g. `git diff --stat HEAD`). If it's empty, tell the user "No changes to review." and stop. Then write the full diff to a file with the same arguments plus `--output=<git_dir>/pell-local-review.diff` (e.g. `git diff --output=<git_dir>/pell-local-review.diff HEAD`), where `<git_dir>` is the output of `git rev-parse --absolute-git-dir`. That file is `diff_path` for Step 2. It sits inside `.git`, so it is never committed, and the next run overwrites it. Don't print the full diff into this conversation — the reviewers read it from the file.
 
 Also capture:
 - `git status --short` — modified vs new files
@@ -39,12 +39,13 @@ Each agent gets:
 
 ```
 mode: local
+context_source: local
 repo_root: <path>
+diff_path: <diff_path>
 
 Scope: <describe: "all uncommitted changes", "staged only", "files X,Y", etc.>
 
-Diff:
-<diff>
+Read diff_path in full before reviewing.
 
 git status:
 <git status --short output>
@@ -131,3 +132,4 @@ If the user picks `no`, exit cleanly.
 - **Never apply fixes without explicit confirmation**
 - If a reviewer agent returns malformed JSON, render its raw output and skip the side-effect offer for that dimension
 - Findings from different reviewers may overlap — show both, they're different angles
+- Never paste the diff into the reviewer prompts. Writing four copies of it is the most expensive thing this command can do

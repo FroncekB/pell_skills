@@ -24,7 +24,7 @@ neighbors: <JSON array of {key, summary, description truncated to about 500 char
 
 Fetch every comment on the ticket, every page, before you read any code — anything already raised there changes how you tag your findings (Thread status, below). The comment tool differs by connection shape:
 
-- **Plugin server (`plugin:atlassian:atlassian`)** — the tool is `listJiraIssueComments`, found via `discover` and run with `executeRead({name, cloudId, inputs})`; `cloudId` is a top-level argument, never inside `inputs`. Example:
+- **Plugin server (`plugin:atlassian:atlassian`)** — the tool is `listJiraIssueComments`, called directly, with no `discover` round trip (run `discover` and retry only if the call fails with `Unknown operation`), as `executeRead({name, cloudId, inputs})`; `cloudId` is a top-level argument, never inside `inputs`. Example:
   ```
   executeRead({
     name: "listJiraIssueComments",

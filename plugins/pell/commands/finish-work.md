@@ -103,7 +103,7 @@ Otherwise, ask:
 
 Resolve the workspace and repo. Run `git remote get-url origin` and parse the Bitbucket URL — expect `git@bitbucket.org:<workspace>/<repo>.git` or `https://bitbucket.org/<workspace>/<repo>.git`. If parsing fails → ask the user for the workspace/repo. Cache nothing.
 
-Run `listBitbucketRepoPullRequests` on `plugin:atlassian:atlassian`. It is not a primary tool: reach it through `discover`, then call `executeRead({name: "listBitbucketRepoPullRequests", inputs, responseFields})` with no `cloudId` (Bitbucket operations don't take one). Inputs:
+Run `listBitbucketRepoPullRequests` on `plugin:atlassian:atlassian`. It is not a primary tool: call it directly, with no `discover` round trip (run `discover` and retry only if the call fails with `Unknown operation` or `Failed to fetch cloud ID`), as `executeRead({name: "listBitbucketRepoPullRequests", inputs, responseFields})` with no `cloudId` (Bitbucket operations don't take one). Inputs:
 - `workspaceId`: `<workspace>`
 - `repoId`: `<repo>`
 - `state`: `OPEN`
@@ -148,7 +148,7 @@ Print:
 
 This prompt is required even when the user passed pre-authorizations elsewhere — PR creation is the one side-effect that's always explicitly confirmed.
 
-On `y`, run `createBitbucketRepoPullRequest` on `plugin:atlassian:atlassian` — reach it through `discover`, then call `executeWrite({name: "createBitbucketRepoPullRequest", inputs})` with no `cloudId`. Inputs:
+On `y`, run `createBitbucketRepoPullRequest` on `plugin:atlassian:atlassian` — call it directly, with no `discover` round trip (run `discover` and retry only if the call fails with `Unknown operation` or `Failed to fetch cloud ID`), as `executeWrite({name: "createBitbucketRepoPullRequest", inputs})` with no `cloudId`. Inputs:
 - `workspaceId`: `<workspace>`
 - `repoId`: `<repo>`
 - `sourceBranch`: `<branch>`
@@ -179,7 +179,7 @@ Look up `pell-config.json:jira.transitions[<projectKey>].in_review`:
 - **Cached and the ticket's current `status.name` matches it (case-insensitive)** → skip Step 8a entirely. Print: "Ticket already in `<status.name>` — skipping transition."
 - **Cached but the ticket is NOT in that status** → use the cached transition name. Run discovery step 1 below to fetch the live `{id, name}` list — the transition call needs a live `id`, and the spelling check below matches against this list — then skip steps 2–6. If the cached name matches no live name, even case-insensitively or through the recorded spelling below, the cache is stale: print `Cached transition <name> is not available on <KEY> — choosing again.` and run steps 2–6 against the list you just fetched.
 - **Not cached** → run discovery:
-  1. Fetch the live transitions. The tool differs by connection shape — name both, by role, and use whichever the session exposes: `listJiraIssueTransitions` on `plugin:atlassian:atlassian`, which is not a primary tool there — reach it through `discover`, then run `executeRead({name: "listJiraIssueTransitions", cloudId, inputs: {issueIdOrKey: <KEY>}})` with `cloudId` top-level, never inside `inputs`; `getTransitionsForJiraIssue` on the classic connection, called directly with `cloudId` and `issueIdOrKey: <KEY>`. Capture `{id, name}` for each transition
+  1. Fetch the live transitions. The tool differs by connection shape — name both, by role, and use whichever the session exposes: `listJiraIssueTransitions` on `plugin:atlassian:atlassian`, which is not a primary tool there — call it directly, with no `discover` round trip (run `discover` and retry only if the call fails with `Unknown operation`), as `executeRead({name: "listJiraIssueTransitions", cloudId, inputs: {issueIdOrKey: <KEY>}})` with `cloudId` top-level, never inside `inputs`; `getTransitionsForJiraIssue` on the classic connection, called directly with `cloudId` and `issueIdOrKey: <KEY>`. Capture `{id, name}` for each transition
   2. Score candidates — favor names containing (case-insensitive) any of: `in review`, `code review`, `review`, `ready for review`, `qa`, `testing`. Push these to the top of the list
   3. Filter out names that match (case-insensitive) any of: `done`, `closed`, `resolved`, `won't do`, `wont do`, `cancelled`, `canceled`, `rejected`, `to do`, `backlog`, `in progress`. None of these are "in review" candidates
   4. If 0 candidates remain → exit with: "No 'in review' transitions available for `<KEY>`. Available transitions: `<comma-separated list of all names from the unfiltered response>`. Pass one explicitly with `move it to <name>` to bypass discovery."

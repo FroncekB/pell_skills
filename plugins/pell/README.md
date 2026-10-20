@@ -115,7 +115,9 @@ Each dimension uses its own scale; reviewers surface everything (no pre-filterin
 
 - **Atlassian MCP v2** (`plugin:atlassian:atlassian`, OAuth, `https://mcp.atlassian.com/v2/mcp`) — one connection for Jira, Confluence, and Bitbucket. Every Jira-ops command, every PR-mode review, `four-pass-review`, `address-review`, `review-queue`, `finish-work`, `related`, and `precheck`.
 
-Install it with `/plugin install atlassian@claude-plugins-official` and sign in once. The separate API-token `atlassian-bitbucket` connection is no longer used. See the [marketplace root README](../../README.md) for setup and migration.
+Install it with `/plugin install atlassian@claude-plugins-official` and sign in once. The separate API-token `atlassian-bitbucket` connection is no longer used.
+
+**A local clone of the repo under review** is the default for PR-mode reviews. The command fetches the PR's branches (`git fetch` updates remote-tracking refs only), diffs them, and the reviewers read the PR's code with `git show` / `git grep`, whatever branch you have checked out. Without a matching clone, or with `use bitbucket`, the diff and code come from Bitbucket instead. See the [marketplace root README](../../README.md) for setup and migration.
 
 **Optional plugin dependencies** (notify-don't-force — the command/skill skips or substitutes inline when absent):
 

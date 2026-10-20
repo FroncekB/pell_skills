@@ -16,7 +16,7 @@ Parse `$ARGUMENTS`:
 
 **Context source** (governs *fix-application* reads only — comments are always fetched from Bitbucket):
 - Default `local` — assume a local checkout; read surrounding code with `Read`/`Grep`/`Glob` against `<repo_root>` (`git rev-parse --show-toplevel`)
-- If `$ARGUMENTS` contains `use bitbucket`, `use mcp`, `use remote`, `fetch via bitbucket`, `not LFS`, or `not local` → `bitbucket`: read via `getBitbucketRepoFileContent` (`executeRead` on `plugin:atlassian:atlassian`) against the PR's source branch
+- If `$ARGUMENTS` contains `use bitbucket`, `use mcp`, `use remote`, `fetch via bitbucket`, `not LFS`, or `not local` → `bitbucket`: read via `getBitbucketRepoFileContent` against the PR's source branch, called directly as `executeRead({name: "getBitbucketRepoFileContent", inputs: {workspaceId, repoId, referenceOrSha: <source branch>, path}})` on `plugin:atlassian:atlassian` with no `cloudId` (run `discover` and retry only if it fails with `Unknown operation` or `Failed to fetch cloud ID`)
 
 **Scope filters** (default is **all comments**; these narrow client-side, and compose):
 - `unresolved` / `open only` → hide resolved threads
@@ -28,7 +28,7 @@ Parse `$ARGUMENTS`:
 
 ## Step 2 — Fetch PR metadata and comments
 
-Call **in parallel** these two `plugin:atlassian:atlassian` operations. Neither is a primary tool: reach each through `discover`, then run it with `executeRead({name, inputs, responseFields})`. Bitbucket operations take no `cloudId`. Both default views leave out fields this command reads, so pass `responseFields` as given:
+Call **in parallel** these two `plugin:atlassian:atlassian` operations. Neither is a primary tool: call each directly with `executeRead({name, inputs, responseFields})`, with no `discover` round trip (run `discover` and retry only if a call fails with `Unknown operation` or `Failed to fetch cloud ID`). Bitbucket operations take no `cloudId`. Both default views leave out fields this command reads, so pass `responseFields` as given:
 - `getBitbucketRepoPullRequest`, `inputs: {workspaceId, repoId, prId}`, `responseFields: ["title", "source.branch.name", "destination.branch.name", "comment_count"]` — capture title, source branch, destination branch, `comment_count`
 - `listBitbucketRepoPullRequestComments`, `inputs: {workspaceId, repoId, prId, pagelen: 100}`, `responseFields: ["values.id", "values.user.display_name", "values.inline", "values.content.raw", "values.parent.id", "values.resolution", "values.deleted", "values.pending", "values.created_on", "values.updated_on"]`
 
@@ -105,7 +105,7 @@ After all fixes:
 
 1. Draft the reply text. If this comment was also `fix`ed, default the draft to `Addressed — <one-line summary of the edit>`; otherwise use the user's inline text from Step 4 or ask what to say
 2. **Show the draft and confirm before posting**
-3. Post via `addBitbucketRepoPullRequestComment` on `plugin:atlassian:atlassian` — reach it through `discover`, then run `executeWrite({name: "addBitbucketRepoPullRequestComment", inputs: {prId, workspaceId, repoId, parentCommentId: <thread root id>, content: <reply>}})` with no `cloudId`. Run sequentially (rate limits)
+3. Post via `addBitbucketRepoPullRequestComment` on `plugin:atlassian:atlassian` — call it directly, with no `discover` round trip (run `discover` and retry only if the call fails with `Unknown operation` or `Failed to fetch cloud ID`), as `executeWrite({name: "addBitbucketRepoPullRequestComment", inputs: {prId, workspaceId, repoId, parentCommentId: <thread root id>, content: <reply>}})` with no `cloudId`. Run sequentially (rate limits)
 
 **A reply does not resolve the thread**, and this command never resolves one, even though the connection can. Resolving stays a manual step in the Bitbucket UI, after the author has checked each fix. Say so; don't imply a reply closes the thread.
 
