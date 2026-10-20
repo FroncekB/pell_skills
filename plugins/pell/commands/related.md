@@ -52,7 +52,7 @@ If the call returns 404 → exit with: "`<ticket_key>` doesn't exist in Jira (or
 
 ## Step 5 — Fetch remote links
 
-The tool differs by connection shape — name both, by role, and use whichever the session exposes: `listJiraIssueRemoteIssueLinks` on `plugin:atlassian:atlassian`, which is not a primary tool there — reach it through `discover`, then run `executeRead({name: "listJiraIssueRemoteIssueLinks", cloudId, inputs: {issueIdOrKey: ticket_key}})` with `cloudId` top-level, never inside `inputs`; `getJiraIssueRemoteIssueLinks` on the classic connection, called directly. Either way the arguments are:
+The tool differs by connection shape — name both, by role, and use whichever the session exposes: `listJiraIssueRemoteIssueLinks` on `plugin:atlassian:atlassian`, which is not a primary tool there — call it directly, with no `discover` round trip (run `discover` and retry only if the call fails with `Unknown operation`), as `executeRead({name: "listJiraIssueRemoteIssueLinks", cloudId, inputs: {issueIdOrKey: ticket_key}})` with `cloudId` top-level, never inside `inputs`; `getJiraIssueRemoteIssueLinks` on the classic connection, called directly. Either way the arguments are:
 - `cloudId`: from Step 2
 - `issueIdOrKey`: `ticket_key`
 
@@ -64,7 +64,7 @@ Skip this step if the user said `skip bitbucket` in Step 1, or if `git rev-parse
 
 Parse `git remote get-url origin` — expect `git@bitbucket.org:<workspace>/<repo>.git` or `https://bitbucket.org/<workspace>/<repo>.git`. If parsing fails (not a Bitbucket remote), skip this step silently — but **capture the detected host** (e.g. `github.com`, `gitlab.com`, or the raw URL) so the final report can name it. Note in the final report under "Bitbucket PRs" that the origin isn't Bitbucket and which host was detected.
 
-Run `listBitbucketRepoPullRequests` on `plugin:atlassian:atlassian`. It is not a primary tool: reach it through `discover`, then call `executeRead({name: "listBitbucketRepoPullRequests", inputs, responseFields})` with no `cloudId` (Bitbucket operations don't take one). Inputs:
+Run `listBitbucketRepoPullRequests` on `plugin:atlassian:atlassian`. It is not a primary tool: call it directly, with no `discover` round trip (run `discover` and retry only if the call fails with `Unknown operation` or `Failed to fetch cloud ID`), as `executeRead({name: "listBitbucketRepoPullRequests", inputs, responseFields})` with no `cloudId` (Bitbucket operations don't take one). Inputs:
 - `workspaceId`: `<workspace>`
 - `repoId`: `<repo>`
 - `q`: `title ~ "<ticket_key>" OR source.branch.name ~ "<ticket_key>"` (BBQL contains-match)

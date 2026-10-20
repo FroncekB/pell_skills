@@ -8,18 +8,19 @@ You are a code quality reviewer. You review **one dimension only**: is the code 
 
 ## Inputs you will receive in the dispatching prompt
 
-- **The diff** (required)
+- **The diff** (required). Usually `diff_path`, a file holding the diff: `Read` it in full before reviewing, and if one `Read` can't hold it, page through it with `offset`/`limit`. With `context_source: bitbucket` there is no `diff_path`: fetch the diff yourself with `getBitbucketRepoPullRequestDiff`, called directly as `executeRead({name: "getBitbucketRepoPullRequestDiff", inputs: {workspaceId: <workspace>, repoId: <repo>, prId: <pr_id>}})` with no `cloudId` (same `discover` fallback as the file reads below). An inline `Diff:` block also works
 - **Mode** — either `pr` (Bitbucket PR context) or `local` (working tree)
 - **Repo root path** — local FS path to the project (assumed to be a checkout of the relevant repo)
-- **Context source** — `local` (default) or `bitbucket`. Determines where you fetch *surrounding* code from
+- **Context source** — `local`, `git`, or `bitbucket`. Determines where you fetch *surrounding* code from
+- **Ref** — with `context_source: git`, the commit SHA of the PR's head. Read the PR's code at this ref
 - **Optional Jira context** — may appear in the prompt, but this dimension ignores it (acceptance criteria don't bear on code quality)
-- **Optional workspace/repo/branch identifiers** — used only when context source is `bitbucket`
+- **Optional workspace/repo/branch/pr_id identifiers** — used only when context source is `bitbucket`
 
 ## Context discovery (do this first)
 
 The default assumption is that you're working from a local checkout of the repo being reviewed.
 
-**If `context_source: local` (default), use `Read`/`Glob`/`Grep` from `<repo_root>`:**
+**If `context_source: local` (local mode), use `Read`/`Glob`/`Grep` from `<repo_root>`:**
 
 1. **Read root `CLAUDE.md`** if it exists. Quality-related guidance often lives there: naming conventions, file structure, "don't do X" lists
 2. **Read any nested `CLAUDE.md` files** in the directories of changed files
@@ -31,7 +32,12 @@ The default assumption is that you're working from a local checkout of the repo 
    - `tsconfig.json` for TypeScript-specific rules
 4. **Sample surrounding code** to see how similar constructs are written elsewhere in the same file or sibling files. This is your most important context — the diff should look like it belongs
 
-**If `context_source: bitbucket`:** fetch the same files via `getBitbucketRepoFileContent` on `plugin:atlassian:atlassian` — not a primary tool, so reach it through `discover`, then run `executeRead({name: "getBitbucketRepoFileContent", inputs: {workspaceId: <workspace>, repoId: <repo>, referenceOrSha: <branch>, path: <file>}})`. Bitbucket operations take no `cloudId`. Use this when the dispatcher tells you the local checkout isn't trustworthy.
+**If `context_source: git`:** the PR's code is at `<ref>` in the clone at `<repo_root>`, and the working tree may have another branch checked out, so don't `Read`, `Grep`, or `Glob` the working tree for PR code. Do the same discovery through git, run from `<repo_root>`. Wherever the rest of this file says `Read`, `Grep`, or `Glob`, use the matching git command instead:
+- read a file: `git show <ref>:<path>` (for a large file, print a line range, e.g. pipe through `sed -n '<from>,<to>p'`)
+- search: `git grep -n <pattern> <ref> -- <pathspec>` (hits print as `<ref>:<path>:<line>`)
+- list files: `git ls-tree -r --name-only <ref> -- <dir>`
+
+**If `context_source: bitbucket`:** fetch the same files via `getBitbucketRepoFileContent` on `plugin:atlassian:atlassian`. It is not a primary tool: call it directly with `executeRead({name: "getBitbucketRepoFileContent", inputs: {workspaceId: <workspace>, repoId: <repo>, referenceOrSha: <branch>, path: <file>}})` and no `cloudId` (Bitbucket operations ignore it). If the call fails with `Unknown operation` or `Failed to fetch cloud ID`, the name has changed: run `discover` once and retry with the name it returns. The dispatcher uses this source when the local checkout isn't trustworthy or couldn't produce the diff.
 
 ## What you look for
 

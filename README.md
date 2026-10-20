@@ -48,7 +48,7 @@ It connects to `https://mcp.atlassian.com/v2/mcp` and prompts for OAuth on first
 
 **3. Check Bitbucket access** by asking Claude to "list my Bitbucket workspaces". The answer should include `pellsoftware`.
 
-You won't see any `bitbucket*` tools in `/mcp`. On v2, Bitbucket operations aren't primary tools: commands find them with `discover` and run them through `executeRead` / `executeWrite`.
+You won't see any `bitbucket*` tools in `/mcp`. On v2, Bitbucket operations aren't primary tools: commands call them by name through `executeRead` / `executeWrite`.
 
 **Troubleshooting:**
 - *Bitbucket calls fail, or `pellsoftware` is missing* — v2 only serves Bitbucket workspaces linked to an Atlassian organization, and only those you allowed at sign-in. Clear the server's authentication from `/mcp` and sign in again.
@@ -306,6 +306,8 @@ Composes the full pre-implementation workflow in one command: fetches the Jira t
 
 The single-dimension reviewers (`correctness`, `quality`, `security`, `test`) share one usage shape and run against either local changes or a Bitbucket PR. The composites (`local-review`, `four-pass-review`) run all four at once. Expect four reviewer subagents per composite run, each at the orchestrator's model; pass `skip tests` to drop the test-coverage pass and run three.
 
+In PR mode, every reviewer works from your local clone. The command runs `git fetch origin <source> <destination>`, diffs `origin/<destination>...origin/<source>`, and the reviewers read the PR's code at its head commit with `git show` / `git grep`. Your checked-out branch doesn't matter, and `git fetch` touches no local branch or working-tree file. If the clone isn't the PR's repo, the PR is from a fork, or there's no clone, the command says so in one line and uses Bitbucket instead. The diff goes to the reviewers as a file inside `.git` rather than pasted into each prompt; under `use bitbucket`, each reviewer fetches it from Bitbucket itself.
+
 ### `/pell:correctness-review`
 
 Single-dimension review for correctness only. Surfaces logic errors, off-by-one bugs, broken invariants, missing error handling at real boundaries, race conditions, regressions, and CLAUDE.md violations.
@@ -318,10 +320,10 @@ Single-dimension review for correctness only. Surfaces logic errors, off-by-one 
 /pell:correctness-review src/api/handlers/                       # reviews changes under a path
 /pell:correctness-review vrs_default#42                          # reviews Bitbucket PR
 /pell:correctness-review https://bitbucket.org/.../pull-requests/42
-/pell:correctness-review 42 use bitbucket                        # PR mode with remote context fetch
+/pell:correctness-review 42 use bitbucket                        # PR mode, diff and context from Bitbucket
 ```
 
-**Output:** markdown report grouped by severity (`blocker` / `major` / `minor` / `nit`). Read-only — never modifies anything.
+**Output:** markdown report grouped by severity (`blocker` / `major` / `minor` / `nit`). Read-only — never modifies your code, the PR, or Jira.
 
 ### `/pell:quality-review`
 
@@ -386,7 +388,7 @@ Composite — runs the correctness, quality, security, and test-coverage reviewe
 /pell:four-pass-review 42                                       # if cwd is the target repo's checkout
 /pell:four-pass-review 42 skip jira                             # don't prompt for Jira if no key found
 /pell:four-pass-review 42 skip tests                            # drop the test-coverage pass
-/pell:four-pass-review 42 use bitbucket                         # fetch surrounding context via MCP instead of local FS
+/pell:four-pass-review 42 use bitbucket                         # diff and context from Bitbucket instead of your local clone
 /pell:four-pass-review 42 skip marker                           # don't offer the run-marker comment
 /pell:four-pass-review 42 --dry-run                             # render everything, post nothing
 ```
@@ -394,7 +396,7 @@ Composite — runs the correctness, quality, security, and test-coverage reviewe
 **Behavior:**
 
 1. Resolves the PR identifier
-2. Fetches PR data + diff from Bitbucket (in parallel)
+2. Fetches PR data from Bitbucket, then the PR's branches into your local clone, and diffs them there (falls back to Bitbucket's diff when the clone can't serve it)
 3. Searches PR title, source branch (GitFlow-aware), and description for a Jira key. Prompts the user if none found
 4. Fetches the linked Jira ticket
 5. Detects WIP/draft PRs and asks for confirmation before proceeding
@@ -595,7 +597,7 @@ The full architecture spec lives at [`docs/specs/2026-05-27-pell-skills-architec
 - **Read-only by default.** Every side effect — modifying files, posting comments, transitioning tickets, creating branches — is gated on a `(y/n)` prompt that names exactly what will change
 - **Freeform context wins.** `$ARGUMENTS` is parsed as natural language. `/pell:four-pass-review 42 use bitbucket not LFS` works because the command reads intent, not flags
 - **Notify, don't force, for external dependencies.** When a Pell skill wants to invoke `superpowers:brainstorming` or `frontend-design:frontend-design` and they're not installed, the user is told — never forced
-- **Local FS by default for context.** Reviewers assume you're working in a checkout of the target repo. The `use bitbucket` override flips to remote fetch when needed
+- **Local clone by default for context.** Reviewers assume you're working in a clone of the target repo: the working tree in local mode, the PR's fetched branch in PR mode. The `use bitbucket` override flips to remote fetch when needed, and PR mode falls back to it on its own when the clone doesn't match the PR
 
 ---
 

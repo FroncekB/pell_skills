@@ -46,7 +46,7 @@ Never write to `context.md`. If a live call later contradicts it, use the live v
 
 ## Step 4 — Fetch your review requests
 
-Run `listMyBitbucketReviewRequests` on `plugin:atlassian:atlassian`. It is not a primary tool: reach it through `discover`, then call `executeRead({name: "listMyBitbucketReviewRequests", inputs, responseFields})` with no `cloudId` (Bitbucket operations don't take one). One call covers the whole workspace, and the server works out who "you" are from the signed-in connection.
+Run `listMyBitbucketReviewRequests` on `plugin:atlassian:atlassian`. It is not a primary tool: call it directly, with no `discover` round trip (run `discover` and retry only if the call fails with `Unknown operation` or `Failed to fetch cloud ID`), as `executeRead({name: "listMyBitbucketReviewRequests", inputs, responseFields})` with no `cloudId` (Bitbucket operations don't take one). One call covers the whole workspace, and the server works out who "you" are from the signed-in connection.
 
 - `inputs`: `{workspaceId: <workspace>, state: "OPEN", pagelen: 50}`
 - `responseFields`: `["values.id", "values.title", "values.author.display_name", "values.participants.user.account_id", "values.participants.approved", "values.updated_on", "values.comment_count", "values.draft", "values.links.html.href"]` — the default view leaves out `comment_count`
@@ -66,7 +66,7 @@ Tag each PR with its repo slug, parsed from `links.html.href` (`https://bitbucke
 
 If nothing matches: print `No open PRs awaiting your review in <workspace>.` and stop.
 
-**Branches.** The listing returns empty `source` and `destination` objects, so fetch them for each remaining PR: `getBitbucketRepoPullRequest` via `executeRead`, `inputs: {workspaceId, repoId: <repo>, prId: <id>}`, `responseFields: ["source.branch.name", "destination.branch.name"]`. Run these in **parallel batches** (≤ ~10 at a time) to stay under rate limits; on a 429, fall back to sequential. If one fails, render that PR without its branch segment. A partial line beats a dropped PR.
+**Branches.** The listing returns empty `source` and `destination` objects, so fetch them for each remaining PR: `getBitbucketRepoPullRequest`, called directly via `executeRead` with no `cloudId` (run `discover` and retry only if it fails with `Unknown operation` or `Failed to fetch cloud ID`), `inputs: {workspaceId, repoId: <repo>, prId: <id>}`, `responseFields: ["source.branch.name", "destination.branch.name"]`. Run these in **parallel batches** (≤ ~10 at a time) to stay under rate limits; on a 429, fall back to sequential. If one fails, render that PR without its branch segment. A partial line beats a dropped PR.
 
 ## Step 6 — Render the list
 

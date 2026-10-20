@@ -326,12 +326,12 @@ Otherwise, parse `context_path` in full. Step 2 only reads the `schema` / `gener
 | Check | Method |
 |-|-|
 | Bitbucket slug, base branch | `git remote -v`, `git symbolic-ref refs/remotes/origin/HEAD` |
-| Transition names | fetch transitions for one sampled issue per recorded Jira project — `listJiraIssueTransitions` via `discover` then `executeRead` on `plugin:atlassian:atlassian`, or `getTransitionsForJiraIssue` directly on a classic connection |
+| Transition names | fetch transitions for one sampled issue per recorded Jira project — `listJiraIssueTransitions` via `executeRead` on `plugin:atlassian:atlassian`, called directly, or `getTransitionsForJiraIssue` directly on a classic connection |
 | Confluence page ids | fetch each recorded page by id — `getConfluenceContent` (primary on `plugin:atlassian:atlassian`, called directly) or `getConfluencePage` (classic connection direct tool) — resolves or 404s |
 | Drive folder ids | the Drive file-metadata tool by id — referred to by role, never by an install-specific server id — resolves or 404s |
 | SOW freshness | stat `docs/pell/sow-<KEY>.md` per recorded project, read its own `generated_at` |
 
-Both Atlassian rows name **two** tools on purpose, and both names must be tried. Two differently-shaped Atlassian connections are in use: on `plugin:atlassian:atlassian` the collection operations are not primary tools and are reached only through `discover({query})` then `executeRead({name, cloudId, inputs})` under `list*` names, while a classic connection exposes each as a direct `get*` tool. Naming only one shape is a silent no-such-tool failure at runtime rather than an error you can see — use whichever the session exposes, and if neither resolves, report that row as unchecked rather than as "no drift." On any execute-family call, `cloudId` is a **top-level** argument, a sibling of `name` and `inputs`, never nested inside `inputs`.
+Both Atlassian rows name **two** tools on purpose, and both names must be tried. Two differently-shaped Atlassian connections are in use: on `plugin:atlassian:atlassian` the collection operations are not primary tools and are called through `executeRead({name, cloudId, inputs})` under `list*` names, directly, with no `discover` round trip unless the call fails with `Unknown operation`, while a classic connection exposes each as a direct `get*` tool. Naming only one shape is a silent no-such-tool failure at runtime rather than an error you can see — use whichever the session exposes, and if neither resolves, report that row as unchecked rather than as "no drift." On any execute-family call, `cloudId` is a **top-level** argument, a sibling of `name` and `inputs`, never nested inside `inputs`.
 
 A recorded page whose `id` cell is empty gets no fetch and is not drift — it was written that way because the id could not be resolved, and it is already recorded under `## Gaps`. Skip it rather than fetching an empty id.
 
