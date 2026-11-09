@@ -154,6 +154,14 @@ Done by design-director.
 
 Done by design-director. conductor-design-steward reviews.
 
+The skill dispatches three times, in this order, even when the steward flags nothing:
+
+1. design-director, job "Directions": steps 1 to 4.
+2. conductor-design-steward: step 5's review of step 4's run.
+3. design-director, job "After review", with the steward's report: the rest of step 5 (the one revision and the steward's notes), then steps 6 to 8.
+
+Steps:
+
 1. **How many.** Three directions, or two when the brand already fixes most choices. Letters `a`, `b`, `c`.
 2. **Each direction**, as `directions.md` says:
    - a theme folder, `<Code>.React/src/themes/direction-<letter>/`, with `theme.css` and `README.md` ("Theme folder rules"). Install each font's `@fontsource-variable` package with `npm install`. When the brief has a touch group, `theme.css` holds the touch block, `@media screen { [data-density="touch"] { ... } }`.
@@ -166,7 +174,7 @@ Done by design-director. conductor-design-steward reviews.
    npm run screens -- --theme direction-a --theme direction-b --theme direction-c
    ```
    The same command works in bash and PowerShell. Never set `SCREENS_THEMES` yourself: the script sets it for Playwright, and with no `--theme` it runs every theme folder. It shows the home page with stage 3's queues and each main entity's generated list, form and detail pages, with sample data from the spec examples. The contact sheet puts the directions side by side.
-5. **Design review.** Dispatch conductor-design-steward over that run, against the brief and the three litmus questions in `directions.md`. A direction it flags gets one revision by design-director, and step 4 runs again. Its notes go in the direction file's "Steward's notes", and the direction goes to the pick. It is never reviewed twice, so the stage can't loop.
+5. **Design review.** Dispatch conductor-design-steward over that run, against the brief and the three litmus questions in `directions.md`. A direction it flags gets one revision by design-director, and step 4 runs again. design-director writes the steward's notes into the direction file's "Steward's notes", and the direction goes to the pick. It is never reviewed twice, so the stage can't loop.
 6. **The gate.** Run `npm run screens` once, with every theme folder, the demo themes included. It must pass: each direction differs from every other theme in at least three fingerprint measures (`screens-output/fingerprint.json`), and passes axe and the layout gates. Then `npm run lint && npm run typecheck && npm test`.
 7. **The captures.** Copy 8 per direction from `<Code>.React/screens-output/direction-<letter>/<light|mobile>/<route>-<state>.png` to `docs/project/design/directions/captures/`, with the names and the optional touch capture in `directions.md` ("Captures"): the home page, and the main workflow entity's list, form and detail pages.
 8. **The README**, `docs/project/design/directions/README.md`, from `directions.md` ("Directions README"), with `Status: waiting for your pick` and step 4's exact command as the contact sheet command.

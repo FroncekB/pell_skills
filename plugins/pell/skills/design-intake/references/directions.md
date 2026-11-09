@@ -91,7 +91,7 @@ File: `docs/project/design/directions/<letter>-<name>.md`.
 
 ## Steward's notes
 
-<Added by the design steward after review: what it flagged against the brief and the three litmus questions, and whether the direction was revised once. Write "No flags." when there are none.>
+Waiting for the steward's review.
 ```
 
 Rules:
@@ -100,6 +100,7 @@ Rules:
 - The status tones cover every status of the main workflow entity. Use only tone names the framework's design system defines.
 - The three litmus questions the steward asks of every direction: could it belong to 100 companies, does it serve the work or the screenshot, and is every choice intentional.
 - A direction the steward flags gets one revision. It then goes to the pick with the notes attached.
+- "Steward's notes" starts as the line `Waiting for the steward's review.`. The steward is read-only, so after its review design-director replaces that line with notes from the design steward's review: what it flagged against the brief and the three litmus questions, and whether the direction was revised once. Write `No flags.` when there are none.
 
 ## Theme folder rules
 
