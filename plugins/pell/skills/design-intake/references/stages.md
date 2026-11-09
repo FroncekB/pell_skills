@@ -13,12 +13,12 @@ How to run each stage and checkpoint. `SKILL.md` decides which one runs, and hol
 ## Working with agents
 
 - **intake-analyst and design-director** work in the fork's checkout, on `main`. Give each the stage and its job, the repository root, `client.yaml`'s names, and the paths of the references the stage names. Each ends with `{"files": [...], "questions": [...], "summary": "..."}`. Its `questions` feed the notification, and its `summary` the run-log note.
-- **conductor-implementer** never works on `main`, and gets one unit at a time. Before each unit:
+- **conductor-implementer** never works on `main`, and gets one unit at a time. Its worktree is the fork's own checkout, the repository root, switched to the unit's branch. It makes no other worktree. Before each unit:
   1. Commit the stage's work so far on `main` as `Design intake stage <n>: <name>, work so far`, unless there is nothing to commit. The implementer stops on a dirty tree.
   2. Run `git switch -C intake-<stage name> main`. This drops any commits an interrupted unit left on the branch, and that unit runs again.
-  3. Give it the unit, the branch, the expected tip (`git rev-parse main`), `client.yaml` as its sentinel file, the references and the stage's rules.
+  3. Give it the unit, the branch, its worktree (the repository root), the expected tip (`git rev-parse main`), `client.yaml` as its sentinel file, the references and the stage's rules.
 
-  It commits on the branch and reports. Its own commit carries the unit's bookkeeping, such as stage 7's inventory row. When the unit passes, `git switch main` and `git merge --ff-only intake-<stage name>`. At the stage's end, `git branch -d intake-<stage name>`. Units run one at a time, because they share the database and the port.
+  It commits on the branch and reports. Its own commit carries the unit's bookkeeping, such as stage 7's inventory row. A revision after stage 7's design review isn't a new unit: it runs on the same branch, with no `switch -C`, and the branch's tip (`git rev-parse HEAD`) as the expected tip. When the unit passes, `git switch main` and `git merge --ff-only intake-<stage name>`. At the stage's end, `git branch -d intake-<stage name>`. Units run one at a time, because they share the database and the port.
 - **conductor-design-steward** is read-only, in its screenshot mode. Give it `<Code>.React/screens-output/` (its `manifest.json` and the captures), `design/brief.md`, and from stage 6 on `design/conventions.md`. Its report is ranked prose.
 
 ## Stage 1: Sources
@@ -35,7 +35,7 @@ Without a SOW there is nothing to run. If no one can answer, stop and report wha
    ```
    dotnet run --project tools/<Code>.Scaffolder -c Release -- sources add <file>...
    ```
-   It writes the original, unchanged, to `docs/project/sources/originals/<file name>`; the Markdown to `docs/project/sources/<slug>.md`, whose first line is `<!-- source: originals/<file> | sha256: <hex> | converted: <date> | converter: sources 1 -->`; and a row in `docs/project/sources/README.md`. A file already converted is skipped. A PDF with no text is refused with exit 1: add an open question asking for a text copy, with the guess that the build goes on without it, and convert the rest.
+   It writes the original, unchanged, to `docs/project/sources/originals/<file name>`; the Markdown to `docs/project/sources/<slug>.md`, whose first line is `<!-- source: originals/<file> | sha256: <hex> | converted: <date> | converter: sources 1 -->`; and a row in `docs/project/sources/README.md`. A file already converted is skipped. A PDF with no text is refused with exit 1: add an open question asking for a text copy, with the guess that the build goes on without it, and convert the rest. Number stage 1's questions from `Q-2`, since stage 2 makes the fork's logo question `Q-1`.
 2. **Record the answers as a source**, so no later stage depends on this conversation. Write them to `intake-answers.md` in a temporary folder outside the repository, in this shape, and `sources add` it:
    ```
    # Intake answers
@@ -65,7 +65,7 @@ Never pass `--refresh` once stage 2 has cited a file, since the cited lines must
 
 Done by intake-analyst, dispatched for extraction with the converted sources (`sources/*.md` and `sources/site/`), `formats.md` and `intake-sheet.md`. It reads only the converted Markdown, never the originals. In one pass it writes:
 
-1. `requirements.md`, `glossary.md`, `personas.md`, `workflows.md`, `integrations.md` and `open-questions.md`, each as `formats.md` says. A requirement found in a source but in no SOW item is `REQ-0.<n>`. Questions already in `open-questions.md`, such as the fork's logo question, keep their IDs, and new ones count on from the highest.
+1. `requirements.md`, `glossary.md`, `personas.md`, `workflows.md`, `integrations.md` and `open-questions.md`, each as `formats.md` says. A requirement found in a source but in no SOW item is `REQ-0.<n>`. The fork's `open-questions.md` starts with a logo question written as a bullet with no ID (`- **Logo and icon.** ...`). Rewrite it as `Q-1` in `formats.md`'s entry format, keeping its meaning. Questions stage 1 added keep their IDs, and new ones count on from the highest, from `Q-2` when there are none.
 2. One entity spec per entity in `specs/entities/`, each started with
    ```
    dotnet run --project tools/<Code>.Scaffolder -c Release -- new <Name> <Plural>
@@ -93,7 +93,7 @@ The engineer reads `docs/project/intake-sheet.md` in about 15 minutes, corrects 
 
 While it says `Status: draft`, a run only reminds the engineer in chat: the file, how to correct it (edit any line in place, cross out a guess and write the answer beside it), and the line to change. It sends no second notification.
 
-The engineer may commit the edit or leave it in the working tree. The run commits it before stage 3, as `SKILL.md` says, and stage 3 reads it.
+The engineer may also edit a pack file, a spec in `specs/entities/` or a role in `default-roles.json`. They may commit the edits or leave them in the working tree. The run commits them before stage 3, as `SKILL.md` says, and stage 3 reads them.
 
 ## Stage 3: Generate
 
@@ -114,6 +114,8 @@ Done by intake-analyst (step 1), the skill (steps 2, 3 and 5) and conductor-impl
    dotnet run --project tools/<Code>.Scaffolder -c Release -- ready orders
    ```
    It removes the demo entity, sets `client.yaml`'s `ready.orders: removed`, and prints its follow-ups. Run them in order: regenerate `Initial` (as in step 2.3), run `generate`, run `npm test -- -u` (the Storybook snapshot diff only removes lines), then the checks. The home page loses Order's queues, so rewrite its baseline (see Baselines, `-g home`) before the screenshots. From here on, no screen shows "Orders".
+
+   When `client.yaml` already says `ready.orders: removed`, an earlier try at this stage removed Order. Skip `ready orders`, which refuses a second run with exit 1, and run its follow-ups.
 4. **Home queues.** conductor-implementer writes each entity's queues companion, `<Code>.React/src/app/<plural in kebab case>/<camelPlural>Queues.ts`, from the personas' questions ("what needs my approval", "what failed", "what's due"), so the home page answers them for each persona. Every filter a queue sets must be one the list shows that user, which `homeQueues.test.ts` checks. An entity no persona's question touches keeps its empty list. The home page's baseline is rewritten again.
 5. **The last checks, then the push.** Run the checks. When every one passes, commit and push: this is intake's first push.
 
@@ -189,7 +191,7 @@ Steps:
 
 The engineer reads `docs/project/design/directions/README.md` in about 10 minutes, writes the pick on its Pick line (one direction, a mix such as "B, with A's headings", or a direction with adjustments in plain words), and changes the status to `Status: picked`. The client doesn't see the directions.
 
-While it says `Status: waiting for your pick`, a run only reminds the engineer in chat: the file, the Pick and status lines, and the contact sheet command in the README. It sends no second notification. A `Status: picked` whose Pick line names no direction counts as waiting.
+While it says `Status: waiting for your pick`, a run only reminds the engineer in chat: the file, the Pick and status lines, and the contact sheet command in the README. It sends no second notification. A `Status: picked` whose Pick line is still `Pick: (not yet chosen)` counts as waiting, and gets the same reminder.
 
 The run commits the engineer's edit before stage 6, as `SKILL.md` says, and stage 6 reads the Pick line.
 
@@ -202,9 +204,9 @@ Done by design-director.
    - `client.yaml`'s `logo` is already set: keep it.
    - The engineer supplied an image in `sources/originals/`: use it.
    - Brand capture found a usable logo in `sources/site/<host>/assets/`: use it. Usable means an `.svg`, `.png` or `.webp` that reads as the client's mark at small size, not a photo or a banner.
-   - None: leave `logo: null`. The Pell placeholder stays, and so does the logo question.
+   - None: leave `logo: null`. The Pell placeholder stays, and so does `Q-1`, the logo question.
 
-   To use a logo, copy it to `<Code>.React/public/brand-mark<ext>`, then set `client.yaml`'s `logo: <Code>.React/public/brand-mark<ext>` and `VITE_BRAND_MARK=/brand-mark<ext>` in `<Code>.React/.env` together. When it came from the client's site, the fork's logo question in `open-questions.md` takes "using the logo from the client's site" as its guess.
+   To use a logo, copy it to `<Code>.React/public/brand-mark<ext>`, then set `client.yaml`'s `logo: <Code>.React/public/brand-mark<ext>` and `VITE_BRAND_MARK=/brand-mark<ext>` in `<Code>.React/.env` together. When it came from the client's site, `Q-1`, the logo question in `open-questions.md`, takes "using the logo from the client's site" as its guess.
 3. **Remove the demo themes.**
    ```
    dotnet run --project tools/<Code>.Scaffolder -c Release -- ready themes
@@ -270,9 +272,9 @@ For each unit:
 3. **Fixtures** in `<Code>.React/src/test/fixtures/`, typed by the generated types and written in the glossary's words. The harness's answers go in `screens/fixtures.ts`, and the screen states in `screens/routes.ts`.
 4. **A story and a Vitest test.** Register the story in `STORY_MODULES` in `src/test/storybook-snapshots.test.tsx`, and render the test with `renderWithProviders`. Then the design lint (`npm run lint`) and the screenshots in the client theme (see Baselines).
 5. **The grants.** The new permissions go to the roles, in `default-roles.json`, of the personas that use the screen.
-6. **Design review.** conductor-design-steward reviews the unit's captures against the brief and `conventions.md`. A unit it flags gets one revision.
+6. **Design review**, on the unit's branch, before the unit merges. Once the unit's checks pass (below), conductor-design-steward reviews the captures that run wrote, against the brief and `conventions.md`. A unit it flags gets one revision on the same branch (see Working with agents), then its checks run again, with no second review.
 
-The unit's own commit moves its inventory row to `prototype`. A unit passes when the build, its integration tests, `npm run lint && npm run typecheck && npm test`, `npm run check:api` and `npm run screens -- --active` pass. It then merges into `main`. The checks run once more at the stage's end.
+The unit's own commit moves its inventory row to `prototype`. The unit's checks are the build, its integration tests, `npm run lint && npm run typecheck && npm test`, `npm run check:api` and `npm run screens -- --active`. A unit passes when its checks pass and the steward has reviewed it. Only then does it merge into `main`. The checks run once more at the stage's end.
 
 **No links, and nothing that blocks them.** A unit never adds a link between entities, never ejects a generated file, and never hand-writes a picker or filter into a generated page. A generated form or list shows only its entity's own fields until the link is added. That keeps every link addable later as a spec change and `generate`. The links wait in the inventory's links table.
 

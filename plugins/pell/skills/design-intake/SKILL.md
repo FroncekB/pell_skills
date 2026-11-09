@@ -15,7 +15,7 @@ Each run does the next stage that isn't blocked, then stops. An engineer runs it
 2. Read `client.yaml` for `name.code` (`<Code>`) and `name.lower` (`<lower>`). Read the fork's `CLAUDE.md`, whose rules apply to everything intake writes.
 3. If `HEAD` is on an `intake-<stage name>` branch, a unit stopped part way: run `git switch main`. Uncommitted files come along.
 4. Find the stage in progress. Take the newest start commit (`git log -1 --format=%s --grep=" starts$"`). If its stage has no line in `docs/project/run-log.md` yet, that stage stopped part way. Every uncommitted file is its work: finish that stage, whatever the table below says.
-5. Otherwise, commit any uncommitted edits under `docs/project/` as `Design intake: the engineer's edits`. Any other uncommitted file was written by no stage: stop and tell the engineer.
+5. Otherwise, uncommitted edits under `docs/project/`, `specs/entities/` and `<Code>.API/Configuration/default-roles.json` are the engineer's edits, committed as the commit rule below says. Any other uncommitted file was written by no stage: stop and tell the engineer.
 
 ## Find the next stage
 
@@ -26,10 +26,10 @@ Read the signals from the top. The first that holds decides. Paths are under `do
 |`sources/README.md` lists no source|Ask for the inputs; stage 1|
 |`requirements.md` holds no requirement|Stage 2|
 |`intake-sheet.md` says `Status: draft`|Wait: remind the engineer, run nothing|
-|The sheet says `Status: approved`, but the specs aren't generated: `dotnet run --project tools/<Code>.Scaffolder -c Release -- generate --check` fails|Stage 3|
+|The sheet says `Status: approved`, and `run-log.md` has no stage 3 line|Stage 3|
 |`design/brief.md` is only its skeleton line|Stage 4|
 |No direction file in `design/directions/`|Stage 5|
-|`design/directions/README.md` says `Status: waiting for your pick`|Wait: remind the engineer, run nothing|
+|`design/directions/README.md` says `Status: waiting for your pick`, or says `Status: picked` while its Pick line is still `Pick: (not yet chosen)`|Wait: remind the engineer, run nothing|
 |It says `Status: picked`, and `client.yaml`'s `theme` is still a demo theme (`pell`, `ledger`, `institutional`, `field`) or a `direction-*` theme|Stage 6|
 |A `design/screen-inventory.md` row is hand-built and not yet prototyped|Stage 7|
 |An in-scope `acceptance` requirement in `requirements.md` has no tagged scenario in `<Code>.React/e2e/acceptance/`|Stage 8|
@@ -56,9 +56,9 @@ Each procedure is under its heading in `stages.md`. Read that file's "Terms used
 
 ## Rules for every stage
 
-- **Commit.** A stage works on the run's branch (`main` in a fork). It starts with an empty commit, `git commit --allow-empty -m "Design intake stage <n>: <name> starts"`, so a later run can tell it is in progress. It ends by committing its work as `Design intake stage <n>: <name>`, such as `Design intake stage 2: extract`. A wait at a checkpoint commits nothing.
+- **Commit.** A stage works on the run's branch (`main` in a fork). It starts with an empty commit, `git commit --allow-empty -m "Design intake stage <n>: <name> starts"`, so a later run can tell it is in progress. It ends by committing its work as `Design intake stage <n>: <name>`, such as `Design intake stage 2: extract`. A run that only waits commits nothing. A run that starts a stage, as when it resumes past a checkpoint, first commits the engineer's edits (Before a stage, step 5) together, as `Design intake: the engineer's edits`.
 - **Log.** Before that commit, append the stage's line to `docs/project/run-log.md`, and one line to `docs/project/decisions.md` for each decision made on the engineer's behalf, both as `formats.md` says. The run-log line holds the stage's minutes and tokens (`unknown` when the session doesn't report them). It is what marks the stage done.
-- **Push.** Never push before stage 3 passes every check, so the client repo never holds specs without their generated code. From then on, push the run's branch after each stage's commit with `git push origin main`. First check that `origin` is the repository `client.yaml`'s `repository.bitbucket` names. Never `--force`, never another branch or remote. Intake does nothing else outward.
+- **Push.** Never push before stage 3 passes every check, so the client repo never holds specs without their generated code. From then on, push the run's branch after each stage's commit with `git push origin main`. Before the `run-log.md` line, check that `origin` is the repository `client.yaml`'s `repository.bitbucket` names. When `origin` is missing or names another repository, skip the push, say so in the line's note, and carry on. Never `--force`, never another branch or remote. Intake does nothing else outward.
 - **Never wait on the client**, and never show the client anything. The only waits are the two checkpoints, which wait on the engineer, and a file no stage wrote (Before a stage, step 5).
 - **Questions** go only into `docs/project/open-questions.md`, in `formats.md`'s format, each with the guess the build uses until it is answered. The run carries on with the guess.
 - **Notify.** At each checkpoint, and at the end of any stage that added questions, send the engineer one push notification with Claude Code's `PushNotification` tool, worded as the stage's "Sends" says. It reaches the engineer's own devices, so it isn't an outward action. Where the session has no `PushNotification` tool, put the message in chat and in the stage's `run-log.md` note.

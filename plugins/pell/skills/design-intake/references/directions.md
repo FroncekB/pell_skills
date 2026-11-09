@@ -18,9 +18,9 @@ File: `docs/project/design/directions/README.md`.
 
 Status: waiting for your pick
 
-Change the status line to `Status: picked` when you have chosen.
+Write your pick on the Pick line in place of `(not yet chosen)`: a single direction, a mix such as "B, with A's headings", or a direction with adjustments in plain words. Then change the status line to `Status: picked`.
 
-Pick: <write one: a single direction, a mix such as "B, with A's headings", or a direction with adjustments in plain words>
+Pick: (not yet chosen)
 
 ## Side by side
 

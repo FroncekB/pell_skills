@@ -20,6 +20,8 @@
 3. On the skill's first run, give it `fictional-sow.md` as the source document and `https://www.brightfold.example.com` as the client's website. Skip the optional brand guide and reference products, or answer them with invented values.
 4. Run every stage. A person answers both checkpoints, including the intake sheet.
 
+Trial 1 runs on the Markdown SOW and fetches nothing, because its `example.com` address doesn't resolve. The trial record says so. The `.docx` path and fetching are covered by the framework's converter tests and by trial 2.
+
 ## What passing means
 
 The trial passes when:

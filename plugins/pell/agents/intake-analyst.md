@@ -64,9 +64,9 @@ How the parts map:
 
 - A requirement is `REQ-<item>.<n>`. `<item>` is the SOW item's number. `<n>` counts that item's requirements in order, from 1. So an engineer can go from a failing test to the SOW line and its estimate.
 - A source with no numbered items uses its sections, numbered in order.
-- `REQ-0.<n>` is a requirement found in a source but in no SOW item. It is beyond the SOW, so the sheet's "Beyond the SOW" line lists every one, for the engineer to keep or strike. An `out:` row in no SOW item, such as a later phase, is `REQ-0.<n>` too.
+- `REQ-0.<n>` is a requirement found in a source but in no SOW item. An `out:` row in no SOW item, such as a later phase, is `REQ-0.<n>` too. The sheet's "Beyond the SOW" line names each in-scope `REQ-0.<n>` by ID, with one phrase, for the engineer to keep or strike, then gives only the count of the out-of-scope ones.
 - IDs are never reused or renumbered. A requirement removed later stays, marked `out:`.
-- New open questions count on from the highest `Q-<n>` in `open-questions.md`. Questions already there keep their IDs.
+- The fork's logo question comes as a bullet with no ID (`- **Logo and icon.** ...`). Rewrite it as `Q-1` in `formats.md`'s entry format, keeping its meaning. Numbered questions already in `open-questions.md` keep their IDs, and new ones count on from the highest, from `Q-2` when there are none.
 
 ## The specs
 
