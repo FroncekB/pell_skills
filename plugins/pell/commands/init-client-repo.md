@@ -12,24 +12,41 @@ The user passed: `$ARGUMENTS`
 Work through `$ARGUMENTS` in this order, stripping each recognized token as you go.
 
 1. **Modifiers** (case-insensitive): `--dry-run`, `--reset`.
-   - `--dry-run` → `dry_run = true`. A dry run has no side effect beyond a temporary framework clone it deletes: it never saves the config, creates the repo or clones the client repo. It runs `--names-only`, prints the plan, and stops. A check that would stop a real run before the plan (a busy port, an existing folder, a missing repo) prints its line, and the dry run goes on to the plan.
+   - `--dry-run` → `dry_run = true`. A dry run has no side effect beyond a temporary framework clone it deletes: it never saves the config, creates the repo or clones the client repo. It runs `--names-only`, prints the plan, and stops. A check that would stop a real run before the plan (a busy port, no SQL Server, an existing folder, a missing repo) prints its line, and the dry run goes on to the plan.
    - `--reset` → `reset = true` (Step 3). If both appear, `--dry-run` wins: print `Both "--dry-run" and "--reset" were given — --dry-run wins; the saved repos folder is left alone.`
-2. **The link**: `https://bitbucket.org/<ws>/<slug>` (also with a `user@` before the host, a trailing `/` or `.git`, or more path such as `/src/main/`) or `git@bitbucket.org:<ws>/<slug>.git`. Take the workspace and slug from the first two path segments, without `.git`. With no link, ask: `> Which Bitbucket repository is this client's? Paste its link.` When `--reset` is the only argument, do Step 3's reset and stop instead.
+2. **The link**: `https://bitbucket.org/<ws>/<slug>` (also with a `user@` before the host, a trailing `/` or `.git`, or more path such as `/src/main/`) or `git@bitbucket.org:<ws>/<slug>.git`. Take the workspace and slug from the first two path segments, without `.git`. Each must match `^[A-Za-z0-9._-]+$` and not start with `-`; if either doesn't, say so and ask for the link again. With no link, ask: `> Which Bitbucket repository is this client's? Paste its link.` When `--reset` is the only argument, do Step 3's reset and stop instead.
 3. **`name "<display>"`** → `display`, the client's name as users read it.
-4. **`logo <path>`** → `logo`.
-5. **`ref <branch>`**, or a phrase naming a framework branch (`from the framework's <branch> branch`) → `ref`. Default `react`.
+4. **`logo <path>`** → `logo`. Check that the file exists and ends in `.svg`, `.png` or `.webp`, and make the path absolute (relative to the folder you run in). If it fails the check, say so; Step 6 asks again.
+5. **`ref <branch>`**, or a phrase naming a framework branch (`from the framework's <branch> branch`) → `ref`. Default `react`. It must match `^[A-Za-z0-9._/-]+$` (a branch name may hold `/`) and not start with `-`; otherwise ask for it again.
 6. The rest is context. A name form given in words (`code AcmeOps`, `lower acmeops`, `env ACMEOPS`) is an override passed to the tool in Step 6.
+
+No workspace, slug, ref or path goes into a shell command before it passes its check.
 
 Run `date +%s` and record it as `t_start`. Set `waited = 0`. From here on, for every question to the engineer, run `date +%s` just before asking and again first thing after the answer, and add the difference to `waited`.
 
 Shell conventions for every step:
 - Run shell steps with the Bash tool (Git Bash on Windows). Each call starts a fresh shell, so carry the folders, names and times yourself. Windows means `uname -s` starts with `MINGW`, `MSYS` or `CYGWIN`.
+- "From `<folder>`" means each call starts with `cd '<folder>' &&`.
 - Quote a value for the shell in single quotes, each `'` written as `'\''`. A display such as `Acme & Field Ops` or `Pat's Field Ops` holds characters the shell would otherwise read.
 - On Windows, write paths as `C:/Users/...` (`cygpath -m` converts a Git Bash path), which Git Bash and `dotnet` both read.
+- **Background jobs.** A step that runs `<job>` in the background starts it with the Bash tool's `run_in_background` option, in this shape, so its output and exit code land in `<temp>`:
+
+  ```bash
+  { <command>; } > '<temp>/<job>.log' 2>&1; echo $? > '<temp>/<job>.exit'
+  ```
+
+  Wait for it with the Bash tool's completion notice for that command. To wait without one, use one bounded loop, with a Bash timeout of 600000 ms, and run it again if it ends while the job is still going: `for i in $(seq 1 290); do [ -f '<temp>/<job>.exit' ] && break; sleep 2; done`. The job passed when `<temp>/<job>.exit` holds `0`. Otherwise it failed: show the last 40 lines of `<temp>/<job>.log`.
+- **Stopping early.** When a step says to stop early, in this order:
+  1. Stop the app if it is running (Step 9, item 5).
+  2. If a background job is still running, wait for it to exit: never delete `<temp>` while one may still be writing.
+  3. Delete `<temp>`.
+  4. Print the step's message. If Step 7 cloned the client repo, add `<folder> is left for you to look at. Delete it before running again.` If Step 4 created the repo in this run, add `<ws>/<slug> was created and is still empty.`
 
 ## Step 2 — Prerequisites
 
 Run `command -v git dotnet npm curl`. If one is missing, stop with: `<tool> isn't on the PATH. Install it as the framework's README describes, then run again.`
+
+On macOS and Linux there is no LocalDB, so the fork needs `PELLFW_TEST_SQL`. Test it with `[ -n "${PELLFW_TEST_SQL:-}" ]`, never by printing it. If it isn't set, stop with: `The fork needs a SQL Server, and LocalDB is Windows-only. Set PELLFW_TEST_SQL (a database named PellFramework_Test, as the framework's README says) and PELLFW_TEST_ALLOW_REMOTE=1 in your environment, then run again in a new session.`
 
 Ports 7143 and 5173 must be free: the fork runs on the framework's ports. Find any listener:
 - Windows: `netstat -ano | awk '$4 == "LISTENING" && $2 ~ /:(7143|5173)$/ {print $2, $NF}'`, then name each PID with `tasklist //FI "PID eq <pid>" //FO CSV //NH`.
@@ -89,20 +106,20 @@ Then run `git ls-remote` again. If the repo is still missing, say so and ask aga
 Make a temporary folder: `temp=$(mktemp -d)` (on Windows, `cygpath -m` it). Clone the framework into it fresh, never from a local working tree:
 
 ```bash
-git clone --depth 1 --branch <ref> git@bitbucket.org:pellsoftware/pell_web_app_framework.git '<temp>/framework'
+git clone --depth 1 --branch '<ref>' git@bitbucket.org:pellsoftware/pell_web_app_framework.git '<temp>/framework'
 ```
 
-On failure, delete `<temp>` and stop with `Couldn't clone the framework's <ref>: <git's message>.` Otherwise record `<short sha>` from `git -C '<temp>/framework' rev-parse --short HEAD`. Below, `<fw>` is `<temp>/framework`.
+On failure, stop early with `Couldn't clone the framework's <ref>: <git's message>.` Otherwise record `<short sha>` from `git -C '<temp>/framework' rev-parse --short HEAD`. Below, `<fw>` is `<temp>/framework`.
 
 ## Step 6 — The plan
 
 Run the fork tool for the names, always passing `--from`:
 
 ```bash
-dotnet run --project '<fw>/tools/PellFramework.Fork' -c Release -- --from '<fw>' --names-only --repo <ws>/<slug> [--display '<display>'] [--code <Code>] [--lower <lower>] [--env <ENV>]
+dotnet run --project '<fw>/tools/PellFramework.Fork' -c Release -- --from '<fw>' --names-only --repo '<ws>/<slug>' [--display '<display>'] [--code '<Code>'] [--lower '<lower>'] [--env '<ENV>']
 ```
 
-It prints `{ "display", "code", "lower", "env", "problems": [] }` and exits 0 even when `problems` isn't empty. A non-zero exit is a usage failure: print its `fork:` message, delete `<temp>`, and stop.
+It prints `{ "display", "code", "lower", "env", "problems": [] }` and exits 0 even when `problems` isn't empty. A non-zero exit is a usage failure: stop early with its `fork:` message.
 
 If `problems` isn't empty, show each one and ask for overrides:
 
@@ -110,11 +127,17 @@ If `problems` isn't empty, show each one and ask for overrides:
 
 Run `--names-only` again with the overrides until `problems` is empty. Under `--dry-run`, print the problems with the plan instead.
 
-Unless Step 1 found `logo`, ask (under `--dry-run`, don't):
+Unless Step 1 found a logo that passed its check, ask (under `--dry-run`, don't):
 
 > A logo for the client? Give the path to an .svg, .png or .webp file, or say none.
 
-Check that the file exists and has one of those extensions; otherwise ask again. Then gate once:
+Check the answer as Step 1 checks `logo`, and make it absolute; otherwise ask again.
+
+Just before the gate, print the database the run will use. This line is not part of the gate:
+- `PELLFW_TEST_SQL` set: `Database: the server in PELLFW_TEST_SQL: databases <Code> and <Code>_Test_Fork, and the connection string copied to the fork's user secrets.`
+- Not set: `Database: LocalDB, database <Code>.`
+
+Then gate once:
 
 ```
 > Fork the framework (<ref> at <short sha>) for this client?
@@ -126,14 +149,14 @@ Check that the file exists and has one of those extensions; otherwise ask again.
 ```
 
 - `y` covers Steps 7 to 12, the push included: pushing to the client repo is the standing yes from the plans README, decision 10.
-- `n`: delete `<temp>` and stop with `Nothing forked.` If Step 4 created the repo in this run, add `<ws>/<slug> was created and is still empty.`
+- `n`: stop early with `Nothing forked.`
 - Changed forms or a different logo: run `--names-only` again with them and show this gate again.
 
-Under `--dry-run`, print the plan without asking, delete `<temp>`, and stop with `--dry-run: nothing was saved, created, cloned or pushed.`
+Under `--dry-run`, print the database line and the plan without asking, delete `<temp>`, and stop with `--dry-run: nothing was saved, created, cloned or pushed.`
 
 ## Step 7 — Clone and fork
 
-If `<repos folder>/<slug>` exists now, refuse: delete `<temp>` and stop as in Step 3. Otherwise clone the client repo (an empty repo clones with a warning, which is fine):
+If `<repos folder>/<slug>` exists now, refuse: stop early with Step 3's message. Otherwise clone the client repo (an empty repo clones with a warning, which is fine):
 
 ```bash
 git clone git@bitbucket.org:<ws>/<slug>.git '<repos folder>/<slug>'
@@ -142,16 +165,16 @@ git clone git@bitbucket.org:<ws>/<slug>.git '<repos folder>/<slug>'
 Below, `<folder>` is `<repos folder>/<slug>`. Run the tool with all four confirmed names:
 
 ```bash
-dotnet run --project '<fw>/tools/PellFramework.Fork' -c Release -- --from '<fw>' --into '<folder>' --repo <ws>/<slug> --display '<display>' --code <Code> --lower <lower> --env <ENV> [--logo '<logo>']
+dotnet run --project '<fw>/tools/PellFramework.Fork' -c Release -- --from '<fw>' --into '<folder>' --repo '<ws>/<slug>' --display '<display>' --code '<Code>' --lower '<lower>' --env '<ENV>' [--logo '<logo>']
 ```
 
 - **Exit 0**: it prints `fork: copied N, renamed N, left out N in <s> s`. Record `<s>` as the tool's elapsed time.
-- **Exit 1** (failed: usage, names, or a leftover framework name) or **exit 2** (refused: the folder holds files other than `.git`, `README.md` and `.gitignore`): print the tool's `fork:` message from stderr, delete `<temp>`, and stop. The tool writes nothing when it fails or refuses.
+- **Exit 1** (failed: usage, names, or a leftover framework name) or **exit 2** (refused: the folder holds files other than `.git`, `README.md` and `.gitignore`): stop early with the tool's `fork:` message from stderr. The tool writes nothing when it fails or refuses.
 
-Once the fork is written, start `npm ci` with the Bash tool's `run_in_background` option, so it overlaps Step 8:
+Once the fork is written, start `npm ci` as the background job `npm-ci`, so it overlaps Step 8:
 
 ```bash
-cd '<folder>/<Code>.React' && { npm ci > '<temp>/npm-ci.log' 2>&1; echo $? > '<temp>/npm-ci.exit'; }
+cd '<folder>/<Code>.React' && { npm ci; } > '<temp>/npm-ci.log' 2>&1; echo $? > '<temp>/npm-ci.exit'
 ```
 
 ## Step 8 — The database
@@ -186,52 +209,94 @@ with_fork_db() {
 }
 ```
 
-- **`PELLFW_TEST_SQL` is set** (test it with `[ -n "${PELLFW_TEST_SQL:-}" ]`, never by printing it): from `<folder>`, run `source '<temp>/fork-db.sh' && set_fork_secret <Code>`. The fork has its own `UserSecretsId`, so this writes only the fork's secrets. Print `The app uses your SQL Server from PELLFW_TEST_SQL, database <Code>, through the fork's user secrets.`
-- **Not set, on Windows**: print `The app uses LocalDB, database <Code>.`
-- **Not set, on macOS or Linux**: there is no LocalDB. Take the LocalDB-failure path now.
+- **`PELLFW_TEST_SQL` is set**: from `<folder>`, run `source '<temp>/fork-db.sh' && set_fork_secret '<Code>' 2> /dev/null`. The fork has its own `UserSecretsId`, so this writes only the fork's secrets. If it exits non-zero, stop early with `Couldn't write the fork's user secrets (dotnet user-secrets exited <code>). Run dotnet user-secrets list --project <Code>.API in <folder> to see why.` Never show its output: it may quote what it read. On success, print `The app uses your SQL Server from PELLFW_TEST_SQL, database <Code>, through the fork's user secrets.`
+- **Not set** (Windows only; Step 2 stops elsewhere): print `The app uses LocalDB, database <Code>.`
 
-**The LocalDB-failure path** (here, or when Step 9 shows LocalDB failing): stop the app if it is running (Step 9), delete `<temp>`, and print these for the engineer to run in their own terminal. Never ask for a server, user or password in chat.
+**The LocalDB-failure path** (when Step 9 shows LocalDB failing): stop early, and as its message print this, with every `<...>` filled in except `<server>`, `<user>`, `<password>` and `<connection string>`. Never ask for any of those in chat.
 
 ```
-cd '<folder>'
-dotnet user-secrets set ConnectionStrings:Default "Server=<server>;Database=<Code>;User Id=<user>;Password=<password>;TrustServerCertificate=True" --project <Code>.API
-export <ENV>_TEST_SQL="Server=<server>;Database=<Code>_Test_Fork;User Id=<user>;Password=<password>;TrustServerCertificate=True"
-export <ENV>_TEST_ALLOW_REMOTE=1
+LocalDB couldn't start the app. <folder> holds the fork; nothing is committed or pushed.
+
+Recommended: run the command again against another SQL Server. In your own terminal:
+  1. Set PELLFW_TEST_SQL (a connection string whose database is PellFramework_Test, as the framework's README says) and PELLFW_TEST_ALLOW_REMOTE=1 for your user:
+     PowerShell:  [Environment]::SetEnvironmentVariable('PELLFW_TEST_SQL', '<connection string>', 'User')
+                  [Environment]::SetEnvironmentVariable('PELLFW_TEST_ALLOW_REMOTE', '1', 'User')
+     macOS, Linux: add export PELLFW_TEST_SQL='<connection string>' and export PELLFW_TEST_ALLOW_REMOTE=1 to your shell profile.
+  2. Delete <folder>.
+  3. Start a new Claude Code session and run /pell:init-client-repo <link> again.
+
+Or finish by hand, from <folder>, in this order. Each command must pass before the next.
+  1. Point the fork at the server:
+     dotnet user-secrets set ConnectionStrings:Default "Server=<server>;Database=<Code>;User Id=<user>;Password=<password>;TrustServerCertificate=True" --project <Code>.API
+     Then, in the same terminal, for the checks:
+     Git Bash:    export <ENV>_TEST_SQL="Server=<server>;Database=<Code>_Test_Fork;User Id=<user>;Password=<password>;TrustServerCertificate=True"
+                  export <ENV>_TEST_ALLOW_REMOTE=1
+     PowerShell:  $env:<ENV>_TEST_SQL = "Server=<server>;Database=<Code>_Test_Fork;User Id=<user>;Password=<password>;TrustServerCertificate=True"
+                  $env:<ENV>_TEST_ALLOW_REMOTE = "1"
+  2. Run it: dotnet run --project <Code>.API --launch-profile https. Check that https://localhost:5173/login shows <display>, then stop it with Ctrl+C.
+  3. The checks:
+     dotnet build <Code>.Web.sln -c Release -p:ShouldRunNpmInstall=false -p:ShouldRunBuildScript=false
+     dotnet test <Code>.Tests -c Release
+     dotnet test <Code>.IntegrationTests -c Release
+     dotnet run --project tools/<Code>.Scaffolder -c Release -- generate --check
+     In <Code>.React: npm run lint, then npm run typecheck, then npm test
+  4. In <Code>.React: npm run screens -- --active --update-all. It rewrites every baseline so they show <display>; npm run screens alone keeps the old images.
+  5. The leftover check, which must print nothing:
+     git grep --untracked -n -i -E "pell.?framework|pellfw|pell_web_app_framework|pf_auth"
+  6. Add this line to the end of docs/project/run-log.md:
+     - <YYYY-MM-DD>: forked from <ref> at <short sha>; the fork tool took <s> s; finished by hand after LocalDB failed.
+  7. Commit and push:
+     git switch -c main
+     git add -A
+     git commit -m "Start <display> from the Pell Web App Framework (<short sha>)"
+     git branch staging
+     git push --atomic -u origin main staging
 ```
 
-Then: `With those set, run the commands in the fork's CLAUDE.md "Standard commands", then: git switch -c main (if the clone has no branch yet), git add -A, git commit -m "Start <display> from the Pell Web App Framework (<short sha>)", git branch staging, git push -u origin main staging. Or set PELLFW_TEST_SQL to a connection string for that server, delete <folder>, and run /pell:init-client-repo again in a new session.` Stop the run: nothing is committed or pushed.
+Leave out the `git switch -c main` line when the clone already has commits on `main` (Step 11, item 2).
 
 ## Step 9 — Running
 
-Step 9 starts only after the background `npm ci` has exited (the Bash tool reports when a background command finishes): the API's Debug build runs `npm install` itself when `node_modules` is missing, and the app starts the Vite dev server. Read `<temp>/npm-ci.exit`. If it isn't `0`, show the last 30 lines of `<temp>/npm-ci.log` and stop as a failed check (Step 10).
+Step 9 starts only after the background job `npm-ci` has exited, waited for as "Background jobs" describes: the API's Debug build runs `npm install` itself when `node_modules` is missing, and the app starts the Vite dev server. If the job failed, stop early with `npm ci failed in <Code>.React.` and the last 30 lines of its log.
 
-1. From `<folder>`, start the app with `run_in_background`: `dotnet run --project <Code>.API --launch-profile https`. Its Development profile starts the Vite dev server through the SPA proxy (`npm run dev`, https://localhost:5173).
-2. Wait with one bounded call, with a Bash timeout of 300000 ms: `curl -fsk --retry 90 --retry-delay 2 --retry-all-errors https://localhost:7143/api/health/ready`. If it gives up while the app's output shows it still restoring or building, with no error, run the same call once more. Otherwise read the app's output. A LocalDB error (`LocalDB`, `Local Database Runtime error`) without `PELLFW_TEST_SQL` takes the LocalDB-failure path (Step 8). Anything else: show its last 40 lines, stop the app, delete `<temp>`, and stop.
+1. From `<folder>`, start the app with `run_in_background`: `dotnet run --project '<Code>.API' --launch-profile https > '<temp>/app.log' 2>&1`. Its Development profile starts the Vite dev server through the SPA proxy (`npm run dev`, https://localhost:5173).
+2. Wait with one bounded call, with a Bash timeout of 300000 ms: `curl -fsk --retry 90 --retry-delay 2 --retry-all-errors https://localhost:7143/api/health/ready`. If it gives up while `<temp>/app.log` shows the app still restoring or building, with no error, run the same call once more. Otherwise read `<temp>/app.log`:
+   - A LocalDB error (`LocalDB`, `Local Database Runtime error`) without `PELLFW_TEST_SQL` takes the LocalDB-failure path (Step 8).
+   - Anything else: stop early with `The app didn't become ready.` and the log's last 40 lines.
 3. Check the sign-in page shows the display name, with a fixed-string match, since a display may hold `&` and `'`:
 
    ```bash
    curl -fsk --retry 30 --retry-delay 2 --retry-all-errors -o '<temp>/login.html' https://localhost:5173/login && grep -qF -- '<display>' '<temp>/login.html'
    ```
 
-   If it fails, show the page's `<title>` line (or curl's error), stop the app, delete `<temp>`, and stop.
+   If it fails, stop early with `The sign-in page doesn't show <display>.` and the page's `<title>` line (or curl's error).
 4. Run `date +%s` and record it as `t_running`. The clock stops here.
 5. **Stop the app**, both the API and the Vite server it started. Stop the background `dotnet run` task, then end whatever still listens on 7143 or 5173:
    - Windows: for each PID the Step 2 `netstat` command finds, `taskkill //PID <pid> //T //F`.
    - macOS and Linux: `kill $(lsof -t -iTCP:7143 -iTCP:5173 -sTCP:LISTEN)`.
 
-   Run the Step 2 port check again: both ports must be free. If one is still held, name its process and stop.
+   Run the Step 2 port check again: both ports must be free. If one is still held, stop early, naming its process.
 
 ## Step 10 — Checks
 
-Run these from `<folder>`, one at a time, each as `source '<temp>/fork-db.sh' && with_fork_db <ENV> <Code> <command>`. They are the fork's CLAUDE.md "Standard commands", without end to end (it needs port 7143 again) and the commands that write; if that table spells one differently, use its spelling. Pass a command that holds `&&` as `sh -c '<command>'`, so all of it runs in that environment. Give each call the Bash tool's longest timeout (600000 ms); run one that outlasts it with `run_in_background` and start the next only after it exits.
+Run these from `<folder>`, one at a time, each through `with_fork_db`. They are the fork's CLAUDE.md "Standard commands", without end to end (it needs port 7143 again) and the commands that write; if that table spells one differently, use its spelling. Pass a command that holds `&&` as `sh -c '<command>'`, so all of it runs in that environment.
 
+In the foreground, with the Bash tool's longest timeout (600000 ms), each as `source '<temp>/fork-db.sh' && cd '<folder>' && with_fork_db '<ENV>' '<Code>' <command>`:
 1. The build: `dotnet build <Code>.Web.sln -c Release -p:ShouldRunNpmInstall=false -p:ShouldRunBuildScript=false`
 2. The unit tests: `dotnet test <Code>.Tests -c Release`
-3. The integration tests: `dotnet test <Code>.IntegrationTests -c Release`
-4. In `<Code>.React`: `sh -c 'npm run lint && npm run typecheck && npm test'`
-5. `dotnet run --project tools/<Code>.Scaffolder -c Release -- generate --check`
+3. In `<Code>.React`: `sh -c 'npm run lint && npm run typecheck && npm test'`
 
-Then the baselines. On Windows, in `<Code>.React`, run `npm run screens -- --active --update-all`, which rewrites every baseline of the active theme so they show the client's name. On macOS or Linux, skip it (the baselines exist only for Windows) and append to `docs/project/status.md`:
+As background jobs from the start, since any may outlast the tool's 600 s limit. Start each only after the one before it has exited, in this shape:
+
+```bash
+source '<temp>/fork-db.sh' && cd '<folder>' && { with_fork_db '<ENV>' '<Code>' dotnet test <Code>.IntegrationTests -c Release; } > '<temp>/integration.log' 2>&1; echo $? > '<temp>/integration.exit'
+```
+
+4. `integration`: the integration tests, as above.
+5. `generate-check`: `dotnet run --project tools/<Code>.Scaffolder -c Release -- generate --check`
+6. `screens`, on Windows only: in `<Code>.React`, `npm run screens -- --active --update-all`. It rewrites every baseline of the active theme so they show the client's name; `npm run screens` alone would keep the old images, since the name change is under the comparison's tolerance.
+
+On macOS or Linux, skip `screens` (the baselines exist only for Windows) and append this line to `<folder>/docs/project/status.md`:
 
 ```
 - Screenshot baselines not recaptured: they exist only for Windows. On Windows, run npm run screens -- --active --update-all in <Code>.React and commit the images.
@@ -240,22 +305,21 @@ Then the baselines. On Windows, in `<Code>.React`, run `npm run screens -- --act
 Then run the leftover check again, over the working tree with untracked files counted:
 
 ```bash
-git grep --untracked -n -i -E "pell.?framework|pellfw|pell_web_app_framework|pf_auth"
+git -C '<folder>' grep --untracked -n -i -E "pell.?framework|pellfw|pell_web_app_framework|pf_auth"
 ```
 
-Exit 1 means no leftovers. Exit 0 means it found some: show them and stop. Any other exit is an error: show it and stop.
+Exit 1 means no leftovers. Exit 0 means it found some: show them and stop early. Any other exit is an error: show it and stop early.
 
-A failure stops the run before the commit: print the failing command and the last 40 lines of its output, delete `<temp>`, and print `Stopped before the commit. <folder> holds the fork as it stands; nothing was committed or pushed.` The folder is left for the engineer to look at.
+A failure stops the run before the commit: stop early with `Stopped before the commit: <command> failed. Nothing was committed or pushed.` and the last 40 lines of its output.
 
 ## Step 11 — Commit and push
 
-From `<folder>`:
-1. Run `date +%s`. Append one line to `docs/project/run-log.md`, minutes to one decimal place: `- <YYYY-MM-DD>: forked from <ref> at <short sha>; running in <t_running - t_start> min, <now - t_start> min in total; the fork tool took <s> s.`
-2. If the clone has no branch yet (`git rev-parse --verify -q HEAD` fails), run `git switch -c main`. If Bitbucket made an initial commit on a branch other than `main`, also run `git switch -c main`, so the fork commit goes on top of it.
-3. `git add -A`, then `git commit -m 'Start <display> from the Pell Web App Framework (<short sha>)'`.
-4. `git branch staging`, then `git push -u origin main staging`. Never force.
+1. Run `date +%s`. Append one line to `<folder>/docs/project/run-log.md`, minutes to one decimal place: `- <YYYY-MM-DD>: forked from <ref> at <short sha>; running in <t_running - t_start> min, <now - t_start> min in total; the fork tool took <s> s.`
+2. From `<folder>`: if the clone has no branch yet (`git rev-parse --verify -q HEAD` fails), run `git switch -c main`. If Bitbucket made an initial commit on a branch other than `main`, also run `git switch -c main`, so the fork commit goes on top of it.
+3. From `<folder>`: `git add -A`, then `git commit -m 'Start <display> from the Pell Web App Framework (<short sha>)'`. If the commit fails (no `user.name` or `user.email`, a hook), stop early with git's message and `Nothing was pushed. Fix the cause, then run: git -C '<folder>' commit -m "Start <display> from the Pell Web App Framework (<short sha>)", git -C '<folder>' branch staging, git -C '<folder>' push --atomic -u origin main staging`.
+4. From `<folder>`: `git branch staging`, then `git push --atomic -u origin main staging`, so neither branch lands without the other. Never force.
 
-If the push fails, print git's message and stop with: `Committed on main and created staging, but the push failed. Fix the cause, then run: git -C '<folder>' push -u origin main staging`
+If the push fails, print git's per-branch result (each `! [rejected]` or `! [remote rejected]` line, or its message when the server refuses an atomic push), delete `<temp>`, and stop with: `Committed on main and created staging, but the push failed. Fix the cause, then run: git -C '<folder>' push --atomic -u origin main staging`
 
 ## Step 12 — Report
 
@@ -288,7 +352,8 @@ Then delete the temporary framework clone: `rm -rf '<temp>'`. If that fails, pri
 - **Never** create a repo without the create gate's `y` in this run, never a public one, and never with an API token.
 - **Never** echo, log or show a connection string, or put one on a command line. Only the Step 8 snippet reads `PELLFW_TEST_SQL`. Never read another project's user secrets.
 - **Never** fork from a local working tree. The source is always the fresh clone from Step 5, passed as `--from`.
-- **Always** stop the app and delete `<temp>` on every path that ends the run early. Leave the fork folder for the engineer.
+- **Never** put a workspace, slug, ref or path into a shell command before it passes its Step 1 check.
+- **Always** stop early as Step 1 describes: the app stopped, background jobs finished, `<temp>` deleted, and the fork folder left for the engineer.
 - The plan gate's `y` covers Steps 7 to 12, the push included. The other side effects have their own gates: saving the repos folder (Step 3) and creating the repo (Step 4). `--reset` is the engineer's own request to clear the saved folder.
 - The app, the integration tests and `generate --check` share the database and port 7143: run one at a time.
 - The fork's first Vite start exports the ASP.NET dev certificate for `<lower>.react.client` to `%APPDATA%/ASP.NET/https` (`~/.aspnet/https` elsewhere), as every app made from the template does.
@@ -297,20 +362,23 @@ Then delete the temporary framework clone: `rm -rf '<temp>'`. If that fails, pri
 
 | Condition | Behavior |
 |-|-|
-| No link in `$ARGUMENTS` | Ask for it (Step 1) |
+| No link in `$ARGUMENTS`, or a workspace, slug or ref that fails its check | Ask for it again (Step 1) |
 | `git`, `dotnet`, `npm` or `curl` missing | Name it and stop (Step 2) |
+| macOS or Linux without `PELLFW_TEST_SQL` | Stop before the plan: there is no LocalDB (Step 2) |
 | Port 7143 or 5173 in use | Name the process and its PID, and stop (Step 2). After the app stops, a port still held is named the same way (Step 9) |
 | `<repos folder>/<slug>` exists | Stop before the plan (Step 3), and again before cloning (Step 7) |
 | git can't reach the repo (SSH key, network) | Show git's message and stop (Step 4) |
 | Atlassian connector absent, no create-repository operation in `discover`, or the call fails | Degrade, never abort: ask the engineer to create the repo, private, and say "done" (Step 4) |
-| The framework ref doesn't exist | Show git's message and stop (Step 5) |
+| The framework ref doesn't exist | Show git's message and stop early (Step 5) |
 | The names have problems | Show them and ask for overrides (Step 6) |
-| The tool fails (exit 1) or refuses (exit 2) | Print its `fork:` message and stop. The tool wrote nothing (Step 7) |
-| `npm ci` fails | Show the end of its log and stop before the app starts (Step 9) |
-| LocalDB fails, or no LocalDB on macOS or Linux | Print the user-secrets command and the `<ENV>_TEST_SQL` variables for the engineer to run, and stop (Step 8) |
-| The app isn't ready, or the sign-in page lacks the display name | Show the app's output or the page's title, stop the app, and stop (Step 9) |
-| A check fails, or the leftover check finds a match | Stop before the commit, with the command and the end of its output. The folder stays (Step 10) |
-| The push fails | The commit and `staging` stay local. Print git's message and the push command to retry. Never force (Step 11) |
+| The tool fails (exit 1) or refuses (exit 2) | Stop early with its `fork:` message. The tool wrote nothing; delete the clone before running again (Step 7) |
+| `set_fork_secret` fails | Stop early with its exit code, never its output (Step 8) |
+| `npm ci` fails | Stop early with the end of its log, before the app starts (Step 9) |
+| LocalDB fails | Stop early: recommend a rerun with `PELLFW_TEST_SQL`, or list every remaining step to finish by hand (Step 8) |
+| The app isn't ready, or the sign-in page lacks the display name | Stop early with the app's log or the page's title (Step 9) |
+| A check fails, or the leftover check finds a match | Stop early before the commit, with the command and the end of its output. The folder stays (Step 10) |
+| `git commit` fails | Stop early with git's message and the commands to commit and push by hand. Nothing is pushed (Step 11) |
+| The push fails | The commit and `staging` stay local. Print git's per-branch result and the push command to retry. Never force (Step 11) |
 | `<temp>` can't be deleted | Print its path (Step 12) |
 
 MCP handling is notify, never force. Without the Atlassian connector the command still runs; creating the repo becomes the engineer's step.
