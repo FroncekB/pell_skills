@@ -153,9 +153,14 @@ Schema sketch (refine as skills are built):
   "bitbucket": {
     "workspace": "pellsoftware",
     "default_base_branch": "develop"
+  },
+  "init_client_repo": {
+    "repos_folder": "C:/Users/<you>/Desktop/Pell_Repos"
   }
 }
 ```
+
+`init_client_repo.repos_folder` is the folder `/pell:init-client-repo` clones client repos into. That command writes it after a `(y/n)` and clears it with `--reset`.
 
 > Note: branch names are flat (`<KEY>-<description>`, no GitFlow prefix) — confirmed during `/pell:start-work` design. See [`2026-05-27-pell-start-work-design.md`](2026-05-27-pell-start-work-design.md) §5.
 
@@ -197,7 +202,8 @@ No rigid flag parsing. Engineers should be able to type what they mean.
 | Posting Bitbucket comments | offered, never automatic | y/n prompt |
 | Jira transitions / assignments | offered, never automatic | y/n prompt |
 | Creating branches / worktrees | offered, never automatic | y/n prompt |
-| Committing or pushing | never (out of scope for these skills) | n/a |
+| Committing or pushing | never (out of scope for these skills), except `/pell:from-ticket`'s one-file SOW commit and `/pell:init-client-repo` (next row) | n/a |
+| Clone a new client repo, run local servers and checks, commit, and push a new repo's first branches (`/pell:init-client-repo`) | offered, never automatic | one plan prompt covers the clone, the local run, the checks, the commit and the push of `main` and `staging`; creating the repo is gated separately; the push rests on the plans' standing yes and is never forced |
 
 Default: skills are **read-only unless explicitly told otherwise.** Side effects are gated on user confirmation, and the prompt names exactly what will change.
 
@@ -398,7 +404,7 @@ All previously-open questions are now resolved:
 
 The conventions above are stable and the bulk of the roadmap shipped:
 
-- **Built:** all four review primitives (`correctness`, `quality`, `security`, `test`) + both composites (`four-pass-review`, `local-review`, each running all four by default; `three-pass-review` survives as a deprecated alias); the PR review ops (`review-queue`, `address-review`); both repo-wide audits (`repo-review`, `repo-security-review`) with their `repo-*-reviewer` agents; Jira ops (`my-tickets`, `triage`, `related`, `precheck`, `scope` + its `sow-builder` agent, `groom` + its `ticket-code-mapper` and `ticket-code-auditor` agents, `start-work`, `finish-work`); composers (`from-ticket`, `wrap-up`); repo setup (`map-repo` + its `repo-mapper` agent, mapping a repo's Jira/Confluence/Drive/Bitbucket coordinates into `docs/pell/context.md`, consumed by ten commands); and the `frontend-router` skill.
+- **Built:** all four review primitives (`correctness`, `quality`, `security`, `test`) + both composites (`four-pass-review`, `local-review`, each running all four by default; `three-pass-review` survives as a deprecated alias); the PR review ops (`review-queue`, `address-review`); both repo-wide audits (`repo-review`, `repo-security-review`) with their `repo-*-reviewer` agents; Jira ops (`my-tickets`, `triage`, `related`, `precheck`, `scope` + its `sow-builder` agent, `groom` + its `ticket-code-mapper` and `ticket-code-auditor` agents, `start-work`, `finish-work`); composers (`from-ticket`, `wrap-up`); repo setup (`map-repo` + its `repo-mapper` agent, mapping a repo's Jira/Confluence/Drive/Bitbucket coordinates into `docs/pell/context.md`, consumed by ten commands); and the `frontend-router` skill. Also built: `init-client-repo`, the command that starts a client's Bitbucket repo from the Pell Web App Framework (clone, fork, run, check, commit, push `main` and `staging`), and the `init-client-repo` skill that routes a new client's repo link to it.
 - **Conductor subsystem:** the `coordinate-agents` lead skill, the `fan-and-critic` review-loop skill, the five `autonomous-build*` session skills, and the five `conductor-*` worker agents — a faithful port of Tom Neyland's `conductor`, folded into `pell` (see [`2026-07-13-conductor-port-design.md`](2026-07-13-conductor-port-design.md)). These agents deliberately deviate from §8's JSON-output contract; the exception is documented there.
 - **Not yet built:** `claude-md-init` (§10.6), second-tier composers (e.g. standup, release-notes), and the optional `pell-everything` meta-plugin (§9).
 - **Open work** is tracked in [`2026-05-28-pell-toolkit-improvements-plan.md`](2026-05-28-pell-toolkit-improvements-plan.md).
