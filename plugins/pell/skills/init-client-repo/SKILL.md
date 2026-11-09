@@ -7,13 +7,11 @@ description: Use when the user gives a Bitbucket repository link for a new clien
 
 The user wants a new client's Bitbucket repo started from the Pell Web App Framework. `/pell:init-client-repo` does that whole job: it forks the framework into a fresh clone, runs and checks it, and pushes `main` and `staging`. This skill only decides whether the request is that job and hands it over.
 
-**Announce at start:** "New client repo detected — handing off to `/pell:init-client-repo`."
-
 ## Step 1 — Decide whether this skill actually applies
 
 Apply it when both hold:
 
-- The user gave a Bitbucket repository link (`https://bitbucket.org/<workspace>/<repo>` or `git@bitbucket.org:<workspace>/<repo>.git`), or is about to.
+- The user gave a Bitbucket repository link (`https://bitbucket.org/<workspace>/<repo>` or `git@bitbucket.org:<workspace>/<repo>.git`) in the same request.
 - They want that repo initialized, set up or started as a client project from the Pell Web App Framework.
 
 Skip it, and say so in one short sentence, when the link is given for anything else:
@@ -28,7 +26,7 @@ If it is unclear which one the user means, ask once before invoking anything.
 
 ## Step 2 — Invoke the command
 
-Invoke `/pell:init-client-repo` with the Skill tool, passing the user's words as the arguments: the link, any name, logo or framework branch they gave, and `--dry-run` if they asked for a preview.
+Say "New client repo detected — handing off to `/pell:init-client-repo`." Then invoke it with the Skill tool, passing the user's words as the arguments: the link, any name, logo or framework branch they gave, and `--dry-run` if they asked for a preview.
 
 ## Step 3 — Step aside
 

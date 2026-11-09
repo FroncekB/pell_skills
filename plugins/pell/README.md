@@ -11,7 +11,7 @@ Pell Software's Claude Code toolkit. One plugin, many skills. Install once, get 
 | Command | What it does |
 |-|-|
 | `/pell:map-repo [refresh \| verify \| PROJECT-KEY]` | Map this repo's Jira, Confluence, Drive, and Bitbucket coordinates into a committed `docs/pell/context.md`; optionally build the project SOW at setup time. `verify` re-checks for drift. Read-only against every remote system. |
-| `/pell:init-client-repo <bitbucket link> [name "<display>"] [logo <path>] [ref <branch>] [--dry-run] [--reset]` | Start a client's Bitbucket repo from the Pell Web App Framework: clone it, fork the framework into it under the client's name, run and check it locally, then commit on `main`, create `staging` and push both. Read-only until you confirm the plan; creating the repo is gated separately. |
+| `/pell:init-client-repo <bitbucket link> [name "<display>"] [logo <path>] [ref <branch>] [--dry-run] [--reset]` | Start a client's Bitbucket repo from the Pell Web App Framework: clone it, fork the framework into it under the client's name, run and check it locally, then commit on `main`, create `staging` and push both. Read-only until you confirm the plan; saving the repos folder and creating the repo are each gated separately. |
 
 ### Review primitives (single-dimension, read-only)
 

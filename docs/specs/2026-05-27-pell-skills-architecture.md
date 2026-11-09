@@ -202,7 +202,7 @@ No rigid flag parsing. Engineers should be able to type what they mean.
 | Posting Bitbucket comments | offered, never automatic | y/n prompt |
 | Jira transitions / assignments | offered, never automatic | y/n prompt |
 | Creating branches / worktrees | offered, never automatic | y/n prompt |
-| Committing or pushing | never (out of scope for these skills), except `/pell:from-ticket`'s one-file SOW commit and `/pell:init-client-repo` (next row) | n/a |
+| Committing or pushing | never (out of scope for these skills) | n/a |
 | Clone a new client repo, run local servers and checks, commit, and push a new repo's first branches (`/pell:init-client-repo`) | offered, never automatic | one plan prompt covers the clone, the local run, the checks, the commit and the push of `main` and `staging`; creating the repo is gated separately; the push rests on the plans' standing yes and is never forced |
 
 Default: skills are **read-only unless explicitly told otherwise.** Side effects are gated on user confirmation, and the prompt names exactly what will change.
