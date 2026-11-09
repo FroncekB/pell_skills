@@ -83,7 +83,7 @@ It never runs `generate`.
 
 **Writes:** the six pack files above, `specs/entities/*.yaml`, `default-roles.json` and `intake-sheet.md`.
 
-**Passes when** `check` prints `Specs are valid.` (run it once more after the agent reports); every requirement's Source names a converted file that exists and a line within it; and the sheet has its ten parts and `Status: draft`.
+**Passes when** `check` prints `Specs are valid.` (run it once more after the agent reports); every requirement's Source names a converted file that exists and a line within it, or, for a row the engineer added on the intake sheet only, a line of the approved sheet as `formats.md` says; and the sheet has its ten parts and `Status: draft`.
 
 **Sends** checkpoint 1's notification: "The intake sheet is ready: docs/project/intake-sheet.md. <n> guesses; the riskiest: <guess 1 in one sentence>. <n> open questions."
 

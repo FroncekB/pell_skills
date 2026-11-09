@@ -23,7 +23,7 @@ One Markdown table, one requirement per row, with these seven columns in this or
 |-|-|-|
 |ID|The requirement's ID|`REQ-<SOW item>.<n>`, such as `REQ-14.3`. `<SOW item>` is the item's number in the source. `<n>` counts requirements in order within the item. A source with no numbered items uses its sections, numbered in order. `REQ-0.<n>` is a requirement found in a source but in no SOW item.|
 |Requirement|One behavior, in one sentence, in the client's words|Free text, one sentence|
-|Source|Where it came from|`sources/<file>.md:<line>` or `sources/<file>.md:<first>-<last>`|
+|Source|Where it came from|`sources/<file>.md:<line>` or `sources/<file>.md:<first>-<last>`. A requirement the engineer adds on the intake sheet, with no source line to cite, cites the approved sheet's committed line as `intake-sheet.md:<line>`. That is the only Source allowed outside `sources/`, because at checkpoint 1 the engineer is the authority.|
 |Personas|Who it serves|Persona names from `personas.md`, comma separated|
 |Verified by|How it will be shown to be done|`acceptance`, `integration`, `unit` or `review`. `review` means judged on screenshots, such as "the theme uses the client's logo".|
 |Scope|Whether it is built|`in`, or `out: <reason>` where the reason is a later phase, the SOW's out-of-scope list, or removed by the engineer|

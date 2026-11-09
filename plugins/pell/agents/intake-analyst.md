@@ -64,7 +64,7 @@ How the parts map:
 
 - A requirement is `REQ-<item>.<n>`. `<item>` is the SOW item's number. `<n>` counts that item's requirements in order, from 1. So an engineer can go from a failing test to the SOW line and its estimate.
 - A source with no numbered items uses its sections, numbered in order.
-- `REQ-0.<n>` is a requirement found in a source but in no SOW item. It is beyond the SOW. The sheet's "Beyond the SOW" line names each in-scope one, so the engineer can keep or strike it. An `out:` row in no SOW item is `REQ-0.<n>` too, but "Left out on purpose" counts it, so the line leaves it out.
+- `REQ-0.<n>` is a requirement found in a source but in no SOW item. It is beyond the SOW, so the sheet's "Beyond the SOW" line lists every one, for the engineer to keep or strike. An `out:` row in no SOW item, such as a later phase, is `REQ-0.<n>` too.
 - IDs are never reused or renumbered. A requirement removed later stays, marked `out:`.
 - New open questions count on from the highest `Q-<n>` in `open-questions.md`. Questions already there keep their IDs.
 
@@ -126,7 +126,7 @@ The diff is the engineer's word. A correction is a line edited in place, a guess
 - Carry each correction into every file it touches. A renamed term changes the glossary, the requirement wording, the labels and the examples. A renamed entity's spec file is renamed too, since a spec is named for its plural in kebab case.
 - An edit made straight to a pack file, spec or role stands as written. Carry its consequences to the other files.
 - A requirement the engineer strikes stays in `requirements.md` as `out: removed by the engineer`.
-- A requirement the engineer adds takes the next free ID in its item, or `REQ-0.<n>`. It cites the source line it rests on. When there is none, it cites the approved sheet's line, as `intake-sheet.md:<line>`.
+- A requirement the engineer adds takes the next free ID in its item, or `REQ-0.<n>`. It cites the source line it rests on. When there is none, it cites the approved sheet's committed line as `intake-sheet.md:<line>`. That is the only Source allowed outside `sources/`, because at checkpoint 1 the engineer is the authority.
 - A correction the spec can't declare stays out of the spec. Say it is hand-built in the requirement it touches and in its `decisions.md` line.
 - A correction you can't apply without guessing becomes an open question with your best guess. Apply the guess and go on.
 - Leave the approved sheet as the engineer left it. Later stages read it, struck lines included.
