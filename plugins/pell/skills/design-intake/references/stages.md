@@ -13,7 +13,12 @@ How to run each stage and checkpoint. `SKILL.md` decides which one runs, and hol
 ## Working with agents
 
 - **intake-analyst and design-director** work in the fork's checkout, on `main`. Give each the stage and its job, the repository root, `client.yaml`'s names, and the paths of the references the stage names. Each ends with `{"files": [...], "questions": [...], "summary": "..."}`. Its `questions` feed the notification, and its `summary` the run-log note.
-- **conductor-implementer** never works on `main`. At the start of a stage that uses it, run `git switch -c intake-<stage name>` from `main` (or `git switch intake-<stage name>` if it exists). Give it one unit at a time, with the branch, the expected tip (`git rev-parse HEAD`), `client.yaml` as its sentinel file, the references, and the stage's rules. It commits on the branch and reports. When a unit passes, `git switch main`, `git merge --ff-only intake-<stage name>`, then switch back for the next unit. At the stage's end, delete the branch with `git branch -d`. Units run one at a time, because they share the database and the port.
+- **conductor-implementer** never works on `main`, and gets one unit at a time. Before each unit:
+  1. Commit the stage's work so far on `main` as `Design intake stage <n>: <name>, work so far`, unless there is nothing to commit. The implementer stops on a dirty tree.
+  2. Run `git switch -C intake-<stage name> main`. This drops any commits an interrupted unit left on the branch, and that unit runs again.
+  3. Give it the unit, the branch, the expected tip (`git rev-parse main`), `client.yaml` as its sentinel file, the references and the stage's rules.
+
+  It commits on the branch and reports. Its own commit carries the unit's bookkeeping, such as stage 7's inventory row. When the unit passes, `git switch main` and `git merge --ff-only intake-<stage name>`. At the stage's end, `git branch -d intake-<stage name>`. Units run one at a time, because they share the database and the port.
 - **conductor-design-steward** is read-only, in its screenshot mode. Give it `<Code>.React/screens-output/` (its `manifest.json` and the captures), `design/brief.md`, and from stage 6 on `design/conventions.md`. Its report is ranked prose.
 
 ## Stage 1: Sources
@@ -94,7 +99,7 @@ The engineer may commit the edit or leave it in the working tree. The run commit
 
 Done by intake-analyst (step 1), the skill (steps 2, 3 and 5) and conductor-implementer (step 4).
 
-1. **Apply the corrections.** Find stage 2's commit with `git log -1 --format=%H --grep="^Design intake stage 2:"`. Dispatch intake-analyst for corrections with `git diff <that commit> HEAD -- docs/project/ specs/ <Code>.API/Configuration/default-roles.json`: the sheet's diff, and any pack file, spec or role the engineer edited. It carries each correction into the pack, the specs and the roles, with a `decisions.md` line for each (decided by: engineer). A correction it can't apply without guessing becomes an open question with its best guess, and the run goes on. The `check` loop passes again.
+1. **Apply the corrections.** Find stage 2's commit with `git log -1 --format=%H --grep="^Design intake stage 2: extract$"`. Dispatch intake-analyst for corrections with `git diff <that commit> HEAD -- docs/project/ specs/ <Code>.API/Configuration/default-roles.json`: the sheet's diff, and any pack file, spec or role the engineer edited. It carries each correction into the pack, the specs and the roles, with a `decisions.md` line for each (decided by: engineer). A correction it can't apply without guessing becomes an open question with its best guess, and the run goes on. The `check` loop passes again.
 2. **Generate every entity**, following the fork's `CLAUDE.md` "Adding an entity" for all the specs at once:
    1. `dotnet run --project tools/<Code>.Scaffolder -c Release -- generate --skip-api`
    2. The build: `dotnet build <Code>.Web.sln -c Release -p:ShouldRunNpmInstall=false -p:ShouldRunBuildScript=false`
@@ -122,11 +127,11 @@ Done by intake-analyst (step 1), the skill (steps 2, 3 and 5) and conductor-impl
 
 Done by design-director.
 
-1. **Brand capture.** Read the site URL and the reference products from `sources/intake-answers.md` and the approved intake sheet's "Guesses on what the SOW doesn't say". Fetch the client site's pages that show the logo, the services and the voice, at most 6 client pages in all, the home page from stage 1 included:
+1. **Brand capture.** Take the site URL from `sources/intake-answers.md`. Fetch the client site's pages that show the logo, the services and the voice, at most 6 client pages in all, the home page from stage 1 included:
    ```
    dotnet run --project tools/<Code>.Scaffolder -c Release -- sources fetch <url> --allow <site host> --to site
    ```
-   Then the public pages of each reference product, liked or disliked, at most 3 each:
+   Then the reference products. Fetch only those the approved intake sheet lists under "Guesses on what the SOW doesn't say", liked or disliked. A product the engineer struck there is never fetched, even though `intake-answers.md` still names it. Take each URL from `intake-answers.md`, or from the sheet when the engineer wrote one there. A listed product with no URL in either is read from what the sheet says, not fetched. Fetch its public pages, at most 3 each:
    ```
    dotnet run --project tools/<Code>.Scaffolder -c Release -- sources fetch <url> --allow <product host> --to references
    ```
@@ -156,11 +161,11 @@ Done by design-director. conductor-design-steward reviews.
 
    Never edit a demo theme or `client.yaml`'s `theme`: the directions aren't active. While working, check the folders with `npx vitest run src/test/theme-contract.test.ts src/test/theme-contrast.test.ts src/test/theme-readme.test.ts`.
 3. **A touch screen.** When the brief has a touch group, add a screen state with `density: 'touch'` for that group's main screen to its entity's companion, `<Code>.React/screens/<camelPlural>Screens.ts`, and write its baseline in the active theme (see Baselines).
-4. **Show them on the client's screens.** Run the harness with only the direction themes, listing the letters made:
+4. **Show them on the client's screens.** Run the harness with only the direction themes, one `--theme` per letter made:
    ```
-   SCREENS_THEMES=direction-a,direction-b,direction-c npm run screens
+   npm run screens -- --theme direction-a --theme direction-b --theme direction-c
    ```
-   In PowerShell: `$env:SCREENS_THEMES='direction-a,direction-b,direction-c'; npm run screens; Remove-Item Env:SCREENS_THEMES`. It shows the home page with stage 3's queues and each main entity's generated list, form and detail pages, with sample data from the spec examples. The contact sheet puts the directions side by side.
+   The same command works in bash and PowerShell. Never set `SCREENS_THEMES` yourself: the script sets it for Playwright, and with no `--theme` it runs every theme folder. It shows the home page with stage 3's queues and each main entity's generated list, form and detail pages, with sample data from the spec examples. The contact sheet puts the directions side by side.
 5. **Design review.** Dispatch conductor-design-steward over that run, against the brief and the three litmus questions in `directions.md`. A direction it flags gets one revision by design-director, and step 4 runs again. Its notes go in the direction file's "Steward's notes", and the direction goes to the pick. It is never reviewed twice, so the stage can't loop.
 6. **The gate.** Run `npm run screens` once, with every theme folder, the demo themes included. It must pass: each direction differs from every other theme in at least three fingerprint measures (`screens-output/fingerprint.json`), and passes axe and the layout gates. Then `npm run lint && npm run typecheck && npm test`.
 7. **The captures.** Copy 8 per direction from `<Code>.React/screens-output/direction-<letter>/<light|mobile>/<route>-<state>.png` to `docs/project/design/directions/captures/`, with the names and the optional touch capture in `directions.md` ("Captures"): the home page, and the main workflow entity's list, form and detail pages.
@@ -259,7 +264,7 @@ For each unit:
 5. **The grants.** The new permissions go to the roles, in `default-roles.json`, of the personas that use the screen.
 6. **Design review.** conductor-design-steward reviews the unit's captures against the brief and `conventions.md`. A unit it flags gets one revision.
 
-A unit passes when the build, its integration tests, `npm run lint && npm run typecheck && npm test`, `npm run check:api` and `npm run screens -- --active` pass. Its inventory row then moves to `prototype`, and it merges into `main`. The checks run once more at the stage's end.
+The unit's own commit moves its inventory row to `prototype`. A unit passes when the build, its integration tests, `npm run lint && npm run typecheck && npm test`, `npm run check:api` and `npm run screens -- --active` pass. It then merges into `main`. The checks run once more at the stage's end.
 
 **No links, and nothing that blocks them.** A unit never adds a link between entities, never ejects a generated file, and never hand-writes a picker or filter into a generated page. A generated form or list shows only its entity's own fields until the link is added. That keeps every link addable later as a spec change and `generate`. The links wait in the inventory's links table.
 

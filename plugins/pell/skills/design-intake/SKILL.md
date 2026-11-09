@@ -13,7 +13,9 @@ Each run does the next stage that isn't blocked, then stops. An engineer runs it
 
 1. Confirm this is a client fork: `client.yaml` at the repository root, and `docs/project/`. If either is missing, stop and say the skill runs only in a fork made by the framework's fork tool.
 2. Read `client.yaml` for `name.code` (`<Code>`) and `name.lower` (`<lower>`). Read the fork's `CLAUDE.md`, whose rules apply to everything intake writes.
-3. The working tree must be clean, apart from the engineer's edits under `docs/project/`. Commit those first, as `Design intake: the engineer's edits`. If anything else is uncommitted, stop and tell the engineer.
+3. If `HEAD` is on an `intake-<stage name>` branch, a unit stopped part way: run `git switch main`. Uncommitted files come along.
+4. Find the stage in progress. Take the newest start commit (`git log -1 --format=%s --grep=" starts$"`). If its stage has no line in `docs/project/run-log.md` yet, that stage stopped part way. Every uncommitted file is its work: finish that stage, whatever the table below says.
+5. Otherwise, commit any uncommitted edits under `docs/project/` as `Design intake: the engineer's edits`. Any other uncommitted file was written by no stage: stop and tell the engineer.
 
 ## Find the next stage
 
@@ -33,7 +35,7 @@ Read the signals from the top. The first that holds decides. Paths are under `do
 |An in-scope `acceptance` requirement in `requirements.md` has no tagged scenario in `<Code>.React/e2e/acceptance/`|Stage 8|
 |None of these|Report that intake is done|
 
-A stage is done only when its `run-log.md` line is there. If the table points past a stage whose line is missing, that stage stopped part way: finish it first.
+A stage is done only when its `run-log.md` line is there. One that started without finishing comes first (Before a stage, step 4).
 
 ## The stages
 
@@ -54,12 +56,12 @@ Each procedure is under its heading in `stages.md`. Read that file's "Terms used
 
 ## Rules for every stage
 
-- **Commit.** A stage commits its work on the run's branch (`main` in a fork) with the message `Design intake stage <n>: <name>`, such as `Design intake stage 2: extract`.
+- **Commit.** A stage works on the run's branch (`main` in a fork). It starts with an empty commit, `git commit --allow-empty -m "Design intake stage <n>: <name> starts"`, so a later run can tell it is in progress. It ends by committing its work as `Design intake stage <n>: <name>`, such as `Design intake stage 2: extract`. A wait at a checkpoint commits nothing.
 - **Log.** Before that commit, append the stage's line to `docs/project/run-log.md`, and one line to `docs/project/decisions.md` for each decision made on the engineer's behalf, both as `formats.md` says. The run-log line holds the stage's minutes and tokens (`unknown` when the session doesn't report them). It is what marks the stage done.
 - **Push.** Never push before stage 3 passes every check, so the client repo never holds specs without their generated code. From then on, push the run's branch after each stage's commit with `git push origin main`. First check that `origin` is the repository `client.yaml`'s `repository.bitbucket` names. Never `--force`, never another branch or remote. Intake does nothing else outward.
-- **Never wait on the client**, and never show the client anything. The only waits are the two checkpoints, which wait on the engineer.
+- **Never wait on the client**, and never show the client anything. The only waits are the two checkpoints, which wait on the engineer, and a file no stage wrote (Before a stage, step 5).
 - **Questions** go only into `docs/project/open-questions.md`, in `formats.md`'s format, each with the guess the build uses until it is answered. The run carries on with the guess.
-- **Notify.** At each checkpoint, and at the end of any stage that added questions, send the engineer one push notification through Claude Code's push notification tool, worded as the stage's "Sends" says. It reaches the engineer's own devices, so it isn't an outward action. Where the session has no such tool, put the message in chat and in the stage's `run-log.md` note.
+- **Notify.** At each checkpoint, and at the end of any stage that added questions, send the engineer one push notification with Claude Code's `PushNotification` tool, worded as the stage's "Sends" says. It reaches the engineer's own devices, so it isn't an outward action. Where the session has no `PushNotification` tool, put the message in chat and in the stage's `run-log.md` note.
 - **Tell the engineer in chat** what the stage did and what comes next, when they are present.
 - **The framework's rules** apply to everything intake writes in the fork: tokens only, the design lint, generated files never edited, no ruling or ledger IDs in code comments, and relative paths.
 
