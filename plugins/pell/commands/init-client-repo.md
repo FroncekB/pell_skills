@@ -254,13 +254,13 @@ Or finish by hand, from <folder>, in this order. Each command must pass before t
      dotnet test <Code>.Tests -c Release
      dotnet test <Code>.IntegrationTests -c Release
      dotnet run --project tools/<Code>.Scaffolder -c Release -- generate --check
-     In <Code>.React: npm run lint, then npm run typecheck, then npm test
-  4. In <Code>.React: npm run screens -- --active --update-all. It rewrites every baseline so they show <display>; npm run screens alone keeps the old images.
-  5. The leftover check, which must print nothing:
+     Then cd <Code>.React and run: npm run lint, then npm run typecheck, then npm test
+  4. From <Code>.React: npm run screens -- --active --update-all. It rewrites every baseline so they show <display>; npm run screens alone keeps the old images.
+  5. From <folder>, the leftover check, which must print nothing:
      git grep --untracked -n -i -E "pell.?framework|pellfw|pell_web_app_framework|pf_auth"
-  6. Add this line to the end of docs/project/run-log.md:
+  6. From <folder>, add this line to the end of docs/project/run-log.md (with a blank line before it if the file holds no entry yet):
      - <YYYY-MM-DD>: forked from <ref> at <short sha>; the fork tool took <s> s; finished by hand after LocalDB failed.
-  7. Commit and push:
+  7. From <folder>, commit and push:
      git switch -c main
      git add -A
      git commit -m "Start <display> from the Pell Web App Framework (<short sha>)"
@@ -298,20 +298,28 @@ First stage the fork without committing: `git -C '<folder>' add -A` (no commit, 
 
 Run these from `<folder>`, one at a time, each through `with_fork_db`. They are the fork's CLAUDE.md "Standard commands", without end to end (it needs port 7143 again) and the commands that write; if that table spells one differently, use its spelling. Pass a command that holds `&&` as `sh -c '<command>'`, so all of it runs in that environment.
 
-In the foreground, with the Bash tool's longest timeout (600000 ms), each as `source '<temp>/fork-db.sh' && cd '<folder>' && with_fork_db '<ENV>' '<Code>' <command>`:
-1. The build: `dotnet build <Code>.Web.sln -c Release -p:ShouldRunNpmInstall=false -p:ShouldRunBuildScript=false`
-2. The unit tests: `dotnet test <Code>.Tests -c Release`
-3. In `<Code>.React`: `sh -c 'npm run lint && npm run typecheck && npm test'`
+In the foreground, with the Bash tool's longest timeout (600000 ms), each with its output going to a log file under `<temp>`, as the background jobs do, in this shape:
+
+```bash
+source '<temp>/fork-db.sh' && cd '<dir>' && { with_fork_db '<ENV>' '<Code>' <command>; } > '<temp>/<check>.log' 2>&1
+```
+
+`<dir>` is `<folder>` unless the item names another folder. The call's exit status is the check's. When it is non-zero, the check failed: show `tail -n 40 '<temp>/<check>.log'` as the failure's output.
+1. `build`: `dotnet build <Code>.Web.sln -c Release -p:ShouldRunNpmInstall=false -p:ShouldRunBuildScript=false`
+2. `unit`: `dotnet test <Code>.Tests -c Release`
+3. `react`, with `<dir>` as `<folder>/<Code>.React`: `sh -c 'npm run lint && npm run typecheck && npm test'`
 
 As background jobs from the start, since any may outlast the tool's 600 s limit. Start each only after the one before it has exited, in this shape:
 
 ```bash
-source '<temp>/fork-db.sh' && cd '<folder>' && { with_fork_db '<ENV>' '<Code>' dotnet test <Code>.IntegrationTests -c Release; } > '<temp>/integration.log' 2>&1; echo $? > '<temp>/integration.exit'
+source '<temp>/fork-db.sh' && cd '<dir>' && { with_fork_db '<ENV>' '<Code>' dotnet test <Code>.IntegrationTests -c Release; } > '<temp>/integration.log' 2>&1; echo $? > '<temp>/integration.exit'
 ```
+
+Here too `<dir>` is `<folder>` unless the item names another folder.
 
 4. `integration`: the integration tests, as above.
 5. `generate-check`: `dotnet run --project tools/<Code>.Scaffolder -c Release -- generate --check`
-6. `screens`, on Windows only: in `<Code>.React`, `npm run screens -- --active --update-all`. It rewrites every baseline of the active theme so they show the client's name; `npm run screens` alone would keep the old images, since the name change is under the comparison's tolerance.
+6. `screens`, on Windows only, with `<dir>` as `<folder>/<Code>.React`: `npm run screens -- --active --update-all`. It rewrites every baseline of the active theme so they show the client's name; `npm run screens` alone would keep the old images, since the name change is under the comparison's tolerance.
 
    The harness serves each theme's app preview and Storybook on fixed ports with `reuseExistingServer: false`, so any other screens run on the machine (the framework's, or another fork's) makes Playwright fail with `... is already used`. Before the job, find which ports an `--active` run will start:
    - `--active` runs only the theme `VITE_THEME` names in `<Code>.React/.env`. List the folders under `<Code>.React/src/themes` sorted in plain code-unit order (as `Array.prototype.sort()` does, which is what `screens/themes.ts` relies on) and take the active theme's zero-based index `i`. The app preview is on port `4301 + i`.
@@ -335,11 +343,11 @@ git -C '<folder>' grep --untracked -n -i -E "pell.?framework|pellfw|pell_web_app
 
 Exit 1 means no leftovers. Exit 0 means it found some: show them and stop early. Any other exit is an error: show it and stop early.
 
-A failure stops the run before the commit: stop early with `Stopped before the commit: <command> failed. Nothing was committed or pushed.` and the last 40 lines of its output.
+A failure stops the run before the commit: stop early with `Stopped before the commit: <command> failed. Nothing was committed or pushed.` and the last 40 lines of its log (`<temp>/<check>.log`; for the leftover check, its own output).
 
 ## Step 11 — Commit and push
 
-1. Run `date +%s`. Append one line to `<folder>/docs/project/run-log.md`, minutes to one decimal place: `- <YYYY-MM-DD>: forked from <ref> at <short sha>; running in <t_running - t_start> min, <now - t_start> min in total; the fork tool took <s> s.`
+1. Run `date +%s`. Append one line to `<folder>/docs/project/run-log.md`, minutes to one decimal place: `- <YYYY-MM-DD>: forked from <ref> at <short sha>; running in <t_running - t_start> min, <now - t_start> min to the commit; the fork tool took <s> s.` If the file's last line is not blank and the file holds no entry yet (its last line is the intro paragraph), write a blank line first, so the entry doesn't sit against the paragraph.
 2. From `<folder>`: if the clone has no branch yet (`git rev-parse --verify -q HEAD` fails), run `git switch -c main`. If Bitbucket made an initial commit on a branch other than `main`, also run `git switch -c main`, so the fork commit goes on top of it.
 3. From `<folder>`: `git add -A` again, which adds the run-log line and anything the checks wrote, then `git commit -m 'Start <display> from the Pell Web App Framework (<short sha>)'`. If the commit fails (no `user.name` or `user.email`, a hook), stop early with git's message and `Nothing was pushed. Fix the cause, then run: git -C '<folder>' commit -m "Start <display> from the Pell Web App Framework (<short sha>)", git -C '<folder>' branch staging, git -C '<folder>' push --atomic -u origin main staging`.
 4. From `<folder>`: `git branch staging`, then `git push --atomic -u origin main staging`, so neither branch lands without the other. Never force.
@@ -355,7 +363,7 @@ Started <display> from the Pell Web App Framework (<ref> at <short sha>).
 
 To running   <t_running - t_start> min
 Waiting      <waited> min of that on you
-Total        <t_end - t_start> min
+Total        <t_end - t_start> min to pushed
 Fork tool    <s> s
 Repo         https://bitbucket.org/<ws>/<slug>
 Folder       <folder>
