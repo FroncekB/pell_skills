@@ -11,7 +11,7 @@ The user wants a new client's Bitbucket repo started from the Pell Web App Frame
 
 Apply it when both hold:
 
-- The user gave a Bitbucket repository link (`https://bitbucket.org/<workspace>/<repo>` or `git@bitbucket.org:<workspace>/<repo>.git`) in the same request.
+- The user gave a Bitbucket repository link (`https://bitbucket.org/<workspace>/<repo>` or `git@ssh.bitbucket.org:<workspace>/<repo>.git`, or the older `git@bitbucket.org:<workspace>/<repo>.git`) in the same request.
 - They want that repo initialized, set up or started as a client project from the Pell Web App Framework.
 
 Skip it, and say so in one short sentence, when the link is given for anything else:

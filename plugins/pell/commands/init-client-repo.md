@@ -14,7 +14,7 @@ Work through `$ARGUMENTS` in this order, stripping each recognized token as you 
 1. **Modifiers** (case-insensitive): `--dry-run`, `--reset`.
    - `--dry-run` → `dry_run = true`. A dry run has no side effect beyond a temporary framework clone it deletes: it never saves the config, creates the repo or clones the client repo. It runs `--names-only`, prints the plan, and stops. A check that would stop a real run before the plan (a busy port, no SQL Server, an existing folder, a missing repo) prints its line, and the dry run goes on to the plan.
    - `--reset` → `reset = true` (Step 3). If both appear, `--dry-run` wins: print `Both "--dry-run" and "--reset" were given — --dry-run wins; the saved repos folder is left alone.`
-2. **The link**: `https://bitbucket.org/<ws>/<slug>` (also with a `user@` before the host, a trailing `/` or `.git`, or more path such as `/src/main/`) or `git@bitbucket.org:<ws>/<slug>.git`. Take the workspace and slug from the first two path segments, without `.git`. Each must match `^[A-Za-z0-9._-]+$` and not start with `-`; if either doesn't, say so and ask for the link again. With no link, ask: `> Which Bitbucket repository is this client's? Paste its link.` When `--reset` is the only argument, do Step 3's reset and stop instead.
+2. **The link**: `https://bitbucket.org/<ws>/<slug>` (also with a `user@` before the host, a trailing `/` or `.git`, or more path such as `/src/main/`) or `git@ssh.bitbucket.org:<ws>/<slug>.git`, or the older `git@bitbucket.org:<ws>/<slug>.git`. Take the workspace and slug from the first two path segments, without `.git`. Each must match `^[A-Za-z0-9._-]+$` and not start with `-`; if either doesn't, say so and ask for the link again. With no link, ask: `> Which Bitbucket repository is this client's? Paste its link.` Whichever form is given, every git command below uses `git@ssh.bitbucket.org:<ws>/<slug>.git`. When `--reset` is the only argument, do Step 3's reset and stop instead.
 3. **`name "<display>"`** → `display`, the client's name as users read it.
 4. **`logo <path>`** → `logo`. Check that the file exists and ends in `.svg`, `.png` or `.webp`, and make the path absolute (relative to the folder you run in). If it fails the check, say so; Step 6 asks again.
 5. **`ref <branch>`**, or a phrase naming a framework branch (`from the framework's <branch> branch`) → `ref`. Default `react`. It must match `^[A-Za-z0-9._/-]+$` (a branch name may hold `/`) and not start with `-`; otherwise ask for it again.
@@ -81,10 +81,20 @@ If `<repos folder>/<slug>` already exists, stop with: `<repos folder>/<slug> alr
 
 ## Step 4 — The client repo
 
-Run `git ls-remote git@bitbucket.org:<ws>/<slug>.git`.
+Run `git ls-remote git@ssh.bitbucket.org:<ws>/<slug>.git`.
 - **Exit 0**: the repo exists. Print `<ws>/<slug> exists on Bitbucket.`
 - **Git says the repository doesn't exist** (`repository does not exist`, `Repository not found`): the repo is missing, or you can't see it.
-- **Any other failure**, such as `Permission denied (publickey)` or a network error: stop with `git can't reach <ws>/<slug> on Bitbucket: <git's message>. Check your SSH key with ssh -T git@bitbucket.org, then run again.`
+- **`Host key verification failed`**: this machine's `known_hosts` has no entry for `ssh.bitbucket.org`, and a non-interactive run can't answer git's prompt. Never accept a host key for the engineer and never edit `known_hosts`. Nothing has been written yet, so stop with the message in the block below.
+- **Any other failure**, such as `Permission denied (publickey)` or a network error: stop with `git can't reach <ws>/<slug> on Bitbucket: <git's message>. Check your SSH key with ssh -T git@ssh.bitbucket.org, then run again.`
+
+The host-key message, shared with Step 5's framework clone:
+
+> This machine hasn't trusted Bitbucket's SSH host key yet. In your own terminal, run `ssh git@ssh.bitbucket.org host_key_info`. Check that the fingerprint it shows matches one of these three (Atlassian lists them at https://bitbucket.org/site/ssh; the values were current in November 2026):
+> - ED25519 `SHA256:ybgmFkzwOSotHTHLJgHO0QN8L0xErw6vd0VhFA9m3SM`
+> - ECDSA `SHA256:FC73VB6C4OQLSCrjEayhMp9UMxS97caD/Yyi2bhW/J0`
+> - RSA `SHA256:46OSHA1Rmj8E8ERTC6xkNcmGOw9oFxYr0WF6zWW8l1E`
+>
+> If it matches, answer `yes`, then run this command again. If it doesn't match, answer `no` and tell your team lead.
 
 When it is missing, gate:
 
@@ -106,10 +116,10 @@ Then run `git ls-remote` again. If the repo is still missing, say so and ask aga
 Make a temporary folder: `temp=$(mktemp -d)` (on Windows, `cygpath -m` it). Clone the framework into it fresh, never from a local working tree:
 
 ```bash
-git clone --depth 1 --branch '<ref>' git@bitbucket.org:pellsoftware/pell_web_app_framework.git '<temp>/framework'
+git clone --depth 1 --branch '<ref>' git@ssh.bitbucket.org:pellsoftware/pell_web_app_framework.git '<temp>/framework'
 ```
 
-On failure, stop early with `Couldn't clone the framework's <ref>: <git's message>.` Otherwise record `<short sha>` from `git -C '<temp>/framework' rev-parse --short HEAD`. Below, `<fw>` is `<temp>/framework`.
+On failure, stop early with `Couldn't clone the framework's <ref>: <git's message>.` If git's message says `Host key verification failed` (this is the first connection to Bitbucket only when Step 4 was skipped), stop early with Step 4's host-key message instead, and never accept a host key or edit `known_hosts`. Otherwise record `<short sha>` from `git -C '<temp>/framework' rev-parse --short HEAD`. Below, `<fw>` is `<temp>/framework`.
 
 ## Step 6 — The plan
 
@@ -159,7 +169,7 @@ Under `--dry-run`, print the database line and the plan without asking, delete `
 If `<repos folder>/<slug>` exists now, refuse: stop early with Step 3's message. Otherwise clone the client repo (an empty repo clones with a warning, which is fine):
 
 ```bash
-git clone git@bitbucket.org:<ws>/<slug>.git '<repos folder>/<slug>'
+git clone git@ssh.bitbucket.org:<ws>/<slug>.git '<repos folder>/<slug>'
 ```
 
 Below, `<folder>` is `<repos folder>/<slug>`. Run the tool with all four confirmed names:
@@ -351,6 +361,7 @@ Then delete the temporary framework clone: `rm -rf '<temp>'`. If that fails, pri
 - **Never** push anywhere but `origin` in the client's clone, and never force. The framework clone is never pushed.
 - **Never** create a repo without the create gate's `y` in this run, never a public one, and never with an API token.
 - **Never** echo, log or show a connection string, or put one on a command line. Only the Step 8 snippet reads `PELLFW_TEST_SQL`. Never read another project's user secrets.
+- **Never** accept an SSH host key for the engineer and never edit `~/.ssh/known_hosts`. On `Host key verification failed`, stop and give the engineer the `host_key_info` steps (Step 4).
 - **Never** fork from a local working tree. The source is always the fresh clone from Step 5, passed as `--from`.
 - **Never** put a workspace, slug, ref or path into a shell command before it passes its Step 1 check.
 - **Always** stop early as Step 1 describes: the app stopped, background jobs finished, `<temp>` deleted, and the fork folder left for the engineer.
@@ -368,6 +379,7 @@ Then delete the temporary framework clone: `rm -rf '<temp>'`. If that fails, pri
 | Port 7143 or 5173 in use | Name the process and its PID, and stop (Step 2). After the app stops, a port still held is named the same way (Step 9) |
 | `<repos folder>/<slug>` exists | Stop before the plan (Step 3), and again before cloning (Step 7) |
 | git can't reach the repo (SSH key, network) | Show git's message and stop (Step 4) |
+| `Host key verification failed` from `ls-remote` or the framework clone | Stop (early, for the clone) with the `ssh git@ssh.bitbucket.org host_key_info` steps and the three fingerprints. Never accept a key or edit `known_hosts` (Steps 4 and 5) |
 | Atlassian connector absent, no create-repository operation in `discover`, or the call fails | Degrade, never abort: ask the engineer to create the repo, private, and say "done" (Step 4) |
 | The framework ref doesn't exist | Show git's message and stop early (Step 5) |
 | The names have problems | Show them and ask for overrides (Step 6) |
