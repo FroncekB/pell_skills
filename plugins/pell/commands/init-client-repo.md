@@ -41,6 +41,7 @@ Shell conventions for every step:
   2. If a background job is still running, wait for it to exit: never delete `<temp>` while one may still be writing.
   3. Delete `<temp>`.
   4. Print the step's message. If Step 7 cloned the client repo, add `<folder> is left for you to look at. Delete it before running again.` If Step 4 created the repo in this run, add `<ws>/<slug> was created and is still empty.`
+  5. Add the times, in the same form as Step 12's report and in minutes to one decimal place: run `date +%s` for now. Once `t_running` is set (Step 9, item 4), add `To running <t_running - t_start> min, waiting <waited> min on you, <now - t_start> min elapsed so far, fork tool <s> s.` Before that, add `<now - t_start> min elapsed so far, <waited> min of that waiting on you.` Write no run-log line on a stop: the fork isn't committed.
 
 ## Step 2 — Prerequisites
 
@@ -84,7 +85,7 @@ If `<repos folder>/<slug>` already exists, stop with: `<repos folder>/<slug> alr
 Run `git ls-remote git@ssh.bitbucket.org:<ws>/<slug>.git`.
 - **Exit 0**: the repo exists. Print `<ws>/<slug> exists on Bitbucket.`
 - **Git says the repository doesn't exist** (`repository does not exist`, `Repository not found`): the repo is missing, or you can't see it.
-- **`Host key verification failed`**: this machine's `known_hosts` has no entry for `ssh.bitbucket.org`, and a non-interactive run can't answer git's prompt. Never accept a host key for the engineer and never edit `known_hosts`. Nothing has been written yet, so stop with the message in the block below.
+- **`Host key verification failed`**: this machine's `known_hosts` has no entry for `ssh.bitbucket.org`, and a non-interactive run can't answer git's prompt. Never accept a host key for the engineer and never edit `known_hosts`. Nothing has been cloned or created yet, so stop with the message in the block below.
 - **Any other failure**, such as `Permission denied (publickey)` or a network error: stop with `git can't reach <ws>/<slug> on Bitbucket: <git's message>. Check your SSH key with ssh -T git@ssh.bitbucket.org, then run again.`
 
 The host-key message, shared with Step 5's framework clone:
@@ -244,7 +245,9 @@ Or finish by hand, from <folder>, in this order. Each command must pass before t
      PowerShell:  $env:<ENV>_TEST_SQL = "Server=<server>;Database=<Code>_Test_Fork;User Id=<user>;Password=<password>;TrustServerCertificate=True"
                   $env:<ENV>_TEST_ALLOW_REMOTE = "1"
   2. Run it: dotnet run --project <Code>.API --launch-profile https. Check that https://localhost:5173/login shows <display>, then stop it with Ctrl+C.
-  3. The checks:
+  3. Stage the fork, because the unit tests read the files git lists:
+     git add -A
+     Then the checks:
      dotnet build <Code>.Web.sln -c Release -p:ShouldRunNpmInstall=false -p:ShouldRunBuildScript=false
      dotnet test <Code>.Tests -c Release
      dotnet test <Code>.IntegrationTests -c Release
@@ -289,6 +292,8 @@ Step 9 starts only after the background job `npm-ci` has exited, waited for as "
 
 ## Step 10 — Checks
 
+First stage the fork without committing: `git -C '<folder>' add -A` (no commit, no branch change). The fork's unit tests read the files git lists, and an unstaged fork is a list of one file.
+
 Run these from `<folder>`, one at a time, each through `with_fork_db`. They are the fork's CLAUDE.md "Standard commands", without end to end (it needs port 7143 again) and the commands that write; if that table spells one differently, use its spelling. Pass a command that holds `&&` as `sh -c '<command>'`, so all of it runs in that environment.
 
 In the foreground, with the Bash tool's longest timeout (600000 ms), each as `source '<temp>/fork-db.sh' && cd '<folder>' && with_fork_db '<ENV>' '<Code>' <command>`:
@@ -326,7 +331,7 @@ A failure stops the run before the commit: stop early with `Stopped before the c
 
 1. Run `date +%s`. Append one line to `<folder>/docs/project/run-log.md`, minutes to one decimal place: `- <YYYY-MM-DD>: forked from <ref> at <short sha>; running in <t_running - t_start> min, <now - t_start> min in total; the fork tool took <s> s.`
 2. From `<folder>`: if the clone has no branch yet (`git rev-parse --verify -q HEAD` fails), run `git switch -c main`. If Bitbucket made an initial commit on a branch other than `main`, also run `git switch -c main`, so the fork commit goes on top of it.
-3. From `<folder>`: `git add -A`, then `git commit -m 'Start <display> from the Pell Web App Framework (<short sha>)'`. If the commit fails (no `user.name` or `user.email`, a hook), stop early with git's message and `Nothing was pushed. Fix the cause, then run: git -C '<folder>' commit -m "Start <display> from the Pell Web App Framework (<short sha>)", git -C '<folder>' branch staging, git -C '<folder>' push --atomic -u origin main staging`.
+3. From `<folder>`: `git add -A` again, which adds the run-log line and anything the checks wrote, then `git commit -m 'Start <display> from the Pell Web App Framework (<short sha>)'`. If the commit fails (no `user.name` or `user.email`, a hook), stop early with git's message and `Nothing was pushed. Fix the cause, then run: git -C '<folder>' commit -m "Start <display> from the Pell Web App Framework (<short sha>)", git -C '<folder>' branch staging, git -C '<folder>' push --atomic -u origin main staging`.
 4. From `<folder>`: `git branch staging`, then `git push --atomic -u origin main staging`, so neither branch lands without the other. Never force.
 
 If the push fails, print git's per-branch result (each `! [rejected]` or `! [remote rejected]` line, or its message when the server refuses an atomic push), delete `<temp>`, and stop with: `Committed on main and created staging, but the push failed. Fix the cause, then run: git -C '<folder>' push --atomic -u origin main staging`
