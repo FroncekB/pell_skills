@@ -124,6 +124,8 @@ git clone --depth 1 --branch '<ref>' git@ssh.bitbucket.org:pellsoftware/pell_web
 
 On failure, stop early with `Couldn't clone the framework's <ref>: <git's message>.` If git's message says `Host key verification failed` (this is the first connection to Bitbucket only when Step 4 was skipped), stop early with Step 4's host-key message instead, and never accept a host key or edit `known_hosts`. Otherwise record `<short sha>` from `git -C '<temp>/framework' rev-parse --short HEAD`. Below, `<fw>` is `<temp>/framework`.
 
+If `<fw>/tools/PellFramework.Fork` isn't a folder, stop early with `The framework's <ref> (<short sha>) is older than the fork tool: it has no tools/PellFramework.Fork. Give a ref that has it, such as react.`
+
 ## Step 6 — The plan
 
 Run the fork tool for the names, always passing `--from`:
@@ -319,7 +321,7 @@ Here too `<dir>` is `<folder>` unless the item names another folder.
 
 4. `integration`: the integration tests, as above.
 5. `generate-check`: `dotnet run --project tools/<Code>.Scaffolder -c Release -- generate --check`
-6. `screens`, on Windows only, with `<dir>` as `<folder>/<Code>.React`: `npm run screens -- --active --update-all`. It rewrites every baseline of the active theme so they show the client's name; `npm run screens` alone would keep the old images, since the name change is under the comparison's tolerance.
+6. `screens`, on Windows only, with `<dir>` as `<folder>/<Code>.React`: `npm run screens -- --active --update-all`. It rewrites every baseline of the active theme so they show the client's name, where the copies the fork carries show the framework's.
 
    The harness serves each theme's app preview and Storybook on fixed ports with `reuseExistingServer: false`, so any other screens run on the machine (the framework's, or another fork's) makes Playwright fail with `... is already used`. Before the job, find which ports an `--active` run will start:
    - `--active` runs only the theme `VITE_THEME` names in `<Code>.React/.env`. List the folders under `<Code>.React/src/themes` sorted in plain code-unit order (as `Array.prototype.sort()` does, which is what `screens/themes.ts` relies on) and take the active theme's zero-based index `i`. The app preview is on port `4301 + i`.
@@ -370,6 +372,7 @@ Folder       <folder>
 Pushed       main, staging
 
 Next:
+- Turn on Bitbucket Pipelines for <ws>/<slug> (Repository settings, Pipelines), and add the secured repository variable <ENV>_CI_SQL_PASSWORD, the sa password of the CI's SQL Server (the comment at the top of bitbucket-pipelines.yml gives its rules). The fork's CI needs both.
 - Send the client the logo question in docs/project/open-questions.md.
 - Run /pell:map-repo in <folder>.
 - Start intake with docs/project/intake-sheet.md.
@@ -406,6 +409,7 @@ Then delete the temporary framework clone: `rm -rf '<temp>'`. If that fails, pri
 | `Host key verification failed` from `ls-remote` or the framework clone | Stop (early, for the clone) with the `ssh git@ssh.bitbucket.org host_key_info` steps and the three fingerprints. Never accept a key or edit `known_hosts` (Steps 4 and 5) |
 | Atlassian connector absent, no create-repository operation in `discover`, or the call fails | Degrade, never abort: ask the engineer to create the repo, private, and say "done" (Step 4) |
 | The framework ref doesn't exist | Show git's message and stop early (Step 5) |
+| The framework ref has no `tools/PellFramework.Fork` | Stop early: the ref is older than the fork tool (Step 5) |
 | The names have problems | Show them and ask for overrides (Step 6) |
 | The tool fails (exit 1) or refuses (exit 2) | Stop early with its `fork:` message. The tool wrote nothing; delete the clone before running again (Step 7) |
 | `set_fork_secret` fails | Stop early with its exit code, never its output (Step 8) |
