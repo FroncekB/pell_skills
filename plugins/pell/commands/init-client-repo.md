@@ -14,7 +14,7 @@ Work through `$ARGUMENTS` in this order, stripping each recognized token as you 
 1. **Modifiers** (case-insensitive): `--dry-run`, `--reset`.
    - `--dry-run` → `dry_run = true`. A dry run has no side effect beyond a temporary framework clone it deletes: it never saves the config, creates the repo or clones the client repo. It runs `--names-only`, prints the plan, and stops. A check that would stop a real run before the plan (a busy port, no SQL Server, an existing folder, a missing repo) prints its line, and the dry run goes on to the plan.
    - `--reset` → `reset = true` (Step 3). If both appear, `--dry-run` wins: print `Both "--dry-run" and "--reset" were given — --dry-run wins; the saved repos folder is left alone.`
-2. **The link**: `https://bitbucket.org/<ws>/<slug>` (also with a `user@` before the host, a trailing `/` or `.git`, or more path such as `/src/main/`) or `git@ssh.bitbucket.org:<ws>/<slug>.git`, or the older `git@bitbucket.org:<ws>/<slug>.git`. Take the workspace and slug from the first two path segments, without `.git`. Each must match `^[A-Za-z0-9._-]+$` and not start with `-`; if either doesn't, say so and ask for the link again. With no link, ask: `> Which Bitbucket repository is this client's? Paste its link.` Whichever form is given, every git command below uses `git@ssh.bitbucket.org:<ws>/<slug>.git`. When `--reset` is the only argument, do Step 3's reset and stop instead.
+2. **The link**: `https://bitbucket.org/<ws>/<slug>` (also with a `user@` before the host, a trailing `/` or `.git`, or more path such as `/src/main/`) or `git@ssh.bitbucket.org:<ws>/<slug>.git`, or the older `git@bitbucket.org:<ws>/<slug>.git`. First drop trailing sentence punctuation from the link (`.`, `,`, `;`, `:`, `!`, `?`, `)` and closing quotes, repeatedly, so `https://bitbucket.org/<ws>/<slug>.` or `"<link>",` becomes the bare link). Then take the workspace and slug from the first two path segments, without `.git`. Each must match `^[A-Za-z0-9._-]+$` and not start with `-`; if either doesn't, say so and ask for the link again. With no link, ask: `> Which Bitbucket repository is this client's? Paste its link.` Whichever form is given, every git command below uses `git@ssh.bitbucket.org:<ws>/<slug>.git`. When `--reset` is the only argument, do Step 3's reset and stop instead.
 3. **`name "<display>"`** → `display`, the client's name as users read it.
 4. **`logo <path>`** → `logo`. Check that the file exists and ends in `.svg`, `.png` or `.webp`, and make the path absolute (relative to the folder you run in). If it fails the check, say so; Step 6 asks again.
 5. **`ref <branch>`**, or a phrase naming a framework branch (`from the framework's <branch> branch`) → `ref`. Default `react`. It must match `^[A-Za-z0-9._/-]+$` (a branch name may hold `/`) and not start with `-`; otherwise ask for it again.
@@ -54,6 +54,8 @@ Ports 7143 and 5173 must be free: the fork runs on the framework's ports. Find a
 - macOS and Linux: `lsof -nP -iTCP:7143 -iTCP:5173 -sTCP:LISTEN`.
 
 If either port is held, stop with: `Port <port> is in use by <process> (PID <pid>). Stop that app, then run again.`
+
+Step 10's screenshot job needs its own ports (4301 and up for the app preview, 4401 and up for Storybook). It checks them just before it runs, not now; if another screens run is going, expect a wait there.
 
 ## Step 3 — The repos folder
 
@@ -311,6 +313,14 @@ source '<temp>/fork-db.sh' && cd '<folder>' && { with_fork_db '<ENV>' '<Code>' d
 5. `generate-check`: `dotnet run --project tools/<Code>.Scaffolder -c Release -- generate --check`
 6. `screens`, on Windows only: in `<Code>.React`, `npm run screens -- --active --update-all`. It rewrites every baseline of the active theme so they show the client's name; `npm run screens` alone would keep the old images, since the name change is under the comparison's tolerance.
 
+   The harness serves each theme's app preview and Storybook on fixed ports with `reuseExistingServer: false`, so any other screens run on the machine (the framework's, or another fork's) makes Playwright fail with `... is already used`. Before the job, find which ports an `--active` run will start:
+   - `--active` runs only the theme `VITE_THEME` names in `<Code>.React/.env`. List the folders under `<Code>.React/src/themes` sorted by name (as `screens/themes.ts` does) and take the active theme's zero-based index `i`. The app preview is on port `4301 + i`.
+   - A Storybook starts on `4401 + i` only if the active theme is listed in `<Code>.React/screens/storybookThemes.js`. Read both files to confirm; if the harness has changed, check exactly the ports its `playwright.screens.config.ts` `webServer` entries would use for that run.
+
+   Check those ports with the Step 2 listener commands (Windows: the same `netstat` with the screens ports in the pattern, then `tasklist`; elsewhere `lsof`). If one is held, name the process and its PID, say `Port <port> is held by <process> (PID <pid>), another screens run, most likely. Waiting up to 10 minutes for it to finish.`, and poll with one bounded loop (Bash timeout 600000 ms), checking every 5 seconds until none of those ports is held. If any is still held after 10 minutes, stop early naming the process. Never end that process yourself.
+
+   If the job fails and its output contains `is already used`, check the ports and wait for them as above, then run the job once more. A second failure, or any other failure, is a failed check.
+
 On macOS or Linux, skip `screens` (the baselines exist only for Windows) and append this line to `<folder>/docs/project/status.md`:
 
 ```
@@ -382,6 +392,7 @@ Then delete the temporary framework clone: `rm -rf '<temp>'`. If that fails, pri
 | `git`, `dotnet`, `npm` or `curl` missing | Name it and stop (Step 2) |
 | macOS or Linux without `PELLFW_TEST_SQL` | Stop before the plan: there is no LocalDB (Step 2) |
 | Port 7143 or 5173 in use | Name the process and its PID, and stop (Step 2). After the app stops, a port still held is named the same way (Step 9) |
+| A port the screens job will serve (4301 + i, 4401 + i) is held, or the job fails with `is already used` | Name the process and wait up to 10 minutes for the port to free, then run the job (once more after an `is already used` failure). Still held after the wait: stop early naming the process (Step 10) |
 | `<repos folder>/<slug>` exists | Stop before the plan (Step 3), and again before cloning (Step 7) |
 | git can't reach the repo (SSH key, network) | Show git's message and stop (Step 4) |
 | `Host key verification failed` from `ls-remote` or the framework clone | Stop (early, for the clone) with the `ssh git@ssh.bitbucket.org host_key_info` steps and the three fingerprints. Never accept a key or edit `known_hosts` (Steps 4 and 5) |
