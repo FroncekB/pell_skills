@@ -62,7 +62,7 @@ A 404 or empty response is fine — just means no external links attached. Conti
 
 Skip this step if the user said `skip bitbucket` in Step 1, or if `git rev-parse --show-toplevel` fails (not in a repo).
 
-Parse `git remote get-url origin` — expect `git@bitbucket.org:<workspace>/<repo>.git` or `https://bitbucket.org/<workspace>/<repo>.git`. If parsing fails (not a Bitbucket remote), skip this step silently — but **capture the detected host** (e.g. `github.com`, `gitlab.com`, or the raw URL) so the final report can name it. Note in the final report under "Bitbucket PRs" that the origin isn't Bitbucket and which host was detected.
+Parse `git remote get-url origin` — expect `git@ssh.bitbucket.org:<workspace>/<repo>.git`, the older `git@bitbucket.org:<workspace>/<repo>.git`, or `https://bitbucket.org/<workspace>/<repo>.git`. If parsing fails (not a Bitbucket remote), skip this step silently — but **capture the detected host** (e.g. `github.com`, `gitlab.com`, or the raw URL) so the final report can name it. Note in the final report under "Bitbucket PRs" that the origin isn't Bitbucket and which host was detected.
 
 Run `listBitbucketRepoPullRequests` on `plugin:atlassian:atlassian`. It is not a primary tool: reach it through `discover`, then call `executeRead({name: "listBitbucketRepoPullRequests", inputs, responseFields})` with no `cloudId` (Bitbucket operations don't take one). Inputs:
 - `workspaceId`: `<workspace>`

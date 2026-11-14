@@ -32,7 +32,7 @@ Most commands need the Atlassian MCP server connected to your Claude Code sessio
 
 | Server | Auth | Required for |
 |-|-|-|
-| `plugin:atlassian:atlassian` (`https://mcp.atlassian.com/v2/mcp`) | OAuth | Every Jira-ops command; any PR-mode review (`/pell:correctness-review`, `/pell:quality-review`, `/pell:security-review`, `/pell:test-review` against a PR); `/pell:four-pass-review`, `/pell:address-review`, `/pell:review-queue`, `/pell:finish-work`, `/pell:related`, `/pell:precheck` |
+| `plugin:atlassian:atlassian` (`https://mcp.atlassian.com/v2/mcp`) | OAuth | Every Jira-ops command; any PR-mode review (`/pell:correctness-review`, `/pell:quality-review`, `/pell:security-review`, `/pell:test-review` against a PR); `/pell:four-pass-review`, `/pell:address-review`, `/pell:review-queue`, `/pell:finish-work`, `/pell:related`, `/pell:precheck`; `/pell:init-client-repo` (optional: without it, creating the repo becomes your step) |
 
 ### Setting up the Atlassian MCP
 
@@ -77,11 +77,11 @@ Toolkit versions before 0.21.0 needed a second, API-token connection named `atla
 
 ## Commands
 
-Twenty-one commands (plus one deprecated alias, `/pell:three-pass-review`), grouped by where they fall in a ticket's lifecycle — pick up work, review it, audit broadly, ship it. Driving a large build is now the [conductor subsystem](#conductor-subsystem) — a skill family, not a command.
+Twenty-two commands (plus one deprecated alias, `/pell:three-pass-review`), grouped by where they fall in a ticket's lifecycle — pick up work, review it, audit broadly, ship it. Driving a large build is now the [conductor subsystem](#conductor-subsystem) — a skill family, not a command.
 
 | Stage | Commands |
 |-|-|
-| **Repo setup** | [`map-repo`](#pellmap-repo-refresh--verify--with-sow--skip-sow--project-key--url----dry-run----verbose) |
+| **Repo setup** | [`map-repo`](#pellmap-repo-refresh--verify--with-sow--skip-sow--project-key--url----dry-run----verbose) · [`init-client-repo`](#pellinit-client-repo-bitbucket-repo-link-name-display-name-logo-path-ref-framework-branch---dry-run---reset) |
 | **Starting work** | [`my-tickets`](#pellmy-tickets) · [`triage`](#pelltriage-key) · [`related`](#pellrelated-key) · [`precheck`](#pellprecheck-key--idea) · [`scope`](#pellscope-key--project-key) · [`groom`](#pellgroom-epic-key--keys--project-key--jql) · [`start-work`](#pellstart-work-key) · [`from-ticket`](#pellfrom-ticket-jira-key-freeform-context) |
 | **Reviewing code** | [`correctness-review`](#pellcorrectness-review) · [`quality-review`](#pellquality-review) · [`security-review`](#pellsecurity-review) · [`test-review`](#pelltest-review) · [`local-review`](#pelllocal-review) · [`four-pass-review`](#pellfour-pass-review-pr) · [`address-review`](#pelladdress-review-pr) · [`review-queue`](#pellreview-queue-repo-) |
 | **Auditing a whole repo** | [`repo-review`](#pellrepo-review) · [`repo-security-review`](#pellrepo-security-review) |
@@ -139,6 +139,37 @@ Walk this repo's Jira, Confluence, Drive, and Bitbucket coordinates once and wri
 **Output:** a rendered coordinate summary (Repository / Atlassian / Jira / Confluence / Drive / Gaps), followed by one line per file actually written this run.
 
 **Side-effects:** read-only against Jira, Confluence, Drive, and Bitbucket — every write is local and its own `(y/n)` gate (`context.md`, each `sow-<KEY>.md`, and the `CLAUDE.md` pointer block are gated separately). Never commits.
+
+---
+
+### `/pell:init-client-repo <bitbucket repo link> [name "<display name>"] [logo <path>] [ref <framework branch>] [--dry-run] [--reset]`
+
+Turn a client's Bitbucket repo link into that repo holding the Pell Web App Framework under the client's name: forked by the framework's own tool from a fresh clone, running locally with the client's name on the sign-in page, checked, committed on `main`, branched to `staging`, and pushed.
+
+**Usage:**
+
+```
+/pell:init-client-repo https://bitbucket.org/pellsoftware/acme-field-ops
+/pell:init-client-repo https://bitbucket.org/pellsoftware/acme-field-ops name "Acme & Field Ops" logo ./acme.svg
+/pell:init-client-repo <link> ref react          # fork a different framework branch (default: react)
+/pell:init-client-repo <link> --dry-run          # check the names, print the plan, change nothing
+/pell:init-client-repo --reset                   # clear the saved repos folder
+```
+
+**Behavior:**
+
+1. Checks that git, dotnet, npm and curl are present and that ports 7143 and 5173 are free; on macOS and Linux it stops unless `PELLFW_TEST_SQL` is set, since there is no LocalDB
+2. Finds the folder your client repos live in (saved as `init_client_repo.repos_folder` in `~/.claude/pell-config.json` after a `(y/n)`), and checks the repo exists on Bitbucket with `git ls-remote`
+3. If the repo is missing, offers to create it, private, through the Atlassian connector when it offers a create-repository operation; otherwise asks you to create it and say "done"
+4. Clones the framework's `react` branch (or `ref`) fresh, stopping if that ref is older than the fork tool, asks the fork tool for the client's name forms, and asks for a logo
+5. Shows the plan and asks once: the names, the folder, the logo, and the steps that follow
+6. On `y`: clones the client repo, runs the fork tool into it, starts the app, checks the sign-in page shows the client's name, then stops it
+7. Runs the build, the unit tests, lint, typecheck and `npm test`, the integration tests, the generator check and a leftover-name check, stopping before any commit if one fails; on Windows it then rewrites the active theme's screenshot baselines (`npm run screens -- --active --update-all`) so they show the client's name, elsewhere it adds a line to `docs/project/status.md`
+8. Commits on `main`, creates `staging`, and pushes both together with `git push --atomic`, never forced
+
+**Output:** the plan, then a report with the time to running and in total, the fork tool's time, the repo link, the folder, the pushed branches and next steps (turning on Bitbucket Pipelines and setting the CI's SQL password variable, `/pell:map-repo`, the intake sheet).
+
+**Side-effects:** read-only until the plan prompt, except two writes with their own `(y/n)`: saving the repos folder, and creating the Bitbucket repo. After the plan `y` it clones, runs local servers and checks, commits, and pushes `main` and `staging` to the client repo, which is the one standing yes. The database: with `PELLFW_TEST_SQL` set, it writes the fork's user secrets and creates the databases `<Code>` and `<Code>_Test_Fork` on that server; without it, it uses LocalDB (Windows only). It also adds a line to `docs/project/run-log.md`, and the fork's first Vite start exports the ASP.NET dev certificate for the app, as any app made from the template does. If a step fails, it stops before the commit and leaves the folder for you. `--dry-run` writes nothing beyond a temporary framework clone it deletes. Needs the Atlassian connector only to create a missing repo.
 
 ---
 
@@ -563,6 +594,10 @@ To install the recommended companion:
 ```
 
 The skill is deliberately quiet about pure bug fixes, refactors, tests, and non-visual frontend work — it only triggers when the deliverable is something a human will look at.
+
+### `init-client-repo`
+
+Fires when you give a Bitbucket repository link for a new client project and ask to initialize, set up or start it from the Pell Web App Framework ("here's the repo for the next client"). Checks that is what you mean and invokes `/pell:init-client-repo` with your words. It never clones, creates or pushes anything itself, and stays quiet when a Bitbucket link is given for anything else, such as reviewing a PR or mapping an existing repo.
 
 ---
 
