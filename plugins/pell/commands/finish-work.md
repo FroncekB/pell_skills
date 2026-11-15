@@ -101,7 +101,7 @@ Otherwise, ask:
 
 **Existing PR for this branch?**
 
-Resolve the workspace and repo. Run `git remote get-url origin` and parse the Bitbucket URL — expect `git@bitbucket.org:<workspace>/<repo>.git` or `https://bitbucket.org/<workspace>/<repo>.git`. If parsing fails → ask the user for the workspace/repo. Cache nothing.
+Resolve the workspace and repo. Run `git remote get-url origin` and parse the Bitbucket URL — expect `git@ssh.bitbucket.org:<workspace>/<repo>.git`, the older `git@bitbucket.org:<workspace>/<repo>.git`, or `https://bitbucket.org/<workspace>/<repo>.git`. If parsing fails → ask the user for the workspace/repo. Cache nothing.
 
 Run `listBitbucketRepoPullRequests` on `plugin:atlassian:atlassian`. It is not a primary tool: call it directly, with no `discover` round trip (run `discover` and retry only if the call fails with `Unknown operation` or `Failed to fetch cloud ID`), as `executeRead({name: "listBitbucketRepoPullRequests", inputs, responseFields})` with no `cloudId` (Bitbucket operations don't take one). Inputs:
 - `workspaceId`: `<workspace>`
