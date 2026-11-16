@@ -101,7 +101,7 @@ The host-key message, shared with Step 5's framework clone:
 
 When it is missing, gate:
 
-> Create the private repository <ws>/<slug> on Bitbucket? (y/n)
+> Create the private repository <ws>/<slug> on Bitbucket, and block force pushes and deletion on its main and staging branches? (y/n)
 
 Under `--dry-run`, skip the gate: print `--dry-run: <ws>/<slug> doesn't exist; a real run asks to create it.`
 
@@ -160,8 +160,11 @@ Then gate once:
 >   Folder: <repos folder>/<slug>
 >   Logo: <path> | none (Pell's mark stays as a placeholder)
 >   Then: run it locally, run the checks, commit on main, create staging, and push both to <ws>/<slug>.
+>   Then: block force pushes and deletion on main and staging in <ws>/<slug>.
 > (y/n, or name the forms to change)
 ```
+
+Print the last `Then:` line only when the repo already existed. When Step 4 created it in this run, its `y` already covered the restrictions.
 
 - `y` covers Steps 7 to 12, the push included: pushing to the client repo is the standing yes from the plans README, decision 10.
 - `n`: stop early with `Nothing forked.`
@@ -354,6 +357,10 @@ A failure stops the run before the commit: stop early with `Stopped before the c
 3. From `<folder>`: `git add -A` again, which adds the run-log line and anything the checks wrote, then `git commit -m 'Start <display> from the Pell Web App Framework (<short sha>)'`. If the commit fails (no `user.name` or `user.email`, a hook), stop early with git's message and `Nothing was pushed. Fix the cause, then run: git -C '<folder>' commit -m "Start <display> from the Pell Web App Framework (<short sha>)", git -C '<folder>' branch staging, git -C '<folder>' push --atomic -u origin main staging`.
 4. From `<folder>`: `git branch staging`, then `git push --atomic -u origin main staging`, so neither branch lands without the other. Never force.
 
+5. Block force pushes and deletion on `main` and `staging`, only once the push has succeeded and only with a yes already given for it: Step 4's create gate when this run created the repo, otherwise Step 6's plan gate. The restrictions are `kind: force` and `kind: delete` on each of the patterns `main` and `staging`, four in all and no other kind, so normal pushes stay allowed. This version of the command has no automated call for them: print the manual settings and record the restrictions as not set, with the reason `no branch-restriction operation checked for`:
+
+   > Block force pushes and deletion on main and staging yourself: in Bitbucket, open <ws>/<slug>, Repository settings, Branch restrictions, and for each of `main` and `staging` add Prevent a force push and Prevent deletion. Normal pushes stay allowed.
+
 If the push fails, print git's per-branch result (each `! [rejected]` or `! [remote rejected]` line, or its message when the server refuses an atomic push), delete `<temp>`, and stop with: `Committed on main and created staging, but the push failed. Fix the cause, then run: git -C '<folder>' push --atomic -u origin main staging`
 
 ## Step 12 — Report
@@ -370,6 +377,7 @@ Fork tool    <s> s
 Repo         https://bitbucket.org/<ws>/<slug>
 Folder       <folder>
 Pushed       main, staging
+Branch rules  main, staging: no force push, no deletion
 
 Next:
 - Turn on Bitbucket Pipelines for <ws>/<slug> (Repository settings, Pipelines), and add the secured repository variable <ENV>_CI_SQL_PASSWORD, the sa password of the CI's SQL Server (the comment at the top of bitbucket-pipelines.yml gives its rules). The fork's CI needs both.
@@ -378,7 +386,7 @@ Next:
 - Start intake with docs/project/intake-sheet.md.
 ```
 
-Omit the logo line when the fork has a logo. Add a transparency line for each skipped step, such as `- Repos folder not saved (you answered no)` or `- Screenshot baselines not recaptured: not Windows (see docs/project/status.md)`.
+In place of the `Branch rules` line above, print `Branch rules  not set (<reason>); set them in Repository settings, Branch restrictions` when Step 11 item 5 didn't set them. Omit the logo line when the fork has a logo. Add a transparency line for each skipped step, such as `- Repos folder not saved (you answered no)` or `- Screenshot baselines not recaptured: not Windows (see docs/project/status.md)`.
 
 Then delete the temporary framework clone: `rm -rf '<temp>'`. If that fails, print `Couldn't delete <temp>; delete it yourself.`
 
@@ -391,7 +399,7 @@ Then delete the temporary framework clone: `rm -rf '<temp>'`. If that fails, pri
 - **Never** fork from a local working tree. The source is always the fresh clone from Step 5, passed as `--from`.
 - **Never** put a workspace, slug, ref or path into a shell command before it passes its Step 1 check.
 - **Always** stop early as Step 1 describes: the app stopped, background jobs finished, `<temp>` deleted, and the fork folder left for the engineer.
-- The plan gate's `y` covers Steps 7 to 12, the push included. The other side effects have their own gates: saving the repos folder (Step 3) and creating the repo (Step 4). `--reset` is the engineer's own request to clear the saved folder.
+- The plan gate's `y` covers Steps 7 to 12, the push included. The other side effects have their own gates: saving the repos folder (Step 3) and creating the repo (Step 4). The branch restrictions (Step 11 item 5) ride on a yes already given: Step 4's create gate, or Step 6's plan gate for a repo that already existed. `--reset` is the engineer's own request to clear the saved folder.
 - The app, the integration tests and `generate --check` share the database and port 7143: run one at a time.
 - The fork's first Vite start exports the ASP.NET dev certificate for `<lower>.react.client` to `%APPDATA%/ASP.NET/https` (`~/.aspnet/https` elsewhere), as every app made from the template does.
 
@@ -408,6 +416,7 @@ Then delete the temporary framework clone: `rm -rf '<temp>'`. If that fails, pri
 | git can't reach the repo (SSH key, network) | Show git's message and stop (Step 4) |
 | `Host key verification failed` from `ls-remote` or the framework clone | Stop (early, for the clone) with the `ssh git@ssh.bitbucket.org host_key_info` steps and the three fingerprints. Never accept a key or edit `known_hosts` (Steps 4 and 5) |
 | Atlassian connector absent, no create-repository operation in `discover`, or the call fails | Degrade, never abort: ask the engineer to create the repo, private, and say "done" (Step 4) |
+| The branch restrictions can't be set: no operation, or a failed call | Degrade, never abort: print the manual settings, and say in the report that the restrictions weren't set (Step 11) |
 | The framework ref doesn't exist | Show git's message and stop early (Step 5) |
 | The framework ref has no `tools/PellFramework.Fork` | Stop early: the ref is older than the fork tool (Step 5) |
 | The names have problems | Show them and ask for overrides (Step 6) |
