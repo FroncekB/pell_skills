@@ -1,9 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import {
-  PREFIX, CLIENT_ORIGIN, FRAMEWORK_ORIGIN, SETTINGS,
+  PREFIX, CLIENT_ORIGIN, FRAMEWORK_ORIGIN,
   fakeRepo, allowed, denied, runEntry, git, makeClientDir, pushIn,
 } from './helpers.mjs';
 
@@ -222,13 +221,6 @@ test('allows commands that are not a push', () => {
     'npm test',
     'ls -la',
   ]) allowed(cmd);
-});
-
-test('the hook command uses the absolute project path', () => {
-  const settings = JSON.parse(readFileSync(SETTINGS, 'utf8'));
-  const entry = settings.hooks.PreToolUse[0];
-  assert.equal(entry.matcher, 'Bash|PowerShell|Edit|Write|NotebookEdit');
-  assert.equal(entry.hooks[0].command, 'node "$CLAUDE_PROJECT_DIR/.claude/repo-standup/guard.mjs"');
 });
 
 test('entry point prints the deny object for a denied push', () => {

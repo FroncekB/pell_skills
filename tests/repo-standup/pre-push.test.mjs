@@ -92,6 +92,7 @@ test('integration: the installed hook refuses a push whose URL is not the client
   mkdirSync(fork, { recursive: true });
   writeFileSync(path.join(fork, 'client-repo'), 'pellsoftware/acme\n');
   copyFileSync(path.join(HOOKS, 'shell-words.mjs'), path.join(fork, 'shell-words.mjs'));
+  copyFileSync(path.join(HOOKS, 'protected-paths.mjs'), path.join(fork, 'protected-paths.mjs'));
   copyFileSync(path.join(HOOKS, 'guard.mjs'), path.join(fork, 'guard.mjs'));
   copyFileSync(path.join(HOOKS, 'pre-push.mjs'), path.join(fork, 'pre-push.mjs'));
   const hook = path.join(work, '.git', 'hooks', 'pre-push');

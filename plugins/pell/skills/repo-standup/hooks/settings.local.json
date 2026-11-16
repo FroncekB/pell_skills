@@ -2,11 +2,11 @@
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|PowerShell|Edit|Write|NotebookEdit",
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/repo-standup/guard.mjs\""
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/repo-standup/guard.mjs\" || exit 2"
           }
         ]
       }

@@ -149,7 +149,7 @@ test('edits under .git, .claude/repo-standup and settings.local.json are denied'
       '.claude/settings.local.json',
       '.git',
     ]) denied(p, fakeRepo(), tool);
-    for (const p of ['src/app.js', '.gitignore', '.github/workflows/x.yml', 'docs/.claude-notes.md', '.claude/settings.json']) {
+    for (const p of ['src/app.js', '.gitignore', '.github/workflows/x.yml', 'docs/.claude-notes.md']) {
       allowed(p, fakeRepo(), tool);
     }
   }

@@ -7,18 +7,23 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  containsProtected, insideClaudeDir, isProtected, mixesGlobWithDotFolder, pathContext,
+} from './protected-paths.mjs';
 import { parseShell, stripRedirections } from './shell-words.mjs';
 
 export const PREFIX = 'repo-standup guard: ';
 export const FRAMEWORK_REPO = 'pellsoftware/pell_web_app_framework';
 const CANARY = 'repo-standup-guard-check';
-const EDIT_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit']);
+const SHELL_TOOLS = new Set(['Bash', 'PowerShell']);
+const PATH_FIELDS = ['file_path', 'path', 'notebook_path'];
 const deny = (why) => ({ allow: false, reason: PREFIX + why });
 
 // git subcommands that run no alias. Anything else may be an alias for push.
+// `clean` is left out on purpose: it deletes the ignored guard files.
 const BUILTINS = new Set([
   'add', 'am', 'apply', 'archive', 'bisect', 'blame', 'branch', 'bundle', 'cat-file', 'check-ignore',
-  'checkout', 'cherry-pick', 'clean', 'clone', 'commit', 'commit-tree', 'config', 'describe', 'diff',
+  'checkout', 'cherry-pick', 'clone', 'commit', 'commit-tree', 'config', 'describe', 'diff',
   'diff-tree', 'fetch', 'for-each-ref', 'format-patch', 'fsck', 'gc', 'grep', 'hash-object', 'help',
   'init', 'log', 'ls-files', 'ls-remote', 'ls-tree', 'maintenance', 'merge', 'merge-base', 'mv',
   'name-rev', 'notes', 'pull', 'push', 'read-tree', 'rebase', 'reflog', 'remote', 'reset', 'restore',
@@ -33,6 +38,9 @@ const PUSH_OPTIONS = new Set([
 
 // Long options that run a program; git accepts any unambiguous prefix of them.
 const RUNNER_OPTIONS = ['--upload-pack', '--receive-pack', '--exec'];
+// Short option letters, per subcommand, that run a program or set config.
+const RUNNER_LETTERS = { rebase: 'x', clone: 'uc', 'ls-remote': 'u', grep: 'O', init: 'c', submodule: 'c' };
+const CONFIG_OPTION_SUBS = new Set(['clone', 'init', 'submodule']);
 
 // git config keys that may be written. Every other write is denied.
 const SAFE_CONFIG_KEYS =
@@ -47,27 +55,67 @@ const CONFIG_WRITE_FLAGS = new Set(['--add', '--unset', '--unset-all', '--replac
 const WRAPPER = /(^|[\s\\/])(env|xargs|bash|sh|zsh|ksh|dash|cmd|pwsh|powershell|node|python3?|ruby|perl|sudo|time|nohup|command|exec|eval|iex|invoke-expression|start|start-process|call|nice|timeout|watch|source)(\.exe)?(\s|$)/i;
 const INTERPRETERS = new Set(['sh', 'bash', 'zsh', 'ksh', 'dash', 'pwsh', 'powershell', 'cmd', 'iex', 'invoke-expression']);
 const ALWAYS_DENIED_COMMANDS = new Set(['iex', 'invoke-expression', 'eval']);
+const SHELLS = new Set(['bash', 'sh', 'zsh', 'ksh', 'dash']);
+const POWERSHELLS = new Set(['pwsh', 'powershell']);
+const CODE_FLAGS = {
+  node: ['-e', '-p', '--eval', '--print'], nodejs: ['-e', '-p', '--eval', '--print'],
+  python: ['-c'], python3: ['-c'], perl: ['-e', '-E'], ruby: ['-e'],
+};
+const SPAWNING_CODE = /git|push|child_process|spawn|exec|subprocess|system/i;
+
+// Words that precede a command without being one.
+const KEYWORDS = new Set(['!', 'then', 'do', 'else', 'elif', 'time', 'if', 'while', 'until']);
+const DELETE_VERBS = new Set([
+  'rm', 'rmdir', 'del', 'erase', 'rd', 'remove-item', 'ri', 'unlink',
+  'mv', 'move', 'move-item', 'mi', 'ren', 'rename', 'rename-item', 'rni',
+]);
+const CD_VERBS = new Set(['cd', 'chdir', 'pushd', 'push-location', 'set-location', 'sl']);
+const LINK_VERBS = new Set(['ln', 'mklink']);
 
 // Quotes, backslashes, backticks and ^ vanish before a program sees its arguments.
 const normalize = (text) => text.replace(/["'\\`^]/g, '');
 const namesPush = (text) => /\bpush\b/i.test(normalize(text));
 const namesGit = (text) => /\bgit(\.exe)?\b/i.test(normalize(text));
 const commandName = (value) => value.split(/[\\/]/).pop().toLowerCase().replace(/\.exe$/, '');
-const plain = (word) => word.raw === word.value;
-
-// Paths the agent may never write: git's own files, the guard, and its settings.
-const PROTECTED_PATH = /(^|[\s/"'=:(])\.(git|claude\/repo-standup|claude\/settings\.local\.json)(\/|$|[\s"');&|])/i;
-const protectedPath = (text) => {
-  const slashed = text.replace(/\\/g, '/');
-  return PROTECTED_PATH.test(slashed) || PROTECTED_PATH.test(slashed.replace(/["'`^]/g, ''));
+const stripKeywords = (words) => {
+  let at = 0;
+  while (at < words.length && KEYWORDS.has(words[at].raw)) at += 1;
+  return words.slice(at);
 };
 
-function decideEdit(filePath) {
-  const p = String(filePath ?? '').replace(/\\/g, '/');
-  if (/(^|\/)\.git(\/|$)/.test(p) || /(^|\/)\.claude\/repo-standup(\/|$)/.test(p) || /(^|\/)\.claude\/settings\.local\.json$/.test(p)) {
-    return deny('writes under .git/, .claude/repo-standup/ and .claude/settings.local.json are not allowed');
+// Paths a word may name: itself, what follows `=` (--output=PATH), and with a
+// redirection operator removed.
+function pathCandidates(word) {
+  const v = word.value;
+  const eq = v.indexOf('=');
+  const option = v.startsWith('-') && eq > -1;
+  const redirected = v.replace(/^[0-9*]*>>?/, '').replace(/^</, '');
+  const found = [option ? '' : v, eq > -1 ? v.slice(eq + 1) : '', option && redirected === v ? '' : redirected];
+  return [...new Set(found)].filter((s) => s && /[\\/.~]/.test(s));
+}
+
+// Segment-level path rules: protected paths, globs, deletes, cd and links.
+function checkPaths(seg, ctx) {
+  const words = seg.words;
+  for (const w of words) {
+    if (mixesGlobWithDotFolder(w.raw)) return deny('a glob or variable could name a protected folder');
+    for (const p of pathCandidates(w)) {
+      if (isProtected(p, ctx)) return deny(`${p} is a protected path (.git, the guard's files, or a settings file)`);
+    }
   }
-  return { allow: true };
+  const command = stripKeywords(stripRedirections(words)).filter((w) => !/^[A-Za-z_]\w*=/.test(w.raw));
+  if (command.length === 0) return null;
+  const name = commandName(command[0].value);
+  const args = command.slice(1).flatMap(pathCandidates);
+  if (DELETE_VERBS.has(name) && args.some((p) => containsProtected(p, ctx))) {
+    return deny('deleting or moving a folder that holds a protected path is not allowed');
+  }
+  if (CD_VERBS.has(name) && args.some((p) => insideClaudeDir(p, ctx))) return deny('entering the .claude folder is not allowed');
+  if (LINK_VERBS.has(name)) return deny('creating links is not allowed');
+  if ((name === 'new-item' || name === 'ni') && /symboliclink|junction|hardlink/i.test(command.map((w) => w.raw).join(' '))) {
+    return deny('creating links is not allowed');
+  }
+  return null;
 }
 
 // The checks for a git subcommand other than push.
@@ -75,13 +123,14 @@ function checkRunners(sub, args) {
   const values = args.map((a) => a.value);
   for (const v of values) {
     const name = v.split('=')[0];
-    if (v.startsWith('--') && name.length >= 5 && RUNNER_OPTIONS.some((o) => o.startsWith(name))) {
-      return deny(`git option ${name} runs a program`);
+    if (v.startsWith('--') && name.length >= 5) {
+      if (RUNNER_OPTIONS.some((o) => o.startsWith(name))) return deny(`git option ${name} runs a program`);
+      if (CONFIG_OPTION_SUBS.has(sub) && '--config'.startsWith(name)) return deny(`git ${sub} --config sets config`);
+      if (sub === 'grep' && v.length >= 6 && '--open-files-in-pager'.startsWith(name)) return deny('git grep --open-files-in-pager runs a program');
     }
-    if (sub === 'rebase' && /^-x/.test(v)) return deny('git rebase -x runs a command');
-    if ((sub === 'clone' || sub === 'ls-remote') && /^-u/.test(v)) return deny(`git ${sub} -u runs a program`);
-    if (sub === 'grep' && (/^-O/.test(v) || (v.startsWith('--') && name.length >= 6 && '--open-files-in-pager'.startsWith(name)))) {
-      return deny('git grep -O runs a program');
+    const letters = /^-([A-Za-z]+)/.exec(v)?.[1] ?? '';
+    if (!v.startsWith('--') && [...letters].some((l) => (RUNNER_LETTERS[sub] ?? '').includes(l))) {
+      return deny(`git ${sub} -${letters} runs a program or sets config`);
     }
   }
   if (sub === 'submodule' && values.includes('foreach')) return deny('git submodule foreach runs a command');
@@ -91,22 +140,52 @@ function checkRunners(sub, args) {
 }
 
 function checkConfig(values) {
+  const writeCheck = (key) =>
+    key && SAFE_CONFIG_KEYS.test(key.toLowerCase()) ? null : deny(`git config may not write ${key ?? 'that key'}`);
+  // The newer subcommand syntax: git config get|list|set|unset|edit|...
+  const [first] = values;
+  if (first === 'get' || first === 'list') return null;
+  if (first === 'set' || first === 'unset') return writeCheck(values.slice(1).find((v) => !v.startsWith('-')));
+  if (['edit', 'rename-section', 'remove-section'].includes(first)) return deny('this git config form is not allowed');
+
   if (values.some((v) => ['-e', '--edit', '-f', '--blob', '--rename-section', '--remove-section'].includes(v) || v.startsWith('--file'))) {
     return deny('this git config form is not allowed');
   }
   if (values.some((v) => CONFIG_READ_FLAGS.has(v))) return null;
   const keys = values.filter((v) => !v.startsWith('-'));
   const writes = keys.length > 1 || values.some((v) => CONFIG_WRITE_FLAGS.has(v));
-  if (!writes) return null;
-  if (!keys[0] || !SAFE_CONFIG_KEYS.test(keys[0].toLowerCase())) return deny(`git config may not write ${keys[0] ?? 'that key'}`);
+  return writes ? writeCheck(keys[0]) : null;
+}
+
+// For a shell, PowerShell or cmd running a code string, the string to judge
+// as its own command; { encoded: true } for -EncodedCommand; null otherwise.
+function nestedCode(name, words, tool) {
+  const rest = words.slice(1);
+  if (SHELLS.has(name)) {
+    const at = rest.findIndex((w) => /^-[A-Za-z]*c[A-Za-z]*$/.test(w.raw));
+    return at === -1 ? null : { tool: 'Bash', code: rest[at + 1]?.value ?? '' };
+  }
+  if (POWERSHELLS.has(name)) {
+    for (let i = 0; i < rest.length; i++) {
+      if (!rest[i].raw.startsWith('-')) continue;
+      const flag = rest[i].raw.slice(1).toLowerCase().split(':')[0];
+      if (flag && ('encodedcommand'.startsWith(flag) || flag === 'ec')) return { encoded: true };
+      if (flag && 'command'.startsWith(flag)) return { tool: 'PowerShell', code: rest.slice(i + 1).map((w) => w.value).join(' ') };
+    }
+    return null;
+  }
+  if (name === 'cmd') {
+    const at = rest.findIndex((w) => /^\/[ck]$/i.test(w.raw));
+    return at === -1 ? null : { tool: tool === 'Bash' ? 'Bash' : 'PowerShell', code: rest.slice(at + 1).map((w) => w.value).join(' ') };
+  }
   return null;
 }
 
 // Judge one segment. Returns { allow: false, reason }, { push } for a push
 // segment, or null for a harmless one.
-function judgeSegment(seg) {
+function judgeSegment(seg, env) {
   if (seg.dynamicCall) return deny('dynamic execution: & followed by a variable or expression');
-  let words = stripRedirections(seg.words);
+  let words = stripKeywords(stripRedirections(seg.words));
   if (words.length === 0) return null;
   const text = words.map((w) => w.raw).join(' ');
   const pushNamed = namesPush(text);
@@ -126,7 +205,7 @@ function judgeSegment(seg) {
   if (inline || (/^\$[\w:{}.]+$/.test(first) && /^(\+|-)?=$/.test(words[1]?.raw ?? ''))) {
     const rest = words.slice(inline ? 1 : 2);
     if (inline && inline[1]) rest.unshift({ raw: inline[1], value: inline[1] });
-    return rest.length > 0 ? judgeSegment({ words: rest, piped: seg.piped, dynamicCall: false }) : null;
+    return rest.length > 0 ? judgeSegment({ words: rest, piped: seg.piped, dynamicCall: false }, env) : null;
   }
 
   if (/[$%]/.test(first)) return deny('the command word is a variable or expression');
@@ -135,7 +214,16 @@ function judgeSegment(seg) {
   if (seg.piped && INTERPRETERS.has(name)) return deny('a pipe into an interpreter runs text as code');
 
   if (name !== 'git') {
+    const nested = nestedCode(name, words, env.tool);
+    if (nested?.encoded) return deny('-EncodedCommand is not allowed');
     if (pushNamed) return deny('a program other than git names push');
+    if (nested) {
+      const inner = decide(nested.tool, nested.code, env.repo);
+      return inner.allow ? null : inner;
+    }
+    if (CODE_FLAGS[name]?.some((f) => words.some((w) => w.raw === f)) && SPAWNING_CODE.test(normalize(text))) {
+      return deny(`${name} code that names git, push or process spawning is not allowed`);
+    }
     if (gitNamed && WRAPPER.test(normalize(text))) return deny('a wrapper runs git');
     return null;
   }
@@ -194,23 +282,34 @@ export function repoFromUrl(url) {
   return m ? m[1].toLowerCase() : null;
 }
 
-// `command` is the shell command line, or the file path for Edit, Write and NotebookEdit.
+// `command` is the shell command line for Bash and PowerShell, and a file path
+// for any other tool (Edit, Write, NotebookEdit, MultiEdit, a tool not yet invented).
 export function decide(toolName, command, repo) {
-  if (EDIT_TOOLS.has(toolName)) return decideEdit(command);
+  const ctx = repo.pathContext ? repo.pathContext() : pathContext();
+  if (!SHELL_TOOLS.has(toolName)) {
+    return isProtected(String(command ?? ''), ctx)
+      ? deny('this path (.git, the guard\'s files, or a settings file) is protected')
+      : { allow: true };
+  }
 
-  const text = String(command ?? '');
+  const powershell = toolName === 'PowerShell';
+  const text = powershell
+    ? String(command ?? '').replace(/[\u201C\u201D\u201E\u201F]/g, '"').replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    : String(command ?? '');
   const flat = normalize(text);
   if (text.includes(CANARY) && namesPush(text)) return deny('canary');
   if (/--no-verify|core\.hookspath/i.test(flat)) return deny('--no-verify and core.hooksPath are not allowed');
-  if (protectedPath(text)) return deny('commands may not name .git/, .claude/repo-standup/ or .claude/settings.local.json');
 
-  const { segments, problems } = parseShell(text);
+  const { segments, problems } = parseShell(text, powershell ? 'powershell' : 'bash');
   if (problems.length > 0 && /\b(git|push)\b/i.test(flat)) {
     return deny(`cannot classify the command (${problems[0]}), and it names git or push`);
   }
 
+  const env = { tool: toolName, repo, ctx };
   for (const segment of segments) {
-    const verdict = judgeSegment(segment);
+    const pathVerdict = checkPaths(segment, ctx);
+    if (pathVerdict) return pathVerdict;
+    const verdict = judgeSegment(segment, env);
     if (!verdict) continue;
     if (verdict.allow === false) return verdict;
 
@@ -286,9 +385,19 @@ function realRepo(cwd) {
     if (r.status !== 0 && r.status !== 1) throw new Error('git config failed');
     return r.lines;
   };
+  const projectDir = () => process.env.CLAUDE_PROJECT_DIR || runGit(cwd, ['rev-parse', '--show-toplevel']).lines[0];
   return {
+    pathContext() {
+      let gitDir = null;
+      try {
+        gitDir = runGit(cwd, ['rev-parse', '--absolute-git-dir']).lines[0] ?? null;
+      } catch {
+        // No git dir to exempt; the project's .git is still protected.
+      }
+      return pathContext({ cwd, projectDir: projectDir() || cwd, gitDir });
+    },
     get clientRepo() {
-      const top = process.env.CLAUDE_PROJECT_DIR || runGit(cwd, ['rev-parse', '--show-toplevel']).lines[0];
+      const top = projectDir();
       return top ? readClientRepo(top) : null;
     },
     pushUrlsFor(dir) {
@@ -320,19 +429,26 @@ function main() {
     return;
   }
   const tool = input?.tool_name;
-  const toolInput = input?.tool_input ?? {};
-  const target = EDIT_TOOLS.has(tool) ? (toolInput.file_path ?? toolInput.notebook_path ?? toolInput.path) : toolInput.command;
-  if (tool !== 'Bash' && tool !== 'PowerShell' && !EDIT_TOOLS.has(tool)) return;
-  if (typeof target !== 'string') {
-    denyOutput(`${PREFIX}the tool call has no ${EDIT_TOOLS.has(tool) ? 'file path' : 'command'} to judge`);
+  const toolInput = input?.tool_input && typeof input.tool_input === 'object' ? input.tool_input : {};
+  const shell = SHELL_TOOLS.has(tool);
+  const targets = shell ? [toolInput.command] : PATH_FIELDS.map((f) => toolInput[f]).filter((v) => typeof v === 'string');
+  if (!shell && targets.length === 0) return;
+  if (shell && typeof targets[0] !== 'string') {
+    denyOutput(`${PREFIX}the tool call has no command to judge`);
     return;
   }
   try {
-    const result = decide(tool, target, realRepo(path.resolve(input.cwd || '.')));
-    if (!result.allow) denyOutput(result.reason);
+    const repo = realRepo(path.resolve(input.cwd || '.'));
+    for (const target of targets) {
+      const result = decide(tool, target, repo);
+      if (!result.allow) {
+        denyOutput(result.reason);
+        return;
+      }
+    }
   } catch (error) {
-    if (EDIT_TOOLS.has(tool) || /\b(git|push)\b/i.test(normalize(target))) {
-      denyOutput(`${PREFIX}internal error while judging the command (${error.message})`);
+    if (!shell || /\b(git|push)\b/i.test(normalize(targets[0]))) {
+      denyOutput(`${PREFIX}internal error while judging the call (${error.message})`);
     }
   }
 }
