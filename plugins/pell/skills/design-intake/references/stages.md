@@ -150,24 +150,28 @@ Done by design-director.
 
 1. **Brand capture.** Take the site URL from `sources/intake-answers.md`. Fetch the client site's pages that show the logo, the services and the voice, at most 6 client pages in all, the home page from stage 1 included:
    ```
-   dotnet run --project tools/<Code>.Scaffolder -c Release -- sources fetch <url> --allow <site domain> --to site
+   dotnet run --project tools/<Code>.Scaffolder -c Release -- sources fetch <url> --allow <site host> --to site
    ```
-   Then the reference products. Fetch only those the approved intake sheet lists under "Guesses on what the SOW doesn't say", liked or disliked. A product the engineer struck there is never fetched, even though `intake-answers.md` still names it. Take each URL from `intake-answers.md`, or from the sheet when the engineer wrote one there. A listed product with no URL in either is read from what the sheet says, not fetched. Fetch its public pages, at most 3 each:
+   If stage 1 has no home page, try it once. Every fetch tried counts toward the 6, a refused one included. Take the other pages only from links on a page you fetched; never guess a path.
+
+   Then the reference products. Fetch only those the approved intake sheet lists under "Guesses on what the SOW doesn't say", liked or disliked. A product the engineer struck there is never fetched, even though `intake-answers.md` still names it. Take each URL from `intake-answers.md`, or from the sheet when the engineer wrote one there. A listed product with no URL in either, or a tool or form with no pages (paper tickets, a spreadsheet), is read from what the sheet says, as what it contributes or what to avoid, not fetched. Fetch its public pages, at most 3 each:
    ```
-   dotnet run --project tools/<Code>.Scaffolder -c Release -- sources fetch <url> --allow <product domain> --to references
+   dotnet run --project tools/<Code>.Scaffolder -c Release -- sources fetch <url> --allow <product host> --to references
    ```
-   Pass each `--allow` the bare domain, as in stage 1. Each page lands at `docs/project/sources/<site|references>/<host>/<path slug>.md`, as in stage 1. Fetch only the pages brand capture needs: no sign-ins, no forms, never `--refresh`. Reference products are read for density and interaction patterns, never for styling to copy. A site that renders only with scripts leaves little page text: add an open question asking for the brand guide, and guess from what was read.
-2. **The brief**, `docs/project/design/brief.md`, on one page:
-   - the subject and its metaphor, from the client's work, never "modern and professional"
-   - the audiences and their density, per page group: a desk tool is compact, and a page used on a phone outdoors uses the touch density. A page group that uses it is a "touch group".
+   Pass each `--allow` the host without a leading `www.`, as in stage 1. Each page lands at `docs/project/sources/<site|references>/<host>/<path slug>.md`, as in stage 1. Fetch only the pages brand capture needs: no sign-ins, no forms, never `--refresh`. Reference products are read for density and interaction patterns, never for styling to copy.
+
+   When no client page was read, for any reason (a name that doesn't resolve, robots.txt, a site that renders only with scripts), and no open question asks for the brand guide yet, add one, and guess from what was read.
+2. **The brief**, `docs/project/design/brief.md`, in at most 700 words:
+   - the subject and its metaphor, from the client's work, never "modern and professional". With no client page or brand source read, it says so.
+   - the audiences and their density, per page group. A theme has two densities: its own, set for the main audience (a desk tool is compact, close reading now and then comfortable), and the touch block, for a page used on a phone outdoors or with large targets. A page group that uses the touch block is a "touch group". A page group that shares an entity with a desk group gets hand-built screens and routes of its own: never mark a generated route a desk group uses as touch.
    - tone and copy voice, with `glossary.md` as the source of words
-   - the brand: colors with their OKLCH values, fonts, and the logo. A font with no `@fontsource-variable` package can't load under the CSP, so the brief names the closest open font that has one.
-   - what each reference product contributes
+   - the brand: colors with their OKLCH values, fonts, and the logo. With no color declared anywhere, guess them from the trade and the subject, each marked `guess`; with no font declared, name none and list two to four checked packages for the directions. Log each guess in `decisions.md`. A font loads only from an `@fontsource-variable` package under the SIL Open Font License 1.1, so the brief names the closest open font that has one.
+   - what each reference product contributes, or what to avoid
    - the tell list: the framework's (`docs/design-system.md`, "The tell list"), plus anything this client's users would find generic
 
 **Writes:** `sources/site/`, `sources/references/`, `sources/README.md`, `design/brief.md`, and `open-questions.md` when it asks.
 
-**Passes when** the brief holds all six parts on one page, and every page fetched is within the limits and indexed.
+**Passes when** the brief holds all six parts in at most 700 words, and every page fetched is within the limits and indexed.
 
 **Sends**, only when it added questions: "Design brief written. <n> questions added; the riskiest: Q-<n>, <question>."
 
@@ -185,24 +189,24 @@ Steps:
 
 1. **How many.** Three directions, or two when the brand already fixes most choices. Letters `a`, `b`, `c`.
 2. **Each direction**, as `directions.md` says:
-   - a theme folder, `<Code>.React/src/themes/direction-<letter>/`, with `theme.css` and `README.md` ("Theme folder rules"). Install each font's `@fontsource-variable` package with `npm install`. When the brief has a touch group, `theme.css` holds the touch block, `@media screen { [data-density="touch"] { ... } }`.
+   - a theme folder, `<Code>.React/src/themes/direction-<letter>/`, with `theme.css` and `README.md` ("Theme folder rules"). Install each font's `@fontsource-variable` package at an exact version published at least 14 days ago, `npm install <package>@<version>` (`npm view <package> time` lists the dates), which writes `package.json` and `package-lock.json`. When the brief has a touch group, `theme.css` holds the touch block, `@media screen { [data-density="touch"] { ... } }`.
    - `docs/project/design/directions/<letter>-<name>.md` ("Per-direction file").
 
    Never edit a demo theme or `client.yaml`'s `theme`: the directions aren't active. While working, check the folders with `npx vitest run src/test/theme-contract.test.ts src/test/theme-contrast.test.ts src/test/theme-readme.test.ts`.
-3. **A touch screen.** When the brief has a touch group, add a screen state with `density: 'touch'` for that group's main screen to its entity's companion, `<Code>.React/screens/<camelPlural>Screens.ts`, such as `list: { touch: { density: 'touch', modes: ['mobile'] } }`, and write its baseline in the active theme (see Baselines).
+3. **A touch screen.** When the brief has a touch group whose main screen the generator writes, add a screen state with `density: 'touch'` for that screen to its entity's companion, `<Code>.React/screens/<camelPlural>Screens.ts`, such as `list: { touch: { density: 'touch', modes: ['mobile'] } }`, and write its baseline in the active theme (see Baselines). That baseline only keeps the active run passing; the lock replaces it. When the group's main screen is hand-built and not built yet, skip this step: the home's `touch` state already shows each direction's touch block, and stage 7 adds the screen's touch state with the screen.
 4. **Show them on the client's screens.** Run the harness with only the direction themes, one `--theme` per letter made:
    ```
    npm run screens -- --theme direction-a --theme direction-b --theme direction-c
    ```
-   The same command works in bash and PowerShell. Never set `SCREENS_THEMES` yourself: the script sets it for Playwright, and with no `--theme` it runs every theme folder. It shows the home page with stage 3's queues and each main entity's generated list, form and detail pages, with sample data from the spec examples. The contact sheet puts the directions side by side.
-5. **Design review.** Dispatch conductor-design-steward over that run, against the brief and the three litmus questions in `directions.md`. A direction it flags gets one revision by design-director, and step 4 runs again. design-director writes the steward's notes into the direction file's "Steward's notes", and the direction goes to the pick. It is never reviewed twice, so the stage can't loop.
-6. **The gate.** Run `npm run screens` once, with every theme folder, the demo themes included. It must pass: each direction differs from every other theme in at least three fingerprint measures (`screens-output/fingerprint.json`), and passes axe and the layout gates. Then `npm run lint && npm run typecheck && npm test`.
-7. **The captures.** Copy 8 per direction from `<Code>.React/screens-output/direction-<letter>/<light|mobile>/<route>-<state>.png` to `docs/project/design/directions/captures/`, with the names and the optional touch capture in `directions.md` ("Captures"): the home page, and the main workflow entity's list, form and detail pages.
+   The same command works in bash and PowerShell. Never set `SCREENS_THEMES` yourself: the script sets it for Playwright, and with no `--theme` it runs every theme folder. It shows the home page in each role's home state, with stage 3's queues, and each main entity's generated list, form and detail pages, with sample data from the spec examples. The step passes when the command exits 0: design-director fixes and reruns it as its own work (see "A failing check" and "Flakes" in Terms).
+5. **Design review.** Dispatch conductor-design-steward over that run (see Working with agents), against the brief and the three litmus questions in `directions.md`. The captures it reads, for each direction: the 8 that step 7 copies, the main entity's list in dark and in print, and the touch capture; then the main entity's empty, error and form-error states, in light. It judges each direction's status tones from the direction file, since every direction's screens show the tones stage 2 wrote. A direction it flags gets one revision by design-director, within which the director reruns step 4 and fixes what it sees until it passes. design-director writes the steward's notes into the direction file's "Steward's notes", and the direction goes to the pick. It is never reviewed twice, so the stage can't loop.
+6. **The gate.** Run `npm run screens` once, with every theme folder, the demo themes included. The gate judges the direction themes: each direction's captures pass axe and the layout gates, and the fingerprint passes across every theme, each direction differing from every other theme folder in at least three measures (`screens-output/fingerprint.json`). A demo theme's failure on a client screen doesn't block, since the lock retires the demo themes: the run-log note lists each one by theme, route and mode. A failing direction capture is rerun alone once (Flakes, in Terms). Then `npm run lint && npm run typecheck && npm test`.
+7. **The captures.** Copy them from the gate's run, before the harness runs again (see Captures, in Terms): 8 per direction from `<Code>.React/screens-output/direction-<letter>/<light|mobile>/`, plus the touch capture when the brief has a touch group, to `docs/project/design/directions/captures/`, with the captures and names in `directions.md` ("Captures").
 8. **The README**, `docs/project/design/directions/README.md`, from `directions.md` ("Directions README"), with `Status: waiting for your pick` and step 4's exact command as the contact sheet command.
 
-**Writes:** the `direction-*` theme folders, the font packages in `package.json`, the touch state and its baseline, the direction files, the captures and the README.
+**Writes:** the `direction-*` theme folders, the font packages in `package.json` and `package-lock.json`, the touch state and its baseline when step 3 runs, the direction files, the captures and the README.
 
-**Passes when** every direction passes the contract, contrast and README tests; the every-theme run passes, fingerprint included; the React checks pass; each direction has its 8 captures and a complete file with the steward's notes; and the README is written.
+**Passes when** every direction passes the contract, contrast and README tests; in the every-theme run, every direction's captures and the fingerprint pass, with any demo-theme failure on a client screen listed in the run-log note; the React checks pass; each direction has its captures and a complete file with the steward's notes; and the README is written.
 
 **Sends** checkpoint 2's notification: "Directions are ready to pick: docs/project/design/directions/README.md. <n> directions: <letter and name>, ... Steward's flags: <one line each, or none>." When intake added migrations, it ends: "Before the first deployment, regenerate Initial: intake added <n> migrations." The call ends with `design-intake: waiting on docs/project/design/directions/README.md`.
 
@@ -218,7 +222,9 @@ The run commits the engineer's edit before stage 6, as `SKILL.md` says, and stag
 
 Done by design-director.
 
-1. **The client theme.** `git mv` the picked direction's folder to `<Code>.React/src/themes/<lower>/`. Apply the engineer's mix or adjustments, and update its README, its fingerprint table included ("Theme folder rules" in `directions.md`). Delete the other direction folders, and `npm uninstall` the font packages only they imported. Then name the new folder in `client.yaml`'s `theme` and in `VITE_THEME` in `<Code>.React/.env`, together, since the drift test fails when they differ. If the mix breaks a contrast pair, fix the pair in the spirit of the pick and add a `decisions.md` line.
+1. **The client theme.** `git mv` the picked direction's folder to `<Code>.React/src/themes/<lower>/`. Apply the engineer's mix or adjustments, and update its README, its fingerprint table included ("Theme folder rules" in `directions.md`). Delete the other direction folders. Then `npm uninstall` each font package that no theme folder left imports, the demo themes' included. Name the new folder in `client.yaml`'s `theme` and in `VITE_THEME` in `<Code>.React/.env`, together, since the drift test fails when they differ.
+
+   The lock may change a value the pick doesn't name to pass a check, such as a contrast pair the mix breaks or a keyboard check, in the spirit of the pick, with a `decisions.md` line. If the fix would change a fingerprint measure or a token the bold move names, stop: `design-intake: stopped: the pick fails <check>`.
 2. **The logo.** Take the first that applies:
    - `client.yaml`'s `logo` is already set: keep it.
    - The engineer supplied an image in `sources/originals/`: use it.
@@ -231,28 +237,31 @@ Done by design-director.
    dotnet run --project tools/<Code>.Scaffolder -c Release -- ready themes
    ```
    It needs `client.yaml`'s `theme` to name a non-demo folder with a `theme.css` that passes the contract, contrast and README tests, and to match `VITE_THEME`. It removes the four demo themes and their baselines, uninstalls the font packages only they import, sets `ready.demoThemes: removed`, and prints the screenshot steps for the client theme. When the theme has no baselines yet, as after a lock, that is `npm run screens -- --active --update-snapshots=missing`, a look at the new images, then `npm run screens -- --active`; otherwise only the last. Step 6 follows what it printed. If it fails after its first write, don't run it again, since the fonts can no longer be found: take the steps it names as not done by hand.
-4. **Status tones.** For each workflow entity, write each status's tone into its spec's `workflow.statuses` (`<Status>: <tone>`, in enum order): `neutral`, `info`, `success`, `warning` or `destructive`, from the pick's status tones for the main entity and in the same spirit for the rest. Then:
+4. **Status tones.** Stage 2 wrote a tone for every status. For each workflow entity, rewrite them in its spec's `workflow.statuses` (`<Status>: <tone>`, in enum order): `neutral`, `info`, `success`, `warning` or `destructive`. The main entity's come from the pick's status tones, each label in the pick mapped to its enum name (`Not started` to `NotStarted`); the rest follow in the same spirit. Then:
    ```
    dotnet run --project tools/<Code>.Scaffolder -c Release -- generate
    ```
-   If the Storybook snapshots change only where a tone changed, read the diff, then run `npm test -- -u`.
-5. **Touch groups opt in.** Wrap the routes of each page group the brief marks touch in `DensityGroup` from `src/shared/components/DensityGroup.tsx`, in the app shell's routes, never in a generated file: `{ element: <DensityGroup density="touch"><Outlet /></DensityGroup>, children: [...] }`. A page never sets its own density; the design lint refuses it.
-6. **Baselines.** Write the client theme's baselines with the steps `ready themes` printed (see Baselines), then run the checks.
+   See which Storybook snapshots changed with `npx vitest run src/test/storybook-snapshots.test.tsx`. If each failure is only a status stamp's tone (its tone classes and `data-tone`), run `npm test -- -u`. If anything else changed, stop: `design-intake: stopped: generate changed more than the tones`.
+5. **Touch groups opt in.** Wrap the routes of each page group the brief marks touch in `DensityGroup` from `src/shared/components/DensityGroup.tsx`, in the app shell's routes, never in a generated file: `{ element: <DensityGroup density="touch"><Outlet /></DensityGroup>, children: [...] }`. A page never sets its own density; the design lint refuses it. A touch group with no routes yet, because its screens are hand-built and not built, is skipped: stage 7's first unit in it adds the route group. A touch state stage 5 added stays, since it shows a screen of that group.
+6. **Baselines.** Write the client theme's baselines with the steps `ready themes` printed (see Baselines). Check each claim in the client theme's README against the new captures, and correct the README and `conventions.md` where a capture doesn't bear one out. Then run the checks. The baselines' last passing `npm run screens -- --active` counts as the checks' screenshots when nothing visible has changed since.
 7. **`docs/project/design/conventions.md`**, with:
    - the page patterns used per page group, and which groups use the touch density
+   - each persona's first page. For a persona whose first page isn't the attention-queue home, the check that sends them there: grants the persona holds and the home's personas don't. The administrator holds every permission, so a single grant sends them too; pair it with one the persona lacks, such as "holds `<Plural>.ViewAssigned` and not `<Plural>.View`".
    - the status tones per entity
-   - the copy voice, with the glossary as the source of words
-   - the empty, loading and error states, in the client's words
+   - the copy voice, with `docs/project/glossary.md` as the source of words
+   - the empty, loading and error strings for each list screen in the inventory, in the client's words. Loading is the label the framework announces, since its loading state shows no words. An error string is for a failure with no title from the server; a server's title is shown as it is. The strings bind hand-built screens only: generated pages keep their templates' strings.
    - the design rules: home pages answer the personas' questions, density follows the audience, copy comes from the glossary, icons only where they help scanning, no decoration, and the unglamorous screens get equal care
    - what the pick changed
-8. **`docs/project/design/screen-inventory.md`**, with two tables. The first has one row per screen the app needs:
+8. **`docs/project/design/screen-inventory.md`**: under the title, one summary line counting the screens by Written by and by State, then two tables. The first has one row per screen the app needs:
    ```
-   |Screen|Pattern|Page group|Personas|Workflow|Requirements|Written by|API|State|
-   |-|-|-|-|-|-|-|-|-|
+   |Screen|Pattern|Page group|Personas|Workflow|Requirements|Way in|Written by|API|State|
+   |-|-|-|-|-|-|-|-|-|-|
    ```
-   - Written by: `generator` or `hand-built`.
-   - API: each endpoint it calls, as `<METHOD> /api/<route>`, marked `existing` or `stub to write`.
-   - State: `exists` (the generator wrote it), `planned` (hand-built, not started), `prototype` (stage 7 built it on stubs) or `built` (the build filled its endpoints).
+   - Workflow: `WF-<n>`, or `none`.
+   - Way in: how its personas reach it: a nav item, a home queue, or a link from a screen named here. A generated page can't link to a hand-built one, so a way in from a generated page is written `seam: <from where>`, for the build.
+   - Written by: `generator`, `framework` (a screen the framework ships, such as home, sign-in, users and roles) or `hand-built`.
+   - API: each endpoint it calls, as `<METHOD> /api/<route>`, marked `existing`, `stub to write` or `stub` (written, answers 501). A stub that adds input to a generated action, such as a reason or an outcome, is a resource of its own under the record, a noun in kebab case (`POST /api/<plural>/{shortId}/<noun>`), never a change to the generated action.
+   - State: `exists` (the generator or the framework wrote it), `planned` (hand-built, not started), `prototype` (stage 7 built it on stubs) or `built` (the build filled its endpoints).
 
    The second has one row per link in the approved domain model's "Links to" column, a hand-built entity's links included, and checks that stage 3 declared each one it could:
    ```

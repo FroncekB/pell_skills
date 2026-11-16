@@ -28,7 +28,7 @@ Read the signals from the top. The first that holds decides. Paths are under `do
 |`intake-sheet.md` says `Status: draft`|Wait: remind the engineer, run nothing|
 |The sheet says `Status: approved`, and `run-log.md` has no stage 3 line|Stage 3|
 |`design/brief.md` is only its skeleton line|Stage 4|
-|No direction file in `design/directions/`|Stage 5|
+|No direction file (`<letter>-<name>.md`) in `design/directions/`|Stage 5|
 |`design/directions/README.md` says `Status: waiting for your pick`, or says `Status: picked` while its Pick line is still `Pick: (not yet chosen)`|Wait: remind the engineer, run nothing|
 |It says `Status: picked`, and `client.yaml`'s `theme` is still a demo theme (`pell`, `ledger`, `institutional`, `field`) or a `direction-*` theme|Stage 6|
 |A `design/screen-inventory.md` row is hand-built and `planned`, and `run-log.md` has no stage 7 line|Stage 7|
