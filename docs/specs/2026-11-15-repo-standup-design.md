@@ -164,7 +164,7 @@ A rebase conflict stops the run with `main diverged`.
 **Phases 2 to 5.** The skill calls design intake once per stage, passing `from repo-standup`, and reads the outcome line that ends every call **(agreed with design intake)**:
 
 - `design-intake: ran stage <n> <name>`: record the phase, then call it again
-- `design-intake: waiting on <path>`: write `State: waiting on <path>` in `status.md`, commit, and end the turn. Design intake has already sent the checkpoint notification.
+- `design-intake: waiting on <path>`: write `State: waiting on <path>` in `status.md`, commit, and end the turn. Design intake has already sent the checkpoint notification. Stages 2 and 5 end with this line, not `ran stage`, after committing and logging their work, so the phase comes from the path: `intake-sheet.md` is intake, and `design/directions/README.md` is design.
 - `design-intake: done`: go to phase 6
 - `design-intake: stopped: <reason>`: stop with that reason
 
