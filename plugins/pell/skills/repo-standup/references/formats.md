@@ -135,6 +135,7 @@ Design intake's file. Design intake writes its lines in its own shape and the or
 |-|-|-|
 |`merged`|A unit merged|`WF-1 approvals, 4 requirements Verified; opus 120k, sonnet 190k`|
 |`attempt-failed`|A unit's attempt failed|`attempt 2, done check left REQ-14.4 Built-unverified; opus 40k, sonnet 150k`|
+|`attempt-failed`, conductor's share unknown|The usage tool couldn't be loaded|`attempt 1, the e2e check failed; workers only; opus 20k, sonnet 70k`|
 |`failed-env`|An environmental failure, not an attempt|`SQL Server process failed to start; opus 0, sonnet 12k`|
 |`parked`|A unit parked on its third failed attempt|`3 attempts failed, Q-9 added; opus 90k, sonnet 300k`|
 |`phase`|A phase ended|`workflows ended, 12 merged; opus 1.4m, sonnet 2.1m`|
@@ -150,7 +151,7 @@ Full lines, one per shape. The `notified` line carries no token figure, so its m
 - 2026-11-16 15:12 | repo-standup workflows - | 0 min | 0 tokens | notified: through Q-7; alerts: none
 ```
 
-The `notified` line's note is `through Q-<n>; alerts: <comma list or none>`. `Q-<n>` is the highest question number the notification covers, which is how `scoreboard` knows what is new. `<comma list>` names the alerts that notification carried: `blocked-over-30`, `parked-twice`, `security`. When the notification tool is missing or doesn't send, the message goes in chat and the note adds `; chat only`.
+The `notified` line's note is `through Q-<n>; alerts: <comma list or none>`. `Q-<n>` is the highest question number the notification covers, which is how `scoreboard` knows what is new. `<comma list>` is `none`, or the alerts that notification carried, separated by `, `. The words are the scoreboard's own: `blocked-over-30`, and `parked-twice U-<n>` with one entry per unit, as in `alerts: blocked-over-30, parked-twice U-7, parked-twice U-9`. A third word, `security`, is the skill's own, for a high or critical security finding. The scoreboard doesn't print or de-duplicate it and ignores words it doesn't print, so the skill itself sends the security alert once per finding. When the notification tool is missing or doesn't send, the message goes in chat and the note adds `; chat only`.
 
 **Lists.** Design intake's lines can carry lists. Each item sits on its own indented line under the stage's line, as `  - <item>`. The reader joins those lines into the note of the line above, so an indented line belongs to the line it follows. The orchestrator writes none of its own, and puts no unrelated line between a design intake line and its list.
 
@@ -173,9 +174,9 @@ Sent with `PushNotification`: one line, under 200 characters. `<counts>` is `<n>
 |Alert, parked twice|`Alert: U-<n> has parked twice. <counts>`|
 |Alert, blocked share|`Alert: <n>% of the remaining requirements are blocked on the client or on access. <counts>`|
 |Stop|`Run stopped: <reason>. <counts>. See docs/project/handoff.md`|
-|Wait at the guard check|`Waiting on you: the push guard is not loaded. Open a new session in <fork folder>, then say continue the build.`|
+|Stop at the guard check|`Run stopped: the push guard isn't loaded. Open a new session in the fork folder and type /pell:repo-standup.`|
 
-The reason in a stop is one of: `failed-env on 2 units in a row, <the failing check>`, `3 parks in a row`, `the stop date has passed`, `design intake stopped: <its reason>`. The same reason follows `stopped:` in `status.md`.
+The reason in a stop is one of: `failed-env on 2 units in a row, <the failing check>`, `3 parks in a row`, `the stop date has passed`, `design intake stopped: <its reason>`, `guard not loaded; open a new session in the fork folder`. The same reason follows `stopped:` in `status.md`, as `State: stopped: guard not loaded; open a new session in the fork folder`. The guard stop's notification has its own wording, in the row above.
 
 ## Commit messages
 

@@ -1,5 +1,6 @@
 {
-  "checked": "2026-11-16",
+  "checked": "2026-11-03",
+  "source": "claude-api skill price table, cached 2026-11-03",
   "usdPerMillionTokens": {
     "opus": 8.0,
     "sonnet": 4.0
