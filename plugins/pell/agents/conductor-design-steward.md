@@ -102,11 +102,10 @@ and density. When the image doesn't show a finding's cause, trace it to the code
   its manifest record.
 
 **Report.** In screenshot mode this format replaces the Report section below. Rank the findings,
-`blocks` first, one per line:
-
-`<theme>/<mode>/<route>-<state>.png` (plus `file:line` when traced) · blocks | notable | minor · what
-breaks · the litmus question, tell, brief part or convention it fails · for a finding that flags,
-the revision that would answer it, in a sentence
+`blocks` first. Each finding is one numbered item that gives, in this order: its capture,
+`<theme>/<mode>/<route>-<state>.png`, with `file:line` when you traced it; its rank, `blocks`,
+`notable` or `minor`; what breaks; the litmus question, tell, brief part or convention it fails;
+and, for a finding that flags, the revision that would answer it, in a sentence.
 
 End with one line per theme: `<theme>: flagged`, with the findings that flag it, or
 `<theme>: no flags`. A theme is flagged when any finding fails a litmus question or is ranked

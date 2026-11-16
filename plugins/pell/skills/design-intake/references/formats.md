@@ -159,7 +159,8 @@ Each stage appends one line at the end of the file, below the title and line the
 - `<stage>` is the stage number and name, such as `2 extract`.
 - `<minutes>` is a whole number, from the stage's start commit to the line (`SKILL.md`, "Log").
 - `<tokens>` is a number such as `292k`, or `unknown` when the session reports none (`SKILL.md`, "Log").
-- `<note>` says what the stage added in a few words: the counts, the questions it raised, the check runs that failed, any flake, and anything the stage tells the engineer to do, such as regenerating `Initial`.
+- `<note>` says what the stage added in a few words: the counts, the questions it raised, the check runs that failed, and anything the stage tells the engineer to do, such as regenerating `Initial`.
+- A stage that hands on a list puts each item on an indented line of its own under its line, as part of the note: `  - <item>`. That holds each flake, parked unit and framework defect, stage 5's demo-theme failures, and stage 7's findings that flagged no unit. The stage's line stays the one line that marks it done.
 
 ## sources/README.md
 
