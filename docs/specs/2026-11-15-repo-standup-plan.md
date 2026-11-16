@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build the repo-standup orchestrator: a push guard and a Pell skill that runs a client build from the fork to the handoff, plus the framework half it needs (the `scoreboard` command, test results written to files, a seed login per persona, and the new pack files).
+**Goal:** Build the repo-standup orchestrator: a push guard, Bitbucket branch restrictions at fork time, and a Pell skill that runs a client build from the fork to the handoff, plus the framework half it needs (the `scoreboard` command, test results written to files, a seed login per persona, and the new pack files).
 
 **Architecture:** Two branches named `orchestrator`. The Pell_Skills branch holds the push guard (Node, with tests), the `repo-standup` skill and its references, and the `handoff-writer` agent. The framework branch adds the deterministic half: `scoreboard` reads the pack and the test results, computes each requirement's state, the queue's movable units and every numeric stop and alert condition, and writes `scoreboard.md` and the cost tables. Two trials prove the whole run.
 
@@ -579,6 +579,42 @@ Every file below is a prompt. Each task ends with `claude plugin validate ./plug
 - [ ] **Step 1: Write both files.**
 - [ ] **Step 2: Verify.** `claude plugin validate ./plugins/pell` passes.
 - [ ] **Step 3: Commit** `Add the handoff writer`.
+
+### Task 18: Branch restrictions at fork time
+
+Brandon approved this on 2026-11-16. It runs before Task 15, so Task 15's single version bump covers it. It doesn't depend on the framework half, so it can be done before Tasks 4 to 14 if Brandon wants it sooner. In that case it carries its own minor bump and README line.
+
+**Files:**
+- Modify: `plugins/pell/commands/init-client-repo.md`:
+  - Step 4: the create-repo prompt names the restrictions
+  - Step 6: the plan names them when the repo already existed
+  - Step 11: set them after the push succeeds
+  - Step 12: report them
+  - the failure table
+  - the operator notes
+
+**Interfaces:**
+- Consumes the Bitbucket v2 operation that creates a branch restriction, on `plugin:atlassian:atlassian`. Find its exact name with `discover` while authoring, and record it in the command and in architecture spec §4.4. Under the repo's convention, the command calls it directly with `executeWrite` and no `cloudId`, and runs `discover` and retries only on `Unknown operation` or `Failed to fetch cloud ID`.
+- Produces four restrictions on the client repo:
+  - `kind: force` on pattern `main`
+  - `kind: delete` on pattern `main`
+  - `kind: force` on pattern `staging`
+  - `kind: delete` on pattern `staging`
+
+  No other kinds, so normal pushes stay allowed.
+
+- [ ] **Step 1: Find the operation.** Run `discover` for creating a Bitbucket branch restriction, and note its name and input parameter names. If none exists, Step 2 writes only the manual path, and the task report says so.
+- [ ] **Step 2: Edit the command.**
+  - Step 4's create prompt becomes: `Create the private repository <ws>/<slug> on Bitbucket, and block force pushes and deletion on its main and staging branches? (y/n)`.
+  - When the repo already existed, Step 6's plan gets a line: `Then: block force pushes and deletion on main and staging in <ws>/<slug>.`
+  - Step 11 sets the four restrictions after the push succeeds. Restrictions that already exist with the same kind and pattern count as set.
+  - Step 12's report gets a line, `Branch rules  main, staging: no force push, no deletion`, or `not set (<reason>); set them in Repository settings, Branch restrictions`.
+  - The failure table gets a row: a missing operation, or a failed call, degrades and never aborts. It prints the manual settings and says the restrictions weren't set.
+- [ ] **Step 3: Verify.**
+  - `claude plugin validate ./plugins/pell` passes.
+  - The command reads end to end with no step that sets restrictions without a yes.
+- [ ] **Step 4: Prove it once with Brandon.** Run the command against a scratch Bitbucket repo he names. Check in Bitbucket that the four restrictions exist. Check that a normal push to `main` works and `git push --force origin main` is refused by the server. He deletes the scratch repo afterwards.
+- [ ] **Step 5: Commit** `Block force pushes and deletion on a new client repo's main and staging`.
 
 ### Task 15: Housekeeping
 

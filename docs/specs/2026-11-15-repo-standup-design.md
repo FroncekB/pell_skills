@@ -48,6 +48,7 @@ It has a small framework half: the `scoreboard` command, test results written to
 |The handoff package's contents, including a seed login per persona and the cost report.|Brandon|
 |An integration waits for its sandbox access; nothing is built on a guess about an outside API.|Brandon|
 |A push guard hook enforces decision 10 under auto mode.|Claude's call, accepted by Brandon|
+|`/pell:init-client-repo` sets Bitbucket branch restrictions (no force push, no deletion) on the client repo at fork time.|Brandon|
 |Design intake runs phases 2 to 5 unchanged, one stage per call, and ends each call with a fixed outcome line.|agreed with design intake|
 |The client repo is created only on the engineer's yes inside the fork command; pushes go to the client repo's `main` only, never forced; no Jira.|decision 10|
 |Questions go only into `open-questions.md`, with a push notification per batch.|decision 11|
@@ -489,7 +490,17 @@ A Node script, `hooks/guard.mjs` in the skill, copied into the fork at setup. Ru
   - The guard also hooks Edit, Write and NotebookEdit, and denies writes under `.git/`, `.claude/repo-standup/` and `.claude/settings.local.json`. It denies shell commands that name those paths too.
   - Setup pins the client repo into `.claude/repo-standup/client-repo`, and both layers read it from there, never from `client.yaml`, which the agent can edit.
 - **The pre-push hook** is checked out with LF line endings and trims its arguments, so a CRLF checkout can't break it.
-- **The only complete enforcement is on Bitbucket:** branch restrictions on the client repo's `main` that prevent rewriting history and deletion. Whether `/pell:init-client-repo` sets them at fork time is Brandon's call.
+- **The only complete enforcement is on Bitbucket:** branch restrictions that prevent rewriting history and deletion.
+
+**Bitbucket branch restrictions at fork time (Brandon, 2026-11-16).**
+- `/pell:init-client-repo` sets two restrictions on the client repo: no rewriting history (force pushes) and no deletion. It covers both `main` and `staging`, the two branches it pushes. Covering `staging` too is Claude's call: it becomes the deploy branch, and a forced push there is just as damaging.
+- Normal pushes stay allowed, so the run isn't blocked.
+- It sets them right after its first push succeeds, so they never get in the way of that push.
+- **Which yes covers it:**
+  - When the command created the repo, the create-repo yes covers the restrictions.
+  - When the repo already existed, the plan the engineer approves names the restrictions, and that yes covers them.
+- When the Atlassian connector has no branch-restriction operation, or the call fails, the command doesn't abort. It prints the exact settings to make by hand (Repository settings, Branch restrictions) and reports them as not set.
+- The framework repository's own branch protections aren't part of this.
 
 Its tests are Node's built-in test runner, `tests/repo-standup/guard.test.mjs` at the repository root, outside the shipped plugin **(Claude's call)**: a first runnable test in this repo, so the architecture spec records the pattern.
 
