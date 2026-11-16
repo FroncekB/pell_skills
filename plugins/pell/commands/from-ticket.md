@@ -49,7 +49,7 @@ Read `~/.claude/pell-config.json` (treat missing as `{}`).
    - `responseContentFormat`: `"markdown"`
    - `view`: `"full"` — required. The default `compact` view drops `issuetype`, `labels`, `issuelinks`, `subtasks`, and `parent` even when they are listed in `fields`, which leaves the seed with no type and no relationships. `full` still honours the `fields` list.
 
-2. The ticket's remote issue links. The tool differs by connection shape — name both, by role, and use whichever the session exposes: `listJiraIssueRemoteIssueLinks` on `plugin:atlassian:atlassian`, which is not a primary tool there — reach it through `discover`, then run `executeRead({name: "listJiraIssueRemoteIssueLinks", cloudId, inputs: {issueIdOrKey: <KEY>}})` with `cloudId` top-level, never inside `inputs`; `getJiraIssueRemoteIssueLinks` on the classic connection, called directly with `cloudId` and `issueIdOrKey: <KEY>`.
+2. The ticket's remote issue links. The tool differs by connection shape — name both, by role, and use whichever the session exposes: `listJiraIssueRemoteIssueLinks` on `plugin:atlassian:atlassian`, which is not a primary tool there — call it directly, with no `discover` round trip (run `discover` and retry only if the call fails with `Unknown operation`), as `executeRead({name: "listJiraIssueRemoteIssueLinks", cloudId, inputs: {issueIdOrKey: <KEY>}})` with `cloudId` top-level, never inside `inputs`; `getJiraIssueRemoteIssueLinks` on the classic connection, called directly with `cloudId` and `issueIdOrKey: <KEY>`.
 
 **Failure handling:**
 - Ticket 404 → exit: "`<KEY>` doesn't exist in Jira (or you don't have access)."

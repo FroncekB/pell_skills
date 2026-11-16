@@ -53,9 +53,9 @@ If the call fails or returns nothing — no Atlassian MCP wired up, or unauthent
 
 For each project key surfaced in Step 1 (or seeded via `seed_project_keys`):
 
-**Visible projects (resolve existence and name).** This repo standardizes on the `plugin:atlassian:atlassian` connection, and this operation is *not* a primary tool there — it is reached only through `discover({query})` returning an operation name, then `executeRead({name, cloudId, inputs})`, and the operation name differs from the classic connection's direct tool. Naming only one shape here is exactly the silent-failure trap this agent exists to avoid, so name both and use whichever the session exposes:
+**Visible projects (resolve existence and name).** This repo standardizes on the `plugin:atlassian:atlassian` connection, and this operation is *not* a primary tool there — it is called through `executeRead({name, cloudId, inputs})` with the name in the table below, directly, with no `discover` round trip (run `discover` and retry only if the call fails with `Unknown operation`), and the operation name differs from the classic connection's direct tool. Naming only one shape here is exactly the silent-failure trap this agent exists to avoid, so name both and use whichever the session exposes:
 
-| Role | `plugin:atlassian:atlassian` — via `discover` then `executeRead` | Classic connection — direct tool |
+| Role | `plugin:atlassian:atlassian` — `executeRead`, called directly | Classic connection — direct tool |
 |-|-|-|
 | Visible projects | `listJiraProjects` | `getVisibleJiraProjects` |
 
@@ -63,7 +63,7 @@ Filter by the key (`query`/`searchString`). If neither name resolves the key to 
 
 **Issue-type metadata.** Same indirection split:
 
-| Role | `plugin:atlassian:atlassian` — via `discover` then `executeRead` | Classic connection — direct tool |
+| Role | `plugin:atlassian:atlassian` — `executeRead`, called directly | Classic connection — direct tool |
 |-|-|-|
 | Project issue-type metadata | `listJiraProjectIssueTypesMetadata` | `getJiraProjectIssueTypesMetadata` |
 
@@ -83,7 +83,7 @@ The transitions the API returns for an issue depend on that issue's **current st
 2. For each distinct status, run one JQL call scoped to it (`status = "<status>"`, `maxResults: 1`) to get one representative issue in that status.
 3. For each representative issue, fetch its transitions:
 
-   | Role | `plugin:atlassian:atlassian` — via `discover` then `executeRead` | Classic connection — direct tool |
+   | Role | `plugin:atlassian:atlassian` — `executeRead`, called directly | Classic connection — direct tool |
    |-|-|-|
    | Transitions for an issue | `listJiraIssueTransitions` | `getTransitionsForJiraIssue` |
 
@@ -96,7 +96,7 @@ Skipped entirely (with the `gaps` entry from Step 2) if the Atlassian site could
 
 **Candidate pages.** Pull ~20 recently updated issues for the project key (reuse the `searchJiraIssuesUsingJql` call style from Step 4). For each, fetch remote issue links:
 
-| Role | `plugin:atlassian:atlassian` — via `discover` then `executeRead` | Classic connection — direct tool |
+| Role | `plugin:atlassian:atlassian` — `executeRead`, called directly | Classic connection — direct tool |
 |-|-|-|
 | Remote issue links | `listJiraIssueRemoteIssueLinks` | `getJiraIssueRemoteIssueLinks` |
 
@@ -128,13 +128,13 @@ Then work the collected link objects in this order:
 
 **Space.** Fetch the space list:
 
-| Role | `plugin:atlassian:atlassian` — via `discover` then `executeRead` | Classic connection — direct tool |
+| Role | `plugin:atlassian:atlassian` — `executeRead`, called directly | Classic connection — direct tool |
 |-|-|-|
 | Confluence spaces | `listConfluenceSpaces` | `getConfluenceSpaces` |
 
 Params: `cloudId`. Filter to `status: "current"` yourself — do not trust the tool's own default, and do not surface an archived space just because its name matches. Match the remaining spaces against the project name by simple name/key similarity (contains the project name or key). Record the match's `key`/`id` as `confluence.space_key`/`space_id`, and add it to `low_confidence` unless the match is exact and unambiguous.
 
-`cloudId` is always a **top-level** argument on an `executeRead` call — a sibling of `name` and `inputs`, never nested inside `inputs`.
+`cloudId` is always a **top-level** argument on an `executeRead` call — a sibling of `name` and `inputs`, never nested inside `inputs`. Call every operation in these tables directly by name, with no `discover` round trip; run `discover` and retry only if a call fails with `Unknown operation`.
 
 ## Step 6 — Drive
 

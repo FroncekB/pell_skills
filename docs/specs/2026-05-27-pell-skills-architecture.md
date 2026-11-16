@@ -93,7 +93,9 @@ Two differently-shaped Atlassian MCP connections are in use. The repo standardiz
 
 **Primary on `plugin:atlassian:atlassian`** — named directly, and `mcp__plugin_atlassian_atlassian__<name>` is safe to write: `getAccessibleAtlassianResources`, `atlassianUserInfo`, `getJiraIssue`, `searchJiraIssuesUsingJql`, `editJiraIssue`, `transitionJiraIssue`, `createJiraIssue`, `addOrEditJiraIssueComment`, `getConfluenceContent`, `searchConfluence`, `search`, `createConfluenceContent`, `updateConfluenceContent`.
 
-**Everything else** is reached through `discover({query})`, then an execute-family tool (`executeRead`, `executeWrite`, `executeDestructive`) with `cloudId` as a **top-level** argument — a sibling of `name` and `inputs`, never nested inside `inputs`.
+**Everything else** runs through an execute-family tool (`executeRead`, `executeWrite`, `executeDestructive`) with `cloudId` as a **top-level** argument — a sibling of `name` and `inputs`, never nested inside `inputs`.
+
+**Call pinned names directly.** Shipped bodies name the exact operation, so they call the execute tool with it straight away and skip `discover`. A `discover` returns about 5 KB (~1.4k tokens), most of it unrelated operations and primary-tool descriptions, which then stays in context for the rest of the run. The server accepts a known name without a prior `discover` (verified 2026-10-20 with `listMyBitbucketReviewRequests` and `listJiraIssueTransitions`). Each call site keeps a fallback clause: run `discover` and retry only if the call fails with `Unknown operation`. A Bitbucket call carries no `cloudId`, and an unknown name without one fails as `Failed to fetch cloud ID ... Invalid URL` instead, so Bitbucket call sites name both errors.
 
 **Rule:** a call whose role is not in the primary list names both shapes inline, by role, and says to use whichever the session exposes. Classic tool prefixes are install-specific, so classic names are always written bare. Parameter names can differ as well as tool names — name them per shape. Verified pairs (live `discover` against the Pell site, 2026-09-23):
 
@@ -117,7 +119,7 @@ Nothing validates tool names in prompt bodies. Before merging a new Atlassian ca
 
 **Rule:** a call that reads a field compact drops passes `view: "full"` with a one-line inline note naming the fields; calls that read only compact fields stay on the default, which is cheaper. `reporter` is the exception to both views: the plugin connection never returns it, even on issues matching JQL `reporter is not EMPTY`, but it does return `creator`. Request both and fall back to `creator`, labelled as the creator. Verified against RRS 2026-09-17 and 2026-09-23.
 
-**Bitbucket — one shape, v2 only.** Atlassian's v2 endpoint (`https://mcp.atlassian.com/v2/mcp`) serves Bitbucket Cloud over the plugin's OAuth connection. That retired two things: the API-token `atlassian-bitbucket` connection on `…/v1/mcp/authv2?c=bb`, and the dual-connection workaround that kept it from collapsing onto the OAuth session. Bitbucket calls don't name two shapes, because no classic Bitbucket connection is left to fall back to. No Bitbucket operation is primary: each is reached through `discover` and run with an execute-family tool, and none takes `cloudId`. Verified operations (live `discover` and `executeRead` against the `pellsoftware` workspace, 2026-10-12):
+**Bitbucket — one shape, v2 only.** Atlassian's v2 endpoint (`https://mcp.atlassian.com/v2/mcp`) serves Bitbucket Cloud over the plugin's OAuth connection. That retired two things: the API-token `atlassian-bitbucket` connection on `…/v1/mcp/authv2?c=bb`, and the dual-connection workaround that kept it from collapsing onto the OAuth session. Bitbucket calls don't name two shapes, because no classic Bitbucket connection is left to fall back to. No Bitbucket operation is primary: each is called directly by name with an execute-family tool, and none takes `cloudId`. Reviewer commands use the PR-diff and file-content operations only as the fallback when the local clone can't serve them (§8.1). Verified operations (live `discover` and `executeRead` against the `pellsoftware` workspace, 2026-10-12):
 
 | Role | Operation | Execute tool | Retired `atlassian-bitbucket` call |
 |-|-|-|-|
@@ -153,9 +155,14 @@ Schema sketch (refine as skills are built):
   "bitbucket": {
     "workspace": "pellsoftware",
     "default_base_branch": "develop"
+  },
+  "init_client_repo": {
+    "repos_folder": "C:/Users/<you>/Desktop/Pell_Repos"
   }
 }
 ```
+
+`init_client_repo.repos_folder` is the folder `/pell:init-client-repo` clones client repos into. That command writes it after a `(y/n)` and clears it with `--reset`.
 
 > Note: branch names are flat (`<KEY>-<description>`, no GitFlow prefix) — confirmed during `/pell:start-work` design. See [`2026-05-27-pell-start-work-design.md`](2026-05-27-pell-start-work-design.md) §5.
 
@@ -198,6 +205,7 @@ No rigid flag parsing. Engineers should be able to type what they mean.
 | Jira transitions / assignments | offered, never automatic | y/n prompt |
 | Creating branches / worktrees | offered, never automatic | y/n prompt |
 | Committing or pushing | never (out of scope for these skills) | n/a |
+| Clone a new client repo, run local servers and checks, commit, and push a new repo's first branches (`/pell:init-client-repo`) | offered, never automatic | one plan prompt covers the clone, the local run, the checks, the commit and the push of `main` and `staging`; creating the repo is gated separately; the push rests on the plans' standing yes and is never forced |
 
 Default: skills are **read-only unless explicitly told otherwise.** Side effects are gated on user confirmation, and the prompt names exactly what will change.
 
@@ -221,7 +229,7 @@ Composites (`/pell:four-pass-review`, `/pell:local-review`) do NOT reimplement r
 Every reviewer:
 
 1. **Accepts mixed input scope** — a Bitbucket PR identifier, a local `git diff` invocation, a file path, or inline diff content. Auto-detects from `$ARGUMENTS`. If ambiguous, asks.
-2. **Discovers context from the local filesystem by default** — see §8.1 below.
+2. **Discovers context from the local clone by default** — the working tree in local mode, the PR's fetched source branch in PR mode. See §8.1 below.
 3. **Surfaces everything** — including low-confidence observations and stylistic nits. Each finding gets a `severity` so the consumer can filter. **Do not pre-filter.** The consumer (human user or orchestrating composite) decides what's actionable.
 4. **Outputs structured findings only** — a JSON array of `{severity, file, line, finding, fix}` plus a one-line `summary`. Does not decide what to do with them.
 5. **Has no side effects** — never modifies files, never posts comments, never transitions tickets. Purely a reporter.
@@ -235,21 +243,27 @@ Every reviewer:
 > assumed. This is a faithful port, not drift — see
 > [`2026-07-13-conductor-port-design.md`](2026-07-13-conductor-port-design.md).
 
-### 8.1 Context source: local filesystem by default, Bitbucket on request
+### 8.1 Context source: the local clone by default, Bitbucket on request or as fallback
 
-**Default assumption: the user is running the command from a local checkout of the same repo being reviewed.** Reviewers use `Read`, `Grep`, `Glob`, `Bash` to discover `CLAUDE.md`, convention files, and surrounding code from the working directory.
+**Default assumption: the user is running the command from a local clone of the same repo being reviewed.** The clone does not have to be on the PR's branch.
+
+The dispatcher sets one of three values for `context_source` in each reviewer's prompt:
+
+| Source | When | Diff from | Surrounding code from |
+|-|-|-|-|
+| `local` | local mode | `git diff <scope>` | `Read` / `Grep` / `Glob` on the working tree at `<repo_root>` |
+| `git` | PR mode, default | `git diff origin/<destination>...<source_sha>` after `git fetch origin <source> <destination>` | `git show <ref>:<path>`, `git grep -n <pattern> <ref>`, `git ls-tree -r --name-only <ref>` at `ref: <source_sha>` |
+| `bitbucket` | PR mode, on request or as fallback | `getBitbucketRepoPullRequestDiff`, fetched by each reviewer from `pr_id` | `getBitbucketRepoFileContent` with `workspaceId`, `repoId`, `referenceOrSha=<source branch>`, `path` |
+
+The `git` source reads the PR's own commit, never the working tree, so a reviewer on `main` reviewing someone else's PR sees the PR's code rather than whatever happens to be checked out. Before using it the dispatcher checks that `git remote get-url origin` names the PR's `<workspace>/<repo>`, then that `git rev-parse origin/<source>` starts with the PR's `source.commit.hash`. The hash check catches a fork PR whose branch isn't on `origin` and a branch that moved since the PR fetch, and the verified SHA becomes `ref`, so a later background fetch can't make the code drift from the diff. Any failure, including no clone at all, prints `Couldn't diff locally (<reason>). Using Bitbucket.` and drops to `bitbucket`. The three-dot range diffs against the merge base, which matches what Bitbucket shows on the PR. `git fetch` updates remote-tracking refs only; it touches no local branch and no working-tree file.
 
 **Override:** if `$ARGUMENTS` contains freeform context like:
 - `use bitbucket` / `use mcp` / `fetch via bitbucket` / `use remote`
 - `not LFS` / `not local` (in context of context-fetch)
 
-…the command sets `context_source: bitbucket` in the agent's dispatching prompt. The agent then fetches surrounding files via `getBitbucketRepoFileContent` (`discover`, then `executeRead` on `plugin:atlassian:atlassian`, with `workspaceId`, `repoId`, `referenceOrSha=<source branch>`, `path`) instead of the local filesystem.
+…the command uses `bitbucket` for both the diff and the surrounding code. The Bitbucket operations are called directly by name (§4.4).
 
-The diff itself is still resolved per scope (PR-mode diffs come from Bitbucket regardless; local-mode diffs come from `git diff`). The override only affects how *surrounding* context is fetched.
-
-**Future expansion** (not built for v1):
-- Auto-detect whether the local checkout matches the PR's source branch and fall back to Bitbucket if it doesn't
-- Detect when the user isn't in the right repo and offer to switch to Bitbucket mode automatically
+**Diff handoff.** The diff goes to reviewers as a file, not as prompt text. The dispatcher writes it with `git diff --output=<git_dir>/pell-<command>.diff <range>` (`git rev-parse --absolute-git-dir`, so it's never committed and the next run overwrites it), reads only `git diff --stat` itself, and passes `diff_path`. A pasted diff is output the orchestrator generates once per reviewer; a 20k-token diff in `/pell:four-pass-review` used to cost about 80k output tokens before any reviewing started. Under `bitbucket` the dispatcher fetches no diff at all: each reviewer fetches it from `pr_id`, so it still never passes through the orchestrator.
 
 ### Severity scale (uniform across reviewers)
 
@@ -393,13 +407,19 @@ All previously-open questions are now resolved:
 - ✅ **Atlassian read views** — every `getJiraIssue` / `searchJiraIssuesUsingJql` call that reads a field the default `compact` view drops passes `view: "full"` with an inline note. Compact had been silently stripping `parent`, `issuetype`, `issuelinks`, and `statusCategory.key`, so `/pell:related` rendered no relationships, `/pell:my-tickets` could not sort by category, and `/pell:start-work` had no issue type or assignee `accountId`. The "sometimes omits `reporter`" notes were wrong: the plugin connection never returns `reporter`, so bodies fall back to `creator` (2026-09-23, GitHub issues #15 and #16) (§4.4)
 - ✅ **Bitbucket on the v2 connection** — every Bitbucket call runs on `plugin:atlassian:atlassian` against `https://mcp.atlassian.com/v2/mcp`; the API-token `atlassian-bitbucket` connection and the `?c=bb` dual-connection workaround are retired (2026-10-12, plugin 0.21.0). Bitbucket names one shape, not two, since nothing is left to fall back to. The operations and their read-view rule are in §4.4. `/pell:review-queue` moved from a per-repo scan (one repo listing plus one PR query per repo) to a single `listMyBitbucketReviewRequests` call, which also carries approval state, so `unapproved` no longer needs a per-PR get
 - ✅ **Visual scratchpad removed** — the `/pell:visualize` command, the auto-invoked `visual-scratchpad` skill, and the `UserPromptSubmit` hook that surfaced its click events are gone (2026-10-12, plugin 0.22.0). The surface was no longer needed. With the hook gone, the plugin ships no `hooks/` directory. The design and plan stay in `docs/specs/` as history
-- ✅ **Design intake and its two exceptions** — the `design-intake` skill and its `intake-analyst` and `design-director` agents ship in plugin 0.23.0. The skill runs inside a client fork of the Pell Web App Framework, does the next stage that isn't blocked, and stops at two checkpoints, the intake sheet and the direction pick. Two deliberate exceptions to the conventions: (1) the skill breaks the read-only default (command rule 5). It writes and commits inside the fork without `(y/n)` prompts, because the repo-standup orchestrator runs it unattended and the invocation is the yes; it pushes only to the client repo. (2) The two producer agents break the JSON output contract (agent rule 4). They write files rather than report findings, so they end with `{"files": [...], "questions": [...], "summary": "..."}`. `conductor-design-steward` gained a `## Screenshot mode` section for reviewing a screenshot-harness run. Both exceptions are written into `CLAUDE.md` (§8)
+- ✅ **Token cost of the review path and Atlassian calls** (2026-10-20, plugin 0.24.0). Three changes:
+  - **Diff as a file.** Review dispatchers write the diff with `git diff --output` and pass `diff_path`, so the diff is no longer pasted into every reviewer prompt (§8.1).
+  - **PR diffs and code from git.** In PR mode the diff and surrounding code come from the local clone at `origin/<source>` (the new `git` context source), with Bitbucket as the fallback. This also fixes a bug: under the old `local` default, PR-mode reviewers read whatever branch the user had checked out (§8.1).
+  - **No `discover` before pinned operations.** Every non-primary Atlassian call names its operation and calls it directly, with `discover` only as the fallback on an unknown name (§4.4).
+
+  A dedicated Bitbucket CLI was considered and rejected. Atlassian's `acli` has no Bitbucket support, `twg` and third-party CLIs each need their own login or API token, and a CLI would undo the single-OAuth consolidation in 0.21.0 to save little that `git` and `responseFields` don't already save
+- ✅ **Design intake and its two exceptions** — the `design-intake` skill and its `intake-analyst` and `design-director` agents ship in plugin 0.25.0. The skill runs inside a client fork of the Pell Web App Framework, does the next stage that isn't blocked, and stops at two checkpoints, the intake sheet and the direction pick. Two deliberate exceptions to the conventions: (1) the skill breaks the read-only default (command rule 5). It writes and commits inside the fork without `(y/n)` prompts, because the repo-standup orchestrator runs it unattended and the invocation is the yes; it pushes only to the client repo. (2) The two producer agents break the JSON output contract (agent rule 4). They write files rather than report findings, so they end with `{"files": [...], "questions": [...], "summary": "..."}`. `conductor-design-steward` gained a `## Screenshot mode` section for reviewing a screenshot-harness run. Both exceptions are written into `CLAUDE.md` (§8)
 
 ## 12. Implementation status
 
 The conventions above are stable and the bulk of the roadmap shipped:
 
-- **Built:** all four review primitives (`correctness`, `quality`, `security`, `test`) + both composites (`four-pass-review`, `local-review`, each running all four by default; `three-pass-review` survives as a deprecated alias); the PR review ops (`review-queue`, `address-review`); both repo-wide audits (`repo-review`, `repo-security-review`) with their `repo-*-reviewer` agents; Jira ops (`my-tickets`, `triage`, `related`, `precheck`, `scope` + its `sow-builder` agent, `groom` + its `ticket-code-mapper` and `ticket-code-auditor` agents, `start-work`, `finish-work`); composers (`from-ticket`, `wrap-up`); repo setup (`map-repo` + its `repo-mapper` agent, mapping a repo's Jira/Confluence/Drive/Bitbucket coordinates into `docs/pell/context.md`, consumed by ten commands); and the `frontend-router` skill.
+- **Built:** all four review primitives (`correctness`, `quality`, `security`, `test`) + both composites (`four-pass-review`, `local-review`, each running all four by default; `three-pass-review` survives as a deprecated alias); the PR review ops (`review-queue`, `address-review`); both repo-wide audits (`repo-review`, `repo-security-review`) with their `repo-*-reviewer` agents; Jira ops (`my-tickets`, `triage`, `related`, `precheck`, `scope` + its `sow-builder` agent, `groom` + its `ticket-code-mapper` and `ticket-code-auditor` agents, `start-work`, `finish-work`); composers (`from-ticket`, `wrap-up`); repo setup (`map-repo` + its `repo-mapper` agent, mapping a repo's Jira/Confluence/Drive/Bitbucket coordinates into `docs/pell/context.md`, consumed by ten commands); and the `frontend-router` skill. Also built: `init-client-repo`, the command that starts a client's Bitbucket repo from the Pell Web App Framework (clone, fork, run, check, commit, push `main` and `staging`), and the `init-client-repo` skill that routes a new client's repo link to it.
 - **Design intake:** the `design-intake` skill (with its `references/`) and its `intake-analyst` and `design-director` agents, plus a `## Screenshot mode` section in `conductor-design-steward`. It runs inside a client fork of the Pell Web App Framework and stops at two checkpoints. It breaks the read-only default and, for the two agents, the JSON-findings contract; both exceptions are in §11 and `CLAUDE.md`.
 - **Conductor subsystem:** the `coordinate-agents` lead skill, the `fan-and-critic` review-loop skill, the five `autonomous-build*` session skills, and the five `conductor-*` worker agents — a faithful port of Tom Neyland's `conductor`, folded into `pell` (see [`2026-07-13-conductor-port-design.md`](2026-07-13-conductor-port-design.md)). These agents deliberately deviate from §8's JSON-output contract; the exception is documented there.
 - **Not yet built:** `claude-md-init` (§10.6), second-tier composers (e.g. standup, release-notes), and the optional `pell-everything` meta-plugin (§9).

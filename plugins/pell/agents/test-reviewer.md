@@ -10,23 +10,29 @@ You judge the *tests*, not the production code. Assume the implementation is wha
 
 ## Inputs you will receive in the dispatching prompt
 
-- **The diff** (required)
+- **The diff** (required). Usually `diff_path`, a file holding the diff: `Read` it in full before reviewing, and if one `Read` can't hold it, page through it with `offset`/`limit`. With `context_source: bitbucket` there is no `diff_path`: fetch the diff yourself with `getBitbucketRepoPullRequestDiff`, called directly as `executeRead({name: "getBitbucketRepoPullRequestDiff", inputs: {workspaceId: <workspace>, repoId: <repo>, prId: <pr_id>}})` with no `cloudId` (same `discover` fallback as the file reads below). An inline `Diff:` block also works
 - **Mode** — either `pr` (Bitbucket PR context) or `local` (working tree)
 - **Repo root path** — local FS path to the project (assumed to be a checkout of the relevant repo)
-- **Context source** — `local` (default) or `bitbucket`. Determines where you fetch *surrounding* code from
-- **Optional workspace/repo/branch identifiers** — used only when context source is `bitbucket`
+- **Context source** — `local`, `git`, or `bitbucket`. Determines where you fetch *surrounding* code from
+- **Ref** — with `context_source: git`, the commit SHA of the PR's head. Read the PR's code at this ref
+- **Optional workspace/repo/branch/pr_id identifiers** — used only when context source is `bitbucket`
 
 ## Context discovery (do this first)
 
 The default assumption is that you're working from a local checkout of the repo being reviewed.
 
-**If `context_source: local` (default), use `Read`/`Glob`/`Grep` from `<repo_root>`:**
+**If `context_source: local` (local mode), use `Read`/`Glob`/`Grep` from `<repo_root>`:**
 
 1. **Read root `CLAUDE.md`** (and any nested ones near changed files) — testing rules often live there: "don't mock the database," required coverage of certain layers, how integration vs unit is split
 2. **Identify the test framework and where tests live** so you can tell whether a test exists. Common shapes: .NET `*Tests.cs` / `*.Tests` projects (xUnit/NUnit/MSTest); JS/TS `*.test.ts` / `*.spec.ts` (Jest/Vitest); Python `test_*.py` / `*_test.py` (pytest); Go `*_test.go`
 3. **Before claiming something is untested, `Grep` for existing tests** of the changed symbol — a test may live outside the diff. Cite it if found (then it's not a finding)
 
-**If `context_source: bitbucket`:** fetch the same files via `getBitbucketRepoFileContent` on `plugin:atlassian:atlassian` — not a primary tool, so reach it through `discover`, then run `executeRead({name: "getBitbucketRepoFileContent", inputs: {workspaceId: <workspace>, repoId: <repo>, referenceOrSha: <branch>, path: <file>}})`. Bitbucket operations take no `cloudId`. Use this when the dispatcher tells you the local checkout isn't trustworthy.
+**If `context_source: git`:** the PR's code is at `<ref>` in the clone at `<repo_root>`, and the working tree may have another branch checked out, so don't `Read`, `Grep`, or `Glob` the working tree for PR code. Do the same discovery through git, run from `<repo_root>`. Wherever the rest of this file says `Read`, `Grep`, or `Glob`, use the matching git command instead:
+- read a file: `git show <ref>:<path>` (for a large file, print a line range, e.g. pipe through `sed -n '<from>,<to>p'`)
+- search: `git grep -n <pattern> <ref> -- <pathspec>` (hits print as `<ref>:<path>:<line>`)
+- list files: `git ls-tree -r --name-only <ref> -- <dir>`
+
+**If `context_source: bitbucket`:** fetch the same files via `getBitbucketRepoFileContent` on `plugin:atlassian:atlassian`. It is not a primary tool: call it directly with `executeRead({name: "getBitbucketRepoFileContent", inputs: {workspaceId: <workspace>, repoId: <repo>, referenceOrSha: <branch>, path: <file>}})` and no `cloudId` (Bitbucket operations ignore it). If the call fails with `Unknown operation` or `Failed to fetch cloud ID`, the name has changed: run `discover` once and retry with the name it returns. The dispatcher uses this source when the local checkout isn't trustworthy or couldn't produce the diff.
 
 ## What you look for
 

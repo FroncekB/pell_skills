@@ -14,9 +14,9 @@ Parse `$ARGUMENTS`:
 - `<repo>#<n>` — workspace defaults to `pellsoftware`
 - Bare number — resolve repo from `git remote get-url origin`. If origin isn't Bitbucket, ask the user for a full URL
 
-**Context source** for the reviewers' surrounding-code fetches:
-- Default: `local` — assume the user is in a local checkout of the same repo. Reviewers will use `Read`/`Grep`/`Glob` against `<repo_root>`
-- If `$ARGUMENTS` contains `use bitbucket`, `use mcp`, `use remote`, `fetch via bitbucket`, `not LFS`, or `not local` → use `bitbucket` — reviewers will fetch via `getBitbucketRepoFileContent` (`executeRead` on `plugin:atlassian:atlassian`) against the PR's source branch
+**Context source** for the diff and the reviewers' surrounding-code reads:
+- Default: `git` — Step 2 fetches the PR's branches into the user's local clone of the same repo. Reviewers read the PR's code at its head commit with `git show`/`git grep`, so whichever branch is checked out doesn't matter
+- If `$ARGUMENTS` contains `use bitbucket`, `use mcp`, `use remote`, `fetch via bitbucket`, `not LFS`, or `not local` → use `bitbucket` — the diff comes from Bitbucket and reviewers fetch files via `getBitbucketRepoFileContent` (`executeRead` on `plugin:atlassian:atlassian`) against the PR's source branch
 
 **Test pass:** on by default. If `$ARGUMENTS` contains `skip tests`, `no tests`, or `-tests` → do not dispatch the test-coverage reviewer in Step 5, and omit the Test Coverage section, its count line, and its run-marker entries downstream. `with tests`, `include tests`, and `+tests` are accepted as no-ops — the pass already runs.
 
@@ -26,11 +26,20 @@ Honor other freeform context too (e.g. "skip jira", "treat as urgent").
 
 ## Step 2 — Fetch PR data
 
-Call **in parallel** these two `plugin:atlassian:atlassian` operations. Neither is a primary tool: reach each through `discover`, then run it with `executeRead({name, inputs, responseFields})`, with `responseFields` beside `inputs`, never inside it. Bitbucket operations take no `cloudId`.
-- `getBitbucketRepoPullRequest` with `inputs: {workspaceId, repoId, prId}` and `responseFields: ["title", "description", "state", "draft", "author.display_name", "source.branch.name", "destination.branch.name"]` (the default view leaves out `description` and `draft`, which Step 4 reads)
-- `getBitbucketRepoPullRequestDiff` with `inputs: {workspaceId, repoId, prId}`
+Run `getBitbucketRepoPullRequest` on `plugin:atlassian:atlassian`. It is not a primary tool: call it directly with `executeRead({name: "getBitbucketRepoPullRequest", inputs: {workspaceId, repoId, prId}, responseFields})`, with `responseFields` beside `inputs`, never inside it, and no `cloudId` (Bitbucket operations ignore it). If any Bitbucket call in this command fails with `Unknown operation` or `Failed to fetch cloud ID`, the name has changed: run `discover` once for it and retry with the name it returns.
+- `responseFields: ["title", "description", "state", "draft", "author.display_name", "source.branch.name", "source.commit.hash", "destination.branch.name"]` (the default view leaves out `description` and `draft`, which Step 4 reads, and `source.commit.hash`, which the diff check reads)
 
-Capture: title, description, source branch, destination branch, author, state, full diff.
+Capture: title, description, source branch, source commit, destination branch, author, state.
+
+**Diff from the local clone** (skip when the context source is `bitbucket`). Run from `git rev-parse --show-toplevel`:
+1. `git remote get-url origin` must name `<workspace>/<repo>` (case-insensitive). Then `git fetch origin <source> <destination>`, which updates remote-tracking refs only; local branches and the working tree are untouched
+2. `git rev-parse origin/<source>` must start with the PR's `source.commit.hash`. A mismatch means the PR comes from a fork or the branch moved since the PR fetch. Keep the full SHA as `<source_sha>`
+3. `git diff --stat origin/<destination>...<source_sha>`. The three-dot form diffs against the merge base, as Bitbucket does. If it's empty, tell the user "No changes to review." and stop. Don't print the full diff into this conversation — the reviewers read it from the file
+4. `git diff --output=<git_dir>/pell-four-pass-review.diff origin/<destination>...<source_sha>`, where `<git_dir>` is the output of `git rev-parse --absolute-git-dir`. That file is `diff_path` for Step 5. It sits inside `.git`, so it is never committed, and the next run overwrites it
+
+If there's no clone or any of steps 1–4 fails, print `Couldn't diff locally (<reason>). Using Bitbucket.` and switch the context source to `bitbucket`.
+
+**Diff from Bitbucket** (context source `bitbucket`): don't fetch it here. Each reviewer fetches it with `getBitbucketRepoPullRequestDiff` itself, so the diff never passes through this conversation or the reviewer prompts.
 
 ## Step 3 — Find and fetch the Jira ticket
 
@@ -67,11 +76,14 @@ Each agent gets the same prepared prompt:
 
 ```
 mode: pr
-context_source: <local | bitbucket>
+context_source: <git | bitbucket>
 repo_root: <output of `git rev-parse --show-toplevel`>
+ref: <source_sha>   (context_source git only)
 workspace: <workspace>
 repo: <repo>
 branch: <source branch>
+pr_id: <prId>
+diff_path: <diff_path>   (context_source git only)
 
 PR: <workspace>/<repo>#<prId> — "<title>"
 Author: <author>
@@ -83,10 +95,7 @@ Jira description / acceptance criteria:
 
 (omit Jira block if no ticket)
 
-Diff:
-<diff>
-
-Per your context discovery contract: use Read/Grep/Glob from repo_root when context_source is `local`; use getBitbucketRepoFileContent (reach it through discover, then run it with executeRead on plugin:atlassian:atlassian; no cloudId) when context_source is `bitbucket`.
+With diff_path, Read it in full before reviewing. Without one (context_source bitbucket), fetch the diff yourself with getBitbucketRepoPullRequestDiff (executeRead on plugin:atlassian:atlassian with workspace, repo, pr_id; no discover, no cloudId). Per your context discovery contract: use git show/git grep at ref from repo_root when context_source is `git`; use getBitbucketRepoFileContent (call it directly with executeRead on plugin:atlassian:atlassian; no discover, no cloudId) when context_source is `bitbucket`.
 
 Return findings as JSON per your output contract.
 ```
@@ -162,7 +171,7 @@ Show the body. Then:
 
 `y`, `yes`, or an empty reply → post. `n` / `no` → print `Run marker skipped.` and continue to Step 8.
 
-To post, run `addBitbucketRepoPullRequestComment` on `plugin:atlassian:atlassian`. It is not a primary tool: reach it through `discover`, then call `executeWrite({name: "addBitbucketRepoPullRequestComment", inputs: {...}})` with no `cloudId`. Inputs:
+To post, run `addBitbucketRepoPullRequestComment` on `plugin:atlassian:atlassian`. It is not a primary tool: call it directly with `executeWrite({name: "addBitbucketRepoPullRequestComment", inputs: {...}})` and no `cloudId` (on `Unknown operation` or `Failed to fetch cloud ID`, `discover` it once, as in Step 2). Inputs:
 - `prId=<prId>`, `workspaceId=<workspace>`, `repoId=<repo>`
 - `content=<body>`
 
@@ -200,3 +209,4 @@ If the user picks `no`, exit cleanly.
 - The run marker is one general comment; findings are inline comments. Never fold findings into the marker or post the marker as an inline comment
 - If a reviewer agent returns malformed JSON, render its raw output under that dimension, report `n/a` for it in the run marker, and skip the inline-comment offer for that dimension
 - Findings from different reviewers may overlap — show both, they're different angles
+- Never paste the diff into the reviewer prompts. Writing four copies of it is the most expensive thing this command can do
