@@ -399,6 +399,8 @@ Also: a foreground `sleep` is blocked. The full results are in the shared notes 
   - **Median unit tokens,** and the units over 3 times it.
   - **Tokens per Verified requirement:** every known token in the run, divided by the Verified count.
   - **Foundation tokens per entity:** design intake stage 3's tokens over the entity count, beside `162,043` (the framework's measured cost of one generated entity).
+  - **Prototype tokens and minutes per screen:** design intake stage 7's line over the screens it moved to `prototype`, beside trial 1's 318,000 tokens and 38 agent minutes a screen.
+  - **A note above the tables:** worker tokens come from completion notices and track a long agent's context, so they understate billing. The dollar row is a floor.
   - **Checkpoint waits:**
     - checkpoint 1, from `Design intake stage 2: extract` to `Design intake stage 3: generate starts`
     - checkpoint 2, from `Design intake stage 5: directions` to `Design intake stage 6: lock starts`
@@ -513,6 +515,8 @@ Every file below is a prompt. Each task ends with `claude plugin validate ./plug
 
 **`loop.md` holds** the spec's "The work loop" and "Review by risk" as procedure:
 - **Building the queue:** the kinds, their order, ownership, and splitting a workflow over about 8 requirements.
+  - A screen-inventory row that stage 7 left `planned` joins its workflow's unit. That unit builds the screen by stage 7's procedure before filling its endpoints, and always gets the design steward's review.
+- **No outcome line from design intake:** read its signal table and act on it.
 - **One unit:** steps 1 to 9, with the done check, the failed-attempt rule and the park procedure. On a retry, the implementer's brief carries the last failure.
 - **The implementer brief:** what it carries, as the spec lists it, plus the ratchet rule and the tag forms.
 - **The risk path list,** with `<Code>` from `client.yaml`:

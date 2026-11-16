@@ -1,6 +1,6 @@
 # Repo standup orchestrator: Design Spec
 
-Status: approved design (Brandon, 2026-11-15), not yet implemented. Building waits until design intake's trial 1 passes, and anything that trial changes in the interface below is folded in first.
+Status: approved design (Brandon, 2026-11-15). Tasks 1 to 3 were built on 2026-11-16. Design intake's trial 1 passed on 2026-11-16, and its findings are folded in below. The rest of the build waits for design intake's framework half to merge, and for Brandon's go.
 Date: 2026-11-15
 Related: the repo-standup plans (`03-orchestrator.md` and the plans README's decisions 7 to 16, kept outside this repo); design intake's spec, `docs/specs/2026-11-09-design-intake-design.md`, and its skill on branch `design-intake`; the Pell Web App Framework's `CLAUDE.md` (Standard commands, Generators) and `docs/measures/entity-cost.md`; `/pell:init-client-repo`.
 
@@ -168,6 +168,7 @@ A rebase conflict stops the run with `main diverged`.
 - `design-intake: waiting on <path>`: write `State: waiting on <path>` in `status.md`, commit, and end the turn. Design intake has already sent the checkpoint notification. Stages 2 and 5 end with this line, not `ran stage`, after committing and logging their work, so the phase comes from the path: `intake-sheet.md` is intake, and `design/directions/README.md` is design.
 - `design-intake: done`: go to phase 6
 - `design-intake: stopped: <reason>`: stop with that reason
+- **no outcome line**, which trial 1 saw at stage 5 before the pick: read design intake's signal table and act on what it says, the same as for a `waiting on` line when it shows a checkpoint **(Claude's call, after trial 1)**
 
 It never runs design intake's stages itself and never dispatches their agents. Stages 7 and 8 run their own per-row units, with the same park rule.
 
@@ -206,6 +207,8 @@ Each finding of medium severity or more becomes a `fix` unit with its risk. Lowe
 |`fix`|hardening finding, integration-gap finding, answer that differs from its guess, or engineer correction|from the finding|
 
 **Order:** dependencies first; then `fix` units; then links; then the workflow the intake sheet names as the one that must be excellent; then the units that verify the most requirements **(Claude's call)**.
+
+**Screens stage 7 didn't build (after trial 1).** The engineer may stop stage 7 early for cost; trial 1 prototyped one workflow of seven. Design intake's run log then records the rows left `planned`, and those rows go to the build. Each belongs to its workflow's unit. That unit first builds the screen as stage 7 would: the contract-first stub, the page, its fixtures, story and test, and its grants. Then it fills the endpoints. Such a unit always gets the design steward's review **(Claude's call)**.
 
 **Guess, log, continue.** A unit whose requirement depends on an unanswered question goes ahead on the question's guess, unless the question's `Blocks` line lists the requirement.
 
@@ -428,8 +431,11 @@ Otherwise exit 0. Results written before `HEAD`'s commit time put a stale warnin
 - the median, and every unit over 3 times it
 - tokens per Verified requirement
 - foundation's tokens per generated entity, beside the 162k benchmark
+- prototype tokens and minutes per screen, from design intake's stage 7 line divided by the screens it prototyped, beside trial 1's figures (about 318k tokens and 38 agent minutes a screen)
 - each checkpoint's waited time, from the commit times of the stage that ended at it and the next stage's start
 - a dollar estimate per row from `--rates`, a small JSON file of blended list prices per model that the skill ships and dates, labeled as an estimate
+
+A worker's tokens come from its completion notice. Trial 1 found that for a long-running agent this count tracks its context, so it understates what was billed. The report says so above its tables. Its figures are for comparing units, phases and runs, and the dollar row is a floor, not a price.
 
 ## Tags
 
