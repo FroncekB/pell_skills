@@ -605,7 +605,7 @@ Fires when you give a Bitbucket repository link for a new client project and ask
 
 Fires inside a client fork of the Pell Web App Framework (a repo with `client.yaml` and `docs/project/`) when you say "start intake for this fork", "the intake sheet is approved", "I picked direction B", or "continue intake", or when the repo-standup orchestrator calls it. It turns the client's Scope of Work into numbered requirements, personas, generated entities and roles, a client theme, a prototype on contract-first stubs, and tagged acceptance tests. Each run does the next stage that isn't blocked, then stops. It waits only at two checkpoints: the intake sheet (the engineer approves or corrects it) and the direction pick (the engineer chooses a look). Everything it writes is internal, for the Pell engineer who owns the project.
 
-The skill writes and commits inside the fork without `(y/n)` prompts, because the orchestrator runs it unattended; it pushes only to the client repo. It dispatches `intake-analyst` and `design-director` (below), plus `conductor-implementer` and `conductor-design-steward`. A run picks up from the files in the fork alone.
+The skill writes and commits inside the fork without `(y/n)` prompts, because the orchestrator runs it unattended; it pushes only to the client repo. It dispatches `intake-analyst` and `design-director` (below), plus `conductor-implementer` and `conductor-design-steward`. A run picks up from the files in the fork alone. Every call ends with one outcome line for the orchestrator (`design-intake: ran stage <n> <name>`, `waiting on <path>`, `done` or `stopped: <reason>`); a prototype or acceptance unit that fails its checks three times is parked with an open question, and the stage moves on.
 
 ---
 

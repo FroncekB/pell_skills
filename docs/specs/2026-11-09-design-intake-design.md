@@ -399,3 +399,7 @@ Most of this depends on Phase 4: `client.yaml`, the pack skeleton, the `ready` c
 - The skill's reference files' structure, and how much of each stage's procedure lives in the agent prompt versus the skill.
 - How the stub tests are organized: a test per stub, or one test over every endpoint that throws `NotBuiltException`.
 - Where the acceptance scenarios' persona users come from: the e2e support helpers, or a seed.
+
+## Status note (2026-11-15, plugin 0.25.0)
+
+Shipped as the `design-intake` skill and its two agents. The interface agreed with Project 3 changed three things here, and the skill is the current truth: stages 7 and 8 stay in the skill rather than moving to Project 3's work loop, and a unit parks after three failed check rounds with an open question; every call ends with one outcome line (`design-intake: ran stage <n> <name>`, `waiting on <path>`, `done` or `stopped: <reason>`); and a call whose arguments contain `from repo-standup` sends only the two checkpoint notifications.

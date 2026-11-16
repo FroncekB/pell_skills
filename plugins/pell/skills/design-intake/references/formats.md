@@ -1,6 +1,6 @@
 # Project pack formats
 
-Every file below lives under `docs/project/` in the client fork. Phase 4's fork tool writes each as a title plus one line naming what goes in it. Design intake fills them. Everything here is internal: the reader is the Pell engineer who owns the project.
+Every file below lives under `docs/project/` in the client fork. The framework's fork tool writes each as a title plus one line naming what goes in it. Design intake fills them. Everything here is internal: the reader is the Pell engineer who owns the project.
 
 Rules for all files:
 
@@ -144,7 +144,7 @@ One line appended per decision a stage makes on the engineer's behalf. The file 
 
 ## run-log.md line
 
-Each stage appends one line after the first line Phase 4's fork tool wrote. The file only grows.
+Each stage appends one line after the first line the framework's fork tool wrote. The file only grows.
 
 ```
 - <yyyy-MM-dd> | design-intake <stage> | <minutes> min | <tokens> tokens | <note>

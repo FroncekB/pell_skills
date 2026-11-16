@@ -31,11 +31,20 @@ Read the signals from the top. The first that holds decides. Paths are under `do
 |No direction file in `design/directions/`|Stage 5|
 |`design/directions/README.md` says `Status: waiting for your pick`, or says `Status: picked` while its Pick line is still `Pick: (not yet chosen)`|Wait: remind the engineer, run nothing|
 |It says `Status: picked`, and `client.yaml`'s `theme` is still a demo theme (`pell`, `ledger`, `institutional`, `field`) or a `direction-*` theme|Stage 6|
-|A `design/screen-inventory.md` row is hand-built and not yet prototyped|Stage 7|
-|An in-scope `acceptance` requirement in `requirements.md` has no tagged scenario in `<Code>.React/e2e/acceptance/`|Stage 8|
+|A `design/screen-inventory.md` row is hand-built and `planned`, and `run-log.md` has no stage 7 line|Stage 7|
+|An in-scope `acceptance` requirement in `requirements.md` has no tagged scenario in `<Code>.React/e2e/acceptance/`, and `run-log.md` has no stage 8 line|Stage 8|
 |None of these|Report that intake is done|
 
-A stage is done only when its `run-log.md` line is there. One that started without finishing comes first (Before a stage, step 4).
+A stage is done only when its `run-log.md` line is there. One that started without finishing comes first (Before a stage, step 4). Stages 7 and 8 can finish with units parked (`stages.md`, "Working with agents"), which is why their rows also ask for the line.
+
+## How a call ends
+
+Every call, whoever made it, ends with exactly one of these lines, the last thing it says:
+
+- `design-intake: ran stage <n> <name>`, after a stage's commit, such as `design-intake: ran stage 2 extract`
+- `design-intake: waiting on <path>`, at a checkpoint, naming the file the engineer edits: `docs/project/intake-sheet.md` or `docs/project/design/directions/README.md`
+- `design-intake: done`, when none of the signals holds
+- `design-intake: stopped: <reason>`, for anything else that ends the call: not a fork, a file no stage wrote, inputs no one gave, a stage that can't pass
 
 ## The stages
 
@@ -61,7 +70,7 @@ Each procedure is under its heading in `stages.md`. Read that file's "Terms used
 - **Push.** Never push before stage 3 passes every check, so the client repo never holds specs without their generated code. From then on, push the run's branch after each stage's commit with `git push origin main`. Before the `run-log.md` line, check that `origin` is the repository `client.yaml`'s `repository.bitbucket` names. When `origin` is missing or names another repository, skip the push, say so in the line's note, and carry on. Never `--force`, never another branch or remote. Intake does nothing else outward.
 - **Never wait on the client**, and never show the client anything. The only waits are the two checkpoints, which wait on the engineer, and a file no stage wrote (Before a stage, step 5).
 - **Questions** go only into `docs/project/open-questions.md`, in `formats.md`'s format, each with the guess the build uses until it is answered. The run carries on with the guess.
-- **Notify.** At each checkpoint, and at the end of any stage that added questions, send the engineer one push notification with Claude Code's `PushNotification` tool, worded as the stage's "Sends" says. It reaches the engineer's own devices, so it isn't an outward action. Where the session has no `PushNotification` tool, put the message in chat and in the stage's `run-log.md` note.
+- **Notify.** At each checkpoint, and at the end of any stage that added questions, send the engineer one push notification with Claude Code's `PushNotification` tool, worded as the stage's "Sends" says. It reaches the engineer's own devices, so it isn't an outward action. Where the session has no `PushNotification` tool, put the message in chat and in the stage's `run-log.md` note. When the invocation's arguments contain `from repo-standup`, send only the two checkpoint notifications: the orchestrator's shift reports the questions.
 - **Tell the engineer in chat** what the stage did and what comes next, when they are present.
 - **The framework's rules** apply to everything intake writes in the fork: tokens only, the design lint, generated files never edited, no ruling or ledger IDs in code comments, and relative paths.
 

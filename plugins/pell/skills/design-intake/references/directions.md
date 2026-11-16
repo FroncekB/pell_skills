@@ -109,16 +109,16 @@ Each direction is a theme folder at `src/themes/direction-<letter>/` inside `<Co
 Contents:
 
 - `theme.css`: the theme's tokens.
-- `README.md`: the concept, the bold move, and the fonts with their licenses.
+- `README.md`: the concept, the bold move, the fonts with their licenses, and the fingerprint: the seven measures in a `|Measure|Value|` table between `<!-- fingerprint:start -->` and `<!-- fingerprint:end -->`. The first six must agree with `theme.css`. Rows in view comes from `screens-output/fingerprint.json` after a harness run.
 
 It must pass, before the stage commits:
 
 - the theme contract test: every token in `TOKEN_CONTRACT`, and no others
 - the contrast test: every contrast pair passes
-- the README test: the README exists and holds the required parts
+- the README test: the README exists and holds the required parts, its fingerprint table included
 - the fingerprint test: the theme differs measurably from every other theme folder, the demo themes included. A recolor fails on its own.
 
-Touch block: when the brief has a touch group (a page group used on a phone outdoors or with large touch targets), the theme includes the touch-density block. It sets the fixed set of length tokens and no colors. Its floors are `text-base` at least 16px and `control-height` at least 44px. When the brief has no touch group, the theme has no touch block.
+Touch block: when the brief has a touch group (a page group used on a phone outdoors or with large touch targets), the theme includes the touch-density block, `@media screen { [data-density="touch"] { ... } }`. It sets the fixed set of length tokens and no colors. Its floors are `text-base` at least 16px and `control-height` at least 44px, every base floor it doesn't raise still holds (`text-xs` at least 12px), and its `control-height` is greater than the theme's own. When the brief has no touch group, the theme has no touch block.
 
 Other rules:
 

@@ -74,7 +74,7 @@ Finding PRs to review:
 
 - `frontend-router` — routes UI work to `frontend-design` (notify-don't-force).
 - `init-client-repo` — routes a Bitbucket repo link for a new client project to `/pell:init-client-repo`; never does the work itself.
-- `design-intake` — runs inside a client fork of the Pell Web App Framework and does the next design-intake stage (sources, extract, generate, brief, directions, lock, prototype, acceptance), then stops. It waits only at two checkpoints: the intake sheet and the direction pick. It writes and commits in the fork without `(y/n)` prompts, because the orchestrator runs it unattended, and pushes only to the client repo.
+- `design-intake` — runs inside a client fork of the Pell Web App Framework and does the next design-intake stage (sources, extract, generate, brief, directions, lock, prototype, acceptance), then stops. It waits only at two checkpoints: the intake sheet and the direction pick. It writes and commits in the fork without `(y/n)` prompts, because the orchestrator runs it unattended, and pushes only to the client repo. Each call ends with one `design-intake: ...` outcome line, and a prototype or acceptance unit that fails its checks three times is parked with an open question.
 
 ## Agents (composable building blocks)
 
