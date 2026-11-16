@@ -56,8 +56,10 @@ the conductor owns all git plumbing, merges, and pushes. **Never push. Never mer
   find an adjacent gap, NOTE it in your report instead of building it.
 
 ## Verify (in YOUR worktree)
-- Run your project's typecheck/lint and the unit tests covering what you touched — green, from
-  inside your worktree.
+- Run the checks the conductor named for your unit; when it named none, your project's
+  typecheck/lint and the unit tests covering what you touched — green, from inside your worktree.
+- Format only with the commands the project's own docs name. Never run a formatter they don't (a
+  Prettier with no project config rewrites the house style).
 - Use the project's REAL test harness, not one you assume exists. Mind worktree-bootstrap gotchas:
   some toolchains can't create a fresh environment inside a nested worktree, so you invoke the main
   tree's interpreter/tooling against your worktree's source. If the harness fights you, flag it and
@@ -66,7 +68,7 @@ the conductor owns all git plumbing, merges, and pushes. **Never push. Never mer
 
 ## Deliverable
 Commit(s) on your branch with an essay message: WHY + which seams you wired + the exact
-endpoints/shapes you confirmed. Final report to the conductor:
+endpoints/shapes you confirmed. Use the subject line the conductor names, when it names one. Final report to the conductor:
 1. What you built/wired/removed, per scope item.
 2. Exact endpoints + request/response shapes you confirmed (cite `file:line`).
 3. Verification results (check/tests) and what was NOT verified.

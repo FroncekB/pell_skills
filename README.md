@@ -105,7 +105,7 @@ Driving a large build is a **skill family**, not a slash command — a faithful 
 | `autonomous-build-commit-essays` | Writing commit messages as the product's design narrative. |
 | `fan-and-critic` | A long session with little per-change feedback — two standing, opposed reviewers. |
 
-**Worker agents** (dispatched by `coordinate-agents`; prose reports, not JSON): `conductor-implementer` (build one unit end-to-end in an isolated worktree), `conductor-scout` (read-only investigation), `conductor-correctness-reviewer` + `conductor-integration-gap-auditor` (dual-pair review — is it correct, is it connected), and `conductor-design-steward` (UI/verbal cohesion). The shared way-to-think is `plugins/pell/skills/coordinate-agents/references/playbook.md`.
+**Worker agents** (dispatched by `coordinate-agents`; prose reports, not JSON): `conductor-implementer` (build one unit end-to-end in an isolated worktree), `conductor-scout` (read-only investigation), `conductor-correctness-reviewer` + `conductor-integration-gap-auditor` (dual-pair review — is it correct, is it connected), and `conductor-design-steward` (UI/verbal cohesion; it also has a screenshot mode that reviews a `screens-output/` run from the Pell Web App Framework's `npm run screens`, used by `design-intake`). The shared way-to-think is `plugins/pell/skills/coordinate-agents/references/playbook.md`.
 
 ---
 
@@ -601,6 +601,12 @@ The skill is deliberately quiet about pure bug fixes, refactors, tests, and non-
 
 Fires when you give a Bitbucket repository link for a new client project and ask to initialize, set up or start it from the Pell Web App Framework ("here's the repo for the next client"). Checks that is what you mean and invokes `/pell:init-client-repo` with your words. It never clones, creates or pushes anything itself, and stays quiet when a Bitbucket link is given for anything else, such as reviewing a PR or mapping an existing repo.
 
+### `design-intake`
+
+Fires inside a client fork of the Pell Web App Framework (a repo with `client.yaml` and `docs/project/`) when you say "start intake for this fork", "the intake sheet is approved", "I picked direction B", or "continue intake", or when the repo-standup orchestrator calls it. It turns the client's Scope of Work into numbered requirements, personas, generated entities with their links and roles, a client theme, a prototype on contract-first stubs, and tagged acceptance tests. Each run does the next stage that isn't blocked, then stops. It waits only at two checkpoints: the intake sheet (the engineer approves or corrects it) and the direction pick (the engineer chooses a look). Everything it writes is internal, for the Pell engineer who owns the project.
+
+The skill writes and commits inside the fork without `(y/n)` prompts, because the orchestrator runs it unattended; it pushes only to the client repo. It never deletes a migration: each model change gets an additive one, and it asks you to regenerate `Initial` before the first deployment. It dispatches `intake-analyst` and `design-director` (below), plus `conductor-implementer` and `conductor-design-steward`. A run picks up from the files in the fork alone. Every call ends with one outcome line for the orchestrator (`design-intake: ran stage <n> <name>`, `waiting on <path>`, `done` or `stopped: <reason>`); a prototype or acceptance unit that fails its checks three times is parked with an open question, and the stage moves on.
+
 ---
 
 ## Composable building blocks (sub-agents)
@@ -618,6 +624,8 @@ The reviewers are also exposed as composable agents — any current or future co
 | Repo mapper | `repo-mapper` | `{coordinates, low_confidence, gaps, summary}` — not findings; produces the repo's Jira/Confluence/Drive/Bitbucket coordinates, not a review |
 | Ticket code mapper | `ticket-code-mapper` | `{areas, unmapped, summary}` — not findings; maps the code a cluster of tickets touches, for `/pell:groom` |
 | Ticket code auditor | `ticket-code-auditor` | `{findings: [{category, severity, title, evidence, question, code_note, suggestion, related_tickets, thread_status}], touched, thread_read, thread_overlaps, summary}` |
+| Intake analyst | `intake-analyst` | `{files, questions, summary}` — not findings; writes the design-intake project pack (requirements, personas, entity specs, roles, intake sheet), carries the engineer's corrections into it, and declares the approved links |
+| Design director | `design-director` | `{files, questions, summary}` — not findings; writes the brand capture and design brief, the direction themes, and the locked client theme for design-intake |
 
 This is the foundation of the workflow composers: commands like `/pell:wrap-up` dispatch these without re-implementing review logic.
 

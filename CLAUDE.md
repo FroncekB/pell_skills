@@ -32,6 +32,8 @@ pell_skills/
 3. **Arguments are freeform-first.** Parse `$ARGUMENTS` as natural-language context; pull out structured pieces (ticket key, PR URL, paths) but let the user override behavior with free text ("skip jira", "use bitbucket", "treat as hotfix").
 4. **Reserved flags:** `--reset` (clear cached config), `--dry-run` (preview, no side effects), `--verbose`.
 5. **Default to read-only.** Any side effect (file edit, Bitbucket comment, Jira transition, branch creation) is gated on a `(y/n)` prompt that names exactly what will change.
+
+> **Exception — design-intake.** The `design-intake` skill writes and commits inside the client fork it runs in, without `(y/n)` prompts, because the repo-standup orchestrator runs it unattended and the invocation is the yes. It pushes only to the client repo, never to this one. It stops for the engineer only at its two checkpoints, the intake sheet and the direction pick. Do not "fix" it into the gated shape.
 6. **Notify, never force, for external plugin dependencies** (e.g. `superpowers`, `frontend-design`). Skip the step or substitute inline — don't halt the workflow.
 7. **Renaming a command ships a deprecated alias.** Plugins have no alias mechanism, so leave a thin file under the old name: a description that says "Deprecated alias for /pell:<new>", a body that prints one rename line and forwards `$ARGUMENTS` verbatim to the new command via the Skill tool, and no logic of its own. Keep it a release or two, then delete it under the removal rules in Housekeeping. If the command posts a marker that another command matches by literal text, the matcher accepts both the old and new strings. `three-pass-review` → `four-pass-review` is the first instance (architecture spec §11).
 
@@ -52,6 +54,8 @@ pell_skills/
 3. **Omit the `tools:` line** so the agent inherits the orchestrator's tool surface (including MCP tools when needed).
 4. **Output JSON, not prose.** Orchestrators parse the trailing JSON object. Use the shape `{"findings": [...], "summary": "..."}`.
 5. **Surface everything** with severity tags. Never pre-filter — the orchestrator decides what's actionable.
+
+> **Exception — producer agents.** `intake-analyst` and `design-director` break rule 4 on purpose. They write files rather than report findings, so each ends with `{"files": [...], "questions": [...], "summary": "..."}` instead of `{"findings": [...], "summary": "..."}`. The `design-intake` skill reads that object to know what changed and what is open. Do not "fix" them into the findings shape.
 
 > **Exception — `conductor-*` agents.** The five `conductor-*` worker agents
 > (`conductor-implementer`, `conductor-scout`, `conductor-correctness-reviewer`,
