@@ -475,6 +475,22 @@ A Node script, `hooks/guard.mjs` in the skill, copied into the fork at setup. Ru
 
   It catches pushes from scripts and aliases that the command-text layer can't see. What's left is a script that passes `--no-verify` or changes `core.hooksPath`, and auto mode's judgment is the last layer for that.
 
+**What the local layers can and can't do (2026-11-16, Claude's call, after an adversarial review).** A guard that reads command text can't fully parse two shells. A command built to hide a push, through variables, `gcm`, a pipe into `sh`, or a builtin that runs other commands, can still be written. So the local layers are aimed at an agent's mistakes and plausible workarounds, not at an adversary:
+- **The command-text layer:**
+  - It parses quoting, escapes, `#` comments, process substitution and both shells' line breaks (`\r` included) the way the shells do.
+  - It denies dynamic execution wherever it appears: a variable or expression in command position, `& $x`, `& (…)`, `iex`, and a pipe into `sh`, `bash` or `pwsh`.
+  - It denies any command naming `--no-verify` or `core.hooksPath`.
+  - It denies git global options other than `-C` on every subcommand, and git options that run commands: `rebase -x`, `submodule foreach`, `bisect run`, `filter-branch`, `difftool -x`, `--upload-pack`, `--receive-pack`.
+  - It denies `git config` writes to `core.hooksPath`, `core.sshCommand`, `alias.*`, `remote.*`, `url.*`, `push.*` and `include*`.
+  - It denies a push from a repo with submodules.
+  - It always judges the command, with no shortcut on its literal text.
+  - It denies stdin that doesn't parse, after stripping a byte-order mark.
+- **Tamper protection:**
+  - The guard also hooks Edit, Write and NotebookEdit, and denies writes under `.git/`, `.claude/repo-standup/` and `.claude/settings.local.json`. It denies shell commands that name those paths too.
+  - Setup pins the client repo into `.claude/repo-standup/client-repo`, and both layers read it from there, never from `client.yaml`, which the agent can edit.
+- **The pre-push hook** is checked out with LF line endings and trims its arguments, so a CRLF checkout can't break it.
+- **The only complete enforcement is on Bitbucket:** branch restrictions on the client repo's `main` that prevent rewriting history and deletion. Whether `/pell:init-client-repo` sets them at fork time is Brandon's call.
+
 Its tests are Node's built-in test runner, `tests/repo-standup/guard.test.mjs` at the repository root, outside the shipped plugin **(Claude's call)**: a first runnable test in this repo, so the architecture spec records the pattern.
 
 ## The handoff package
