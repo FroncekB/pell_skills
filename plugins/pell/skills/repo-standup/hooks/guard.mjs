@@ -8,15 +8,18 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  containsProtected, insideClaudeDir, isProtected, mixesGlobWithDotFolder, pathContext,
+  containsProtected, insideClaudeDir, isProtected, mixesGlobWithDotFolder, namesHomeGitConfig, namesProtectedPath,
+  pathContext,
 } from './protected-paths.mjs';
-import { parseShell, stripRedirections } from './shell-words.mjs';
+import { commandName, nestedCode, parseShell, stripRedirections, stripWrappers } from './shell-words.mjs';
 
 export const PREFIX = 'repo-standup guard: ';
 export const FRAMEWORK_REPO = 'pellsoftware/pell_web_app_framework';
 const CANARY = 'repo-standup-guard-check';
 const SHELL_TOOLS = new Set(['Bash', 'PowerShell']);
-const PATH_FIELDS = ['file_path', 'path', 'notebook_path'];
+// Tool input fields holding a path; `paths` holds an array of them. No other field
+// is read: agent prompts name .git/pell-repo-standup.diff on purpose.
+const PATH_FIELDS = ['file_path', 'path', 'notebook_path', 'source', 'destination', 'target'];
 const deny = (why) => ({ allow: false, reason: PREFIX + why });
 
 // git subcommands that run no alias. Anything else may be an alias for push.
@@ -36,11 +39,12 @@ const PUSH_OPTIONS = new Set([
   '-u', '--set-upstream', '-q', '--quiet', '-v', '--verbose', '--porcelain', '--progress', '--no-progress',
 ]);
 
-// Long options that run a program; git accepts any unambiguous prefix of them.
+// Long options that run a program or set config, for every subcommand and per
+// subcommand. git accepts an unambiguous prefix of any length, so any prefix matches.
 const RUNNER_OPTIONS = ['--upload-pack', '--receive-pack', '--exec'];
+const SUB_RUNNER_OPTIONS = { grep: ['--open-files-in-pager'], clone: ['--config'], init: ['--config'], submodule: ['--config'] };
 // Short option letters, per subcommand, that run a program or set config.
 const RUNNER_LETTERS = { rebase: 'x', clone: 'uc', 'ls-remote': 'u', grep: 'O', init: 'c', submodule: 'c' };
-const CONFIG_OPTION_SUBS = new Set(['clone', 'init', 'submodule']);
 
 // git config keys that may be written. Every other write is denied.
 const SAFE_CONFIG_KEYS =
@@ -55,8 +59,6 @@ const CONFIG_WRITE_FLAGS = new Set(['--add', '--unset', '--unset-all', '--replac
 const WRAPPER = /(^|[\s\\/])(env|xargs|bash|sh|zsh|ksh|dash|cmd|pwsh|powershell|node|python3?|ruby|perl|sudo|time|nohup|command|exec|eval|iex|invoke-expression|start|start-process|call|nice|timeout|watch|source)(\.exe)?(\s|$)/i;
 const INTERPRETERS = new Set(['sh', 'bash', 'zsh', 'ksh', 'dash', 'pwsh', 'powershell', 'cmd', 'iex', 'invoke-expression']);
 const ALWAYS_DENIED_COMMANDS = new Set(['iex', 'invoke-expression', 'eval']);
-const SHELLS = new Set(['bash', 'sh', 'zsh', 'ksh', 'dash']);
-const POWERSHELLS = new Set(['pwsh', 'powershell']);
 const CODE_FLAGS = {
   node: ['-e', '-p', '--eval', '--print'], nodejs: ['-e', '-p', '--eval', '--print'],
   python: ['-c'], python3: ['-c'], perl: ['-e', '-E'], ruby: ['-e'],
@@ -76,21 +78,24 @@ const LINK_VERBS = new Set(['ln', 'mklink']);
 const normalize = (text) => text.replace(/["'\\`^]/g, '');
 const namesPush = (text) => /\bpush\b/i.test(normalize(text));
 const namesGit = (text) => /\bgit(\.exe)?\b/i.test(normalize(text));
-const commandName = (value) => value.split(/[\\/]/).pop().toLowerCase().replace(/\.exe$/, '');
 const stripKeywords = (words) => {
   let at = 0;
   while (at < words.length && KEYWORDS.has(words[at].raw)) at += 1;
   return words.slice(at);
 };
 
-// Paths a word may name: itself, what follows `=` (--output=PATH), and with a
-// redirection operator removed.
+// Paths a word may name: itself, what follows `=` (--output=PATH) or an option's
+// `:` (-Path:PATH), and what follows a redirection operator, at the start or inside.
 function pathCandidates(word) {
   const v = word.value;
   const eq = v.indexOf('=');
   const option = v.startsWith('-') && eq > -1;
   const redirected = v.replace(/^[0-9*]*>>?/, '').replace(/^</, '');
-  const found = [option ? '' : v, eq > -1 ? v.slice(eq + 1) : '', option && redirected === v ? '' : redirected];
+  const colon = v.startsWith('-') ? v.indexOf(':') : -1;
+  const found = [
+    option ? '' : v, eq > -1 ? v.slice(eq + 1) : '', option && redirected === v ? '' : redirected,
+    colon > -1 ? v.slice(colon + 1) : '', /[<>]/.test(v) ? v.split(/[<>]/).pop() : '',
+  ];
   return [...new Set(found)].filter((s) => s && /[\\/.~]/.test(s));
 }
 
@@ -99,11 +104,12 @@ function checkPaths(seg, ctx) {
   const words = seg.words;
   for (const w of words) {
     if (mixesGlobWithDotFolder(w.raw)) return deny('a glob or variable could name a protected folder');
+    if (namesHomeGitConfig(w.raw)) return deny('the home git config is a protected path');
     for (const p of pathCandidates(w)) {
       if (isProtected(p, ctx)) return deny(`${p} is a protected path (.git, the guard's files, or a settings file)`);
     }
   }
-  const command = stripKeywords(stripRedirections(words)).filter((w) => !/^[A-Za-z_]\w*=/.test(w.raw));
+  const command = stripWrappers(stripKeywords(stripRedirections(words)).filter((w) => !/^[A-Za-z_]\w*=/.test(w.raw))).words;
   if (command.length === 0) return null;
   const name = commandName(command[0].value);
   const args = command.slice(1).flatMap(pathCandidates);
@@ -121,12 +127,11 @@ function checkPaths(seg, ctx) {
 // The checks for a git subcommand other than push.
 function checkRunners(sub, args) {
   const values = args.map((a) => a.value);
+  const runners = [...RUNNER_OPTIONS, ...(SUB_RUNNER_OPTIONS[sub] ?? [])];
   for (const v of values) {
     const name = v.split('=')[0];
-    if (v.startsWith('--') && name.length >= 5) {
-      if (RUNNER_OPTIONS.some((o) => o.startsWith(name))) return deny(`git option ${name} runs a program`);
-      if (CONFIG_OPTION_SUBS.has(sub) && '--config'.startsWith(name)) return deny(`git ${sub} --config sets config`);
-      if (sub === 'grep' && v.length >= 6 && '--open-files-in-pager'.startsWith(name)) return deny('git grep --open-files-in-pager runs a program');
+    if (v.startsWith('--') && name.length > 2 && runners.some((o) => o.startsWith(name))) {
+      return deny(`git ${sub} option ${name} runs a program or sets config`);
     }
     const letters = /^-([A-Za-z]+)/.exec(v)?.[1] ?? '';
     if (!v.startsWith('--') && [...letters].some((l) => (RUNNER_LETTERS[sub] ?? '').includes(l))) {
@@ -157,30 +162,6 @@ function checkConfig(values) {
   return writes ? writeCheck(keys[0]) : null;
 }
 
-// For a shell, PowerShell or cmd running a code string, the string to judge
-// as its own command; { encoded: true } for -EncodedCommand; null otherwise.
-function nestedCode(name, words, tool) {
-  const rest = words.slice(1);
-  if (SHELLS.has(name)) {
-    const at = rest.findIndex((w) => /^-[A-Za-z]*c[A-Za-z]*$/.test(w.raw));
-    return at === -1 ? null : { tool: 'Bash', code: rest[at + 1]?.value ?? '' };
-  }
-  if (POWERSHELLS.has(name)) {
-    for (let i = 0; i < rest.length; i++) {
-      if (!rest[i].raw.startsWith('-')) continue;
-      const flag = rest[i].raw.slice(1).toLowerCase().split(':')[0];
-      if (flag && ('encodedcommand'.startsWith(flag) || flag === 'ec')) return { encoded: true };
-      if (flag && 'command'.startsWith(flag)) return { tool: 'PowerShell', code: rest.slice(i + 1).map((w) => w.value).join(' ') };
-    }
-    return null;
-  }
-  if (name === 'cmd') {
-    const at = rest.findIndex((w) => /^\/[ck]$/i.test(w.raw));
-    return at === -1 ? null : { tool: tool === 'Bash' ? 'Bash' : 'PowerShell', code: rest.slice(at + 1).map((w) => w.value).join(' ') };
-  }
-  return null;
-}
-
 // Judge one segment. Returns { allow: false, reason }, { push } for a push
 // segment, or null for a harmless one.
 function judgeSegment(seg, env) {
@@ -188,8 +169,11 @@ function judgeSegment(seg, env) {
   let words = stripKeywords(stripRedirections(seg.words));
   if (words.length === 0) return null;
   const text = words.map((w) => w.raw).join(' ');
-  const pushNamed = namesPush(text);
+  // A heredoc body is stdin, not words, but it still counts as naming push.
+  const heredocs = seg.words.map((w) => w.heredoc ?? '').join('\n');
+  const pushNamed = namesPush(text) || namesPush(heredocs);
   const gitNamed = namesGit(text);
+  const stdinCode = seg.piped || seg.words.some((w) => /^[0-9]*</.test(w.raw));
 
   let assigns = 0;
   while (assigns < words.length && /^[A-Za-z_]\w*=/.test(words[assigns].raw)) assigns += 1;
@@ -208,20 +192,31 @@ function judgeSegment(seg, env) {
     return rest.length > 0 ? judgeSegment({ words: rest, piped: seg.piped, dynamicCall: false }, env) : null;
   }
 
-  if (/[$%]/.test(first)) return deny('the command word is a variable or expression');
+  const unwrapped = stripWrappers(words);
+  if (unwrapped.problem) return deny(unwrapped.problem);
+  if (unwrapped.wrapped) {
+    if (unwrapped.words.length === 0) return null;
+    if (gitNamed) return deny('a wrapper runs git');
+    words = unwrapped.words;
+  }
+  if (/[$%]/.test(words[0].raw)) return deny('the command word is a variable or expression');
   const name = commandName(words[0].value);
   if (ALWAYS_DENIED_COMMANDS.has(name)) return deny(`${name} evaluates text as code`);
-  if (seg.piped && INTERPRETERS.has(name)) return deny('a pipe into an interpreter runs text as code');
+  if (stdinCode && INTERPRETERS.has(name)) return deny('a pipe, redirect or substitution into an interpreter runs text as code');
 
   if (name !== 'git') {
     const nested = nestedCode(name, words, env.tool);
-    if (nested?.encoded) return deny('-EncodedCommand is not allowed');
+    if (nested?.deny) return deny(nested.deny);
     if (pushNamed) return deny('a program other than git names push');
     if (nested) {
       const inner = decide(nested.tool, nested.code, env.repo);
-      return inner.allow ? null : inner;
+      if (!inner.allow) return inner;
+      if (namesProtectedPath(nested.code, env.ctx)) return deny('the code string names a protected path');
+      if (namesGit(nested.outer.map((w) => w.raw).join(' '))) return deny('a wrapper runs git');
+      return null;
     }
-    if (CODE_FLAGS[name]?.some((f) => words.some((w) => w.raw === f)) && SPAWNING_CODE.test(normalize(text))) {
+    const codeFlag = CODE_FLAGS[name]?.some((f) => words.some((w) => w.raw === f));
+    if ((codeFlag || (CODE_FLAGS[name] && stdinCode)) && SPAWNING_CODE.test(`${normalize(text)}\n${heredocs}`)) {
       return deny(`${name} code that names git, push or process spawning is not allowed`);
     }
     if (gitNamed && WRAPPER.test(normalize(text))) return deny('a wrapper runs git');
@@ -431,7 +426,9 @@ function main() {
   const tool = input?.tool_name;
   const toolInput = input?.tool_input && typeof input.tool_input === 'object' ? input.tool_input : {};
   const shell = SHELL_TOOLS.has(tool);
-  const targets = shell ? [toolInput.command] : PATH_FIELDS.map((f) => toolInput[f]).filter((v) => typeof v === 'string');
+  const targets = shell
+    ? [toolInput.command]
+    : [...PATH_FIELDS.map((f) => toolInput[f]), ...[toolInput.paths ?? []].flat()].filter((v) => typeof v === 'string');
   if (!shell && targets.length === 0) return;
   if (shell && typeof targets[0] !== 'string') {
     denyOutput(`${PREFIX}the tool call has no command to judge`);

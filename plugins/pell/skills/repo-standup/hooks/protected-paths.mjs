@@ -28,6 +28,8 @@ function cleanComponent(component, ctx) {
 export function canonical(p, base, ctx) {
   let s = String(p).replace(/^\\\\\?\\/, '');
   if (s === '~' || /^~[\\/]/.test(s)) s = path.join(ctx.home, s.slice(1));
+  // Git Bash names a drive as /c/...
+  if (ctx.windows) s = s.replace(/^\/([A-Za-z])(\/|$)/, '$1:/');
   const parts = path.resolve(base, s).split(/[\\/]/);
   const root = parts.shift();
   const head = parts.map((c) => cleanComponent(c, ctx)).filter(Boolean);
@@ -87,10 +89,22 @@ export function isProtected(p, ctx) {
     if (isPellDiff(c, ctx)) continue;
     const comps = c.split('/');
     if (comps.includes('.git')) return true;
-    if (comps.some((comp, i) => comp === '.claude' && comps[i + 1] === 'repo-standup')) return true;
+    if (comps.some((comp, i) => comp === '.claude' && CLAUDE_PROTECTED.has(comps[i + 1]))) return true;
     if (roots(ctx).some((r) => inside(c, r))) return true;
   }
   return false;
+}
+
+// Matched by component anywhere in a path, so a relative path after a `cd` is caught.
+const CLAUDE_PROTECTED = new Set(['repo-standup', 'settings.json', 'settings.local.json']);
+
+// True when any path-like fragment of free text is protected: the whole-text
+// scan for a nested code string, whatever words its shell would split it into.
+export function namesProtectedPath(text, ctx) {
+  return String(text)
+    .split(/[\s"'`;&|<>()=,]+/)
+    .filter((f) => /[\\/.~]/.test(f))
+    .some((f) => isProtected(f, ctx) || mixesGlobWithDotFolder(f) || namesHomeGitConfig(f));
 }
 
 // True when `p` is a protected location or a folder holding one (so deleting or
@@ -105,25 +119,41 @@ export function insideClaudeDir(p, ctx) {
   return candidates(p, ctx).some((c) => dirs.some((d) => inside(c, d)));
 }
 
+const DOT_FOLDERS = ['.git', '.claude'];
+
 // True for a word whose glob or variable could expand to a protected folder name,
-// as in `.gi?`, `.cl*` or `$d/.git`.
+// as in `.gi?`, `.cl*` or `$d/.git`, or to a path inside one, as in `.claude/*/x`.
+// Quotes are ignored: PowerShell cmdlets expand wildcards in quoted paths.
 export function mixesGlobWithDotFolder(raw) {
   let dynamicBefore = false;
-  for (const comp of String(raw).split(/[\\/]/)) {
+  let folderBefore = false;
+  for (const comp of String(raw).replace(/["']/g, '').split(/[\\/]/)) {
     const dynamic = /[*?[\]$%{}]/.test(comp);
-    if (dynamicBefore && ['.git', '.claude'].includes(comp.toLowerCase())) return true;
+    const folder = DOT_FOLDERS.includes(comp.toLowerCase());
+    if ((dynamicBefore && folder) || (folderBefore && dynamic)) return true;
+    dynamicBefore ||= dynamic;
+    folderBefore ||= folder;
     if (dynamic && comp.startsWith('.') && comp.length > 1) {
       try {
         const pattern = new RegExp(
           `^${comp.replace(/[.+^|\\()]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.').replace(/\$|%|\{|\}/g, '.*')}$`,
           'i',
         );
-        if (['.git', '.claude'].some((name) => pattern.test(name))) return true;
+        if (DOT_FOLDERS.some((name) => pattern.test(name))) return true;
       } catch {
         return true;
       }
     }
-    dynamicBefore ||= dynamic;
   }
   return false;
+}
+
+// True for a word that names the home git config through a variable or ~, as in
+// `$HOME/.gitconfig`, `$env:USERPROFILE\.gitconfig` or `$XDG_CONFIG_HOME/git/config`.
+export function namesHomeGitConfig(raw) {
+  const s = String(raw).replace(/["']/g, '');
+  if (!/[$%~]/.test(s)) return false;
+  const comps = s.toLowerCase().split(/[\\/]/);
+  return comps.includes('.gitconfig') ||
+    comps.some((c, i) => i > 0 && c === 'git' && comps[i + 1] === 'config' && (comps[i - 1] === '.config' || /[$%]/.test(comps[i - 1])));
 }
