@@ -454,3 +454,7 @@ These tasks are prompts and reference files, not code. Each task's check is `cla
 - [ ] **Step 1:** In a scratch fork that is never pushed, and with no Bitbucket repo, run every stage on the latest real Pell SOW whose project engineers are building by hand.
 - [ ] **Step 2:** Compare the domain model, personas and roles with what the engineers built. Record the engineer's minutes at each checkpoint and the tokens per stage.
 - [ ] **Step 3:** Write the results to a notes file outside both repositories (the session's shared notes folder). Tell Brandon the results and any fixes they call for. Delete the scratch fork when he's read them.
+
+## Status note (2026-11-16, plugin 0.26.0)
+
+Task 16a fixed the skill from trial 1's notes. Two rules Task 15 wrote into `stages.md` changed: stage 3 now declares the approved links in the specs (Brandon's call on 2026-11-16), so stage 7's rule is "no links of its own" rather than "no links", and stage 3 adds migrations rather than regenerating `Initial`. The design spec's status note of the same date lists every changed decision.
