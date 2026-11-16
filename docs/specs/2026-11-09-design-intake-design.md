@@ -403,3 +403,10 @@ Most of this depends on Phase 4: `client.yaml`, the pack skeleton, the `ready` c
 ## Status note (2026-11-15, plugin 0.25.0)
 
 Shipped as the `design-intake` skill and its two agents. The interface agreed with Project 3 changed three things here, and the skill is the current truth: stages 7 and 8 stay in the skill rather than moving to Project 3's work loop, and a unit parks after three failed check rounds with an open question; every call ends with one outcome line (`design-intake: ran stage <n> <name>`, `waiting on <path>`, `done` or `stopped: <reason>`); and a call whose arguments contain `from repo-standup` sends only the two checkpoint notifications.
+
+## Status note (2026-11-16, plugin 0.26.0)
+
+Trial 1 (`docs/trials/design-intake/trial-1-notes.md`) changed these decisions. The skill and its agents are the current truth.
+
+- **Links are declared at stage 3.** This reverses "The prototype leaves out links between entities", by Brandon's call on 2026-11-16, since the generator now writes links. Stage 2 names each link on the intake sheet's domain model, and once the engineer approves it, stage 3 declares each one the generator can write as a `type: link` field, so the generated lists, forms and details get their pickers, columns and filters. The screen inventory's links table now records how each link is made (declared in a spec, or hand-built for the build). Stage 7's units still add no links of their own and eject nothing.
+- **Migrations are additive.** The fork's rules make deleting migration files a person's job, so stage 3 adds a migration for each model change instead of regenerating `Initial`, and asks the engineer, in its run-log note and checkpoint 2's notification, to regenerate `Initial` before the first deployment.

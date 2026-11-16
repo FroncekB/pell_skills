@@ -74,7 +74,7 @@ Finding PRs to review:
 
 - `frontend-router` — routes UI work to `frontend-design` (notify-don't-force).
 - `init-client-repo` — routes a Bitbucket repo link for a new client project to `/pell:init-client-repo`; never does the work itself.
-- `design-intake` — runs inside a client fork of the Pell Web App Framework and does the next design-intake stage (sources, extract, generate, brief, directions, lock, prototype, acceptance), then stops. It waits only at two checkpoints: the intake sheet and the direction pick. It writes and commits in the fork without `(y/n)` prompts, because the orchestrator runs it unattended, and pushes only to the client repo. Each call ends with one `design-intake: ...` outcome line, and a prototype or acceptance unit that fails its checks three times is parked with an open question.
+- `design-intake` — runs inside a client fork of the Pell Web App Framework and does the next design-intake stage (sources, extract, generate, brief, directions, lock, prototype, acceptance), then stops. It waits only at two checkpoints: the intake sheet and the direction pick. It writes and commits in the fork without `(y/n)` prompts, because the orchestrator runs it unattended, and pushes only to the client repo. Stage 3 declares the approved links between entities in the specs, and adds migrations rather than regenerating `Initial`, which it leaves to the engineer before the first deployment. Each call ends with one `design-intake: ...` outcome line, and a prototype or acceptance unit that fails its checks three times is parked with an open question.
 
 ## Agents (composable building blocks)
 
@@ -101,7 +101,7 @@ Ticket groomers (dispatched by `/pell:groom`):
 
 Design intake producers (dispatched by the `design-intake` skill):
 
-- `intake-analyst` — turns the converted SOW and documents into the project pack (cited requirements, glossary, personas, workflows, entity specs, default roles, the intake sheet) and carries the engineer's corrections back into it. Returns `{files, questions, summary}` rather than findings, because it writes files.
+- `intake-analyst` — turns the converted SOW and documents into the project pack (cited requirements, glossary, personas, workflows, entity specs, default roles, the intake sheet), carries the engineer's corrections back into it, and declares the approved links in the specs. Returns `{files, questions, summary}` rather than findings, because it writes files.
 - `design-director` — brand capture and design brief, two or three direction themes on the client's own screens, and the lock into the client theme. Returns `{files, questions, summary}` rather than findings, because it writes files.
 
 `conductor-design-steward` also has a screenshot mode, used by `design-intake`, that reviews a `screens-output/` run from the framework's screenshot harness.

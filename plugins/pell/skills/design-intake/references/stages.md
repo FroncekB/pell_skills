@@ -5,43 +5,51 @@ How to run each stage and checkpoint. `SKILL.md` decides which one runs, and hol
 ## Terms used below
 
 - `<Code>` and `<lower>` are `client.yaml`'s `name.code` and `name.lower`.
+- **The project name** is the intake sheet's title after `Intake sheet: ` (`intake-sheet.md` says where stage 2 takes it from). Every later title that names the project uses it.
 - Scaffolder commands run from the repository root. npm commands run in `<Code>.React/`.
 - Pack paths are under `docs/project/`. `formats.md`, `intake-sheet.md` and `directions.md` sit beside this file, at `${CLAUDE_PLUGIN_ROOT}/skills/design-intake/references/`.
 - **The checks** are every command in the fork's `CLAUDE.md` "Standard commands", run one at a time, each passing: the build, the unit and integration tests, the React checks, the screenshots in the active theme, end to end and `generate --check`. They share the integration tests' LocalDB database and port 7143, so never run two at once.
-- **Baselines.** A screen new to the harness gets its baseline with `npm run screens -- --active --update-snapshots=missing`, which writes the missing ones alone, reports each one it writes as a failure, and moves none that exist. A screen the stage changed on purpose gets its baseline rewritten alone with `npm run screens -- --active --update-all -g <route>`. Either way, look at the images on the contact sheet (`screens-output/index.html`) first, then run `npm run screens -- --active`, which must pass. Never rewrite every baseline at once.
+- **A failing check** is fixed and run again. In stages 3, 5 and 6, the third failed run of the same check stops the stage: `design-intake: stopped: <check> failed three times`, with the last failure in the chat message. Stages 7 and 8 park a unit instead (see Working with agents).
+- **Flakes.** A failure in a screen or test the stage didn't change, or one whose trace shows the harness's own network error (a `net::` error loading a page or an asset), is rerun once, alone (`-g <route>` with its `--project`). If it passes, it is a flake: name it in the run-log note, and it counts as no failed run or round. A second failure is real.
+- **Formatting.** Format only with what the fork's Standard commands name. Never run a formatter they don't, such as Prettier: the lint is the fork's style check.
+- **Baselines.** A screen new to the harness gets its baseline with `npm run screens -- --active --update-snapshots=missing`, which writes the missing ones alone and moves none that exist. It reports each baseline it writes as a failure, so count the failures that aren't a missing snapshot: any one is real. A screen the stage changed on purpose gets its baseline rewritten alone with `npm run screens -- --active --update-all -g <route>`. So does a screen whose baseline the fork left showing the framework's name or demo content where the screen now shows the client's, such as the home and sign-in pages, with a `decisions.md` line. Either way, read the new images first, the PNGs under `<Code>.React/screens/__baselines__/<platform>/<theme>/<mode>/`, since an agent can't open the contact sheet. Then run `npm run screens -- --active`, which must pass. Never rewrite every baseline at once.
+- **Captures.** A harness run writes each capture to `<Code>.React/screens-output/<theme>/<mode>/<route>-<state>.png` and lists it in `manifest.json`. Routes are in kebab case: an entity's list is `<plural>-list`, its new form `<singular>-form`, its edit form `<singular>-edit` and its detail `<singular>-detail`, and a route's normal state is `default`. Every run empties `screens-output/` first, so copy what a later step needs before the next run.
+- **Framework defects.** Intake never changes a template, the scaffolder, a generated file, or any other framework file its stage's "Writes" line doesn't name, to get past a check. When a framework defect fails a check, change the spec to avoid it (an example, a limit, a column), with a `decisions.md` line naming the defect, and name it in the run-log note for the framework. When no spec change avoids it, stop: `design-intake: stopped: framework defect: <what fails>`.
 
 ## Working with agents
 
-- **intake-analyst and design-director** work in the fork's checkout, on `main`. Give each the stage and its job, the repository root, `client.yaml`'s names, and the paths of the references the stage names. Each ends with `{"files": [...], "questions": [...], "summary": "..."}`. Its `questions` feed the notification, and its `summary` the run-log note.
+- **intake-analyst and design-director** work in the fork's checkout, on `main`. Give each the stage and its job, the repository root, `client.yaml`'s names, and the paths of the references the stage names. Each writes its own `decisions.md` lines, and ends with `{"files": [...], "questions": [...], "summary": "..."}`. Its `questions` feed the notification, and its `summary` the run-log note.
 - **conductor-implementer** never works on `main`, and gets one unit at a time. Its worktree is the fork's own checkout, the repository root, switched to the unit's branch. It makes no other worktree. Before each unit:
   1. Commit the stage's work so far on `main` as `Design intake stage <n>: <name>, work so far`, unless there is nothing to commit. The implementer stops on a dirty tree.
   2. Run `git switch -C intake-<stage name> main`. This drops any commits an interrupted unit left on the branch, and that unit runs again.
-  3. Give it the unit, the branch, its worktree (the repository root), the expected tip (`git rev-parse main`), `client.yaml` as its sentinel file, the references and the stage's rules.
+  3. Give it the unit, the branch, its worktree (the repository root), the expected tip (`git rev-parse main`), `client.yaml` as its sentinel file, the references, the stage's rules, the unit's checks, the Formatting rule (Terms) and its commit's subject.
 
-  It commits on the branch and reports. Its own commit carries the unit's bookkeeping, such as stage 7's inventory row. A revision after stage 7's design review isn't a new unit: it runs on the same branch, with no `switch -C`, and the branch's tip (`git rev-parse HEAD`) as the expected tip. When the unit passes, `git switch main` and `git merge --ff-only intake-<stage name>`. At the stage's end, `git branch -d intake-<stage name>` when it is still there. Units run one at a time, because they share the database and the port.
+  It commits on the branch and reports. Its commit's subject is the one the stage names for the unit, and its body an essay. A later commit on the branch adds what it does after a comma, such as `Design intake stage 7: <screen>, revision`. Its own commit carries the unit's bookkeeping, such as stage 7's inventory row. A revision after stage 7's design review isn't a new unit: it runs on the same branch, with no `switch -C`, and the branch's tip (`git rev-parse HEAD`) as the expected tip.
 
-  **Three failed rounds park a unit**, in stages 7 and 8. A round is one run of the unit's checks after the implementer reports. When a round fails, the implementer gets the failures and fixes them on the same branch, as for a revision; the round after a design review's revision counts too. After the third failed round:
-  1. `git switch main`, then `git branch -m intake-<stage name> parked/intake-<stage name>-<unit>`, with `<unit>` the screen's name (stage 7) or the workflow's (stage 8) in kebab case. The unit is left as it is: unmerged, unpushed, its inventory row unchanged.
+  **The unit's checks** run on the unit's branch after the implementer reports, before anything merges; each stage names them. When they pass (and, in stage 7, the steward has reviewed the unit), `git switch main` and `git merge --ff-only intake-<stage name>`. At the stage's end, `git branch -d intake-<stage name>` when it is still there. Units run one at a time, because they share the database and the port.
+
+  **Three failed rounds park a unit**, in stages 7 and 8, and stop stage 3. A round is one run of the unit's checks after the implementer reports. When a round fails, the implementer gets the failures and fixes them on the same branch, as for a revision; the round after a design review's revision counts too. A flake (Terms) is no failed round. In stage 3 the third failed round stops the stage, as a failing check does (Terms). In stages 7 and 8, after the third failed round:
+  1. `git switch main`, then `git branch -m intake-<stage name> parked/intake-<stage name>-<unit>`, with `<unit>` the unit's first screen's name (stage 7) or its workflow's name (stage 8) in kebab case. The unit is left as it is: unmerged, unpushed, its inventory rows unchanged.
   2. Add an open question, in `formats.md`'s format, saying what the unit needs to pass, with the check that failed in its If wrong, the unit's requirements in its Blocks, and the guess that the build finishes the unit from its branch. List it in those requirements' Depends on, and add a `decisions.md` line naming the unit.
   3. Go on to the next unit. A run that resumes the stage skips any unit with a `parked/` branch, and the stage's run-log note names each parked unit.
-- **conductor-design-steward** is read-only, in its screenshot mode. Give it `<Code>.React/screens-output/` (its `manifest.json` and the captures), `design/brief.md`, and from stage 6 on `design/conventions.md`. Its report is ranked prose.
+- **conductor-design-steward** is read-only, in its screenshot mode. Give it the run, `<Code>.React/screens-output/` (its `manifest.json` and the captures), with the commit and time the run was made; the captures to read, which each stage names; `docs/project/design/brief.md`; `docs/project/glossary.md`; and from stage 6 on `docs/project/design/conventions.md`. Its report is ranked prose.
 
 ## Stage 1: Sources
 
 Done by the skill itself.
 
-**Inputs.** Ask the engineer once:
+**Inputs.** Take each from the invocation's arguments when they name it: file paths, the site URL, brand files, and liked or disliked products. Ask the engineer once for whatever is still missing:
 - Required: the source documents (the SOW and anything sent with it: `.docx`, `.xlsx`, `.pdf`, `.md` or `.txt`) and the client's website URL.
 - Optional, and skippable: a brand guide, logo file or prototype the client already has (files, screenshots or a URL), and the products the client's users like or dislike, with their URLs.
 
-Without a SOW there is nothing to run. If no one can answer, stop and report what is missing.
+Without a SOW there is nothing to run. If no one can answer, as in an unattended run whose arguments name none, stop: `design-intake: stopped: no SOW given`. A missing website URL doesn't stop the stage: step 4 is skipped, with its question.
 
 1. **Convert each document.**
    ```
    dotnet run --project tools/<Code>.Scaffolder -c Release -- sources add <file>...
    ```
    It writes the original, unchanged, to `docs/project/sources/originals/<file name>`; the Markdown to `docs/project/sources/<slug>.md`, whose first line is `<!-- source: originals/<file> | sha256: <hex> | converted: <date> | converter: sources 1 -->`; and a row in `docs/project/sources/README.md`. A file already converted is skipped. A PDF with no text is reported as unreadable, the rest are still converted, and the run exits 1: add an open question asking for a text copy, with the guess that the build goes on without it. Number stage 1's questions from `Q-2`, since stage 2 makes the fork's logo question `Q-1`.
-2. **Record the answers as a source**, so no later stage depends on this conversation. Write them to `intake-answers.md` in a temporary folder outside the repository, in this shape, and `sources add` it:
+2. **Record the answers as a source**, so no later stage depends on this conversation. Write them to `intake-answers.md` in a new, empty folder under the system's temporary directory (`$TMPDIR` or `%TEMP%`), never in the repository, in this shape. `sources add` it, then delete that folder. `<engineer>` is `git config user.name`, or `engineer` when it is empty.
    ```
    # Intake answers
 
@@ -56,13 +64,15 @@ Without a SOW there is nothing to run. If no one can answer, stop and report wha
    ```
    dotnet run --project tools/<Code>.Scaffolder -c Release -- sources fetch <site url> --allow <site domain> --to site
    ```
-   Pass `--allow` the bare domain (`example.com`, not `www.example.com`). It takes the domain's subdomains too, so a redirect from `example.com` to `www.example.com` is followed, while one from `www.` to the bare domain would be refused. It writes `docs/project/sources/site/<host>/<path slug>.md`, with a `## Brand signals` section (colors ranked by use, fonts, logo candidates) and `## Page text`, saves the logo candidates in `assets/` beside it, and adds a row to `sources/README.md`. This page is the first of the 6 client pages stage 4 may fetch. A refused fetch (robots.txt, not HTML, a redirect off the host) is noted in the run-log, never worked around.
+   Pass `--allow` the site's host without a leading `www.` (`example.com` for `www.example.com`, `shop.example.com` for `www.shop.example.com`). It takes the host's subdomains too, so a redirect from `example.com` to `www.example.com` is followed, while one from `www.` to the bare host would be refused. It writes `docs/project/sources/site/<host>/<path slug>.md`, with a `## Brand signals` section (colors ranked by use, fonts, logo candidates) and `## Page text`, saves the logo candidates in `assets/` beside it, and adds a row to `sources/README.md`. This page is the first of the 6 client pages stage 4 may fetch. A refused fetch (a name that doesn't resolve, robots.txt, not HTML, a redirect off the host) is noted in the run-log, never worked around.
+
+   When the home page isn't fetched, for any reason, add an open question asking for the brand guide and the logo, and for the site's address when it may be wrong, with the guess that the brief guesses the brand from the SOW and the client's trade.
 
 Never pass `--refresh` once stage 2 has cited a file, since the cited lines must not move. A new version of a document is added under a new file name.
 
-**Writes:** `sources/originals/`, `sources/*.md` (`intake-answers.md` among them), `sources/site/`, `sources/README.md`, and `open-questions.md` when a file is refused.
+**Writes:** `sources/originals/`, `sources/*.md` (`intake-answers.md` among them), `sources/site/`, `sources/README.md`, and `open-questions.md` when a file is refused or the home page isn't fetched.
 
-**Passes when** every document the engineer gave has a row in `sources/README.md` and its converted file, or an open question; `intake-answers.md` is converted; and the home page is fetched, or the run-log note says why not.
+**Passes when** every document the engineer gave has a row in `sources/README.md` and its converted file, or an open question; `intake-answers.md` is converted; and the home page is fetched, or the run-log note says why not and the brand question is asked.
 
 **Sends**, only when it added questions: "Sources converted: <n> documents, <n> site pages. <n> questions added; the riskiest: Q-<n>, <question>."
 
@@ -70,13 +80,13 @@ Never pass `--refresh` once stage 2 has cited a file, since the cited lines must
 
 Done by intake-analyst, dispatched for extraction with the converted sources (`sources/*.md` and `sources/site/`), `formats.md` and `intake-sheet.md`. It reads only the converted Markdown, never the originals. In one pass it writes:
 
-1. `requirements.md`, `glossary.md`, `personas.md`, `workflows.md`, `integrations.md` and `open-questions.md`, each as `formats.md` says. A requirement found in a source but in no SOW item is `REQ-0.<n>`. The fork's `open-questions.md` starts with a logo question written as a bullet with no ID (`- **Logo and icon.** ...`). Rewrite it as `Q-1` in `formats.md`'s entry format, keeping its meaning. Questions stage 1 added keep their IDs, and new ones count on from the highest, from `Q-2` when there are none.
+1. `requirements.md`, `glossary.md`, `personas.md`, `workflows.md`, `integrations.md` and `open-questions.md`, each as `formats.md` says. A requirement found in a source but in no SOW item is `REQ-0.<n>`. The fork's `open-questions.md` starts with a logo question written as a bullet with no ID (`- **Logo and icon.** ...`). Rewrite it as `Q-1` in `formats.md`'s entry format, keeping its meaning, asked on the day it is rewritten. Questions stage 1 added keep their IDs, and new ones count on from the highest, from `Q-2` when there are none.
 2. One entity spec per entity in `specs/entities/`, each started with
    ```
    dotnet run --project tools/<Code>.Scaffolder -c Release -- new <Name> <Plural>
    ```
-   Labels and the three examples use the glossary's words.
-3. The roles in `<Code>.API/Configuration/default-roles.json`, one per persona that signs in, beside the roles already there. Each spec's `defaultRoles` grants come from the SOW's "User Roles this applies to" lists.
+   When `new` refuses a name the API already uses, such as `Route` or `Claim`, prefix it with a word from the client's domain (`DeliveryRoute`), and keep the glossary's label for the screens. Labels and the three examples use the glossary's words. The links wait for stage 3: the intake sheet's domain model names them, and the specs leave them out until the engineer has approved them.
+3. The roles in `<Code>.API/Configuration/default-roles.json`, one per persona that signs in, beside the roles already there. Each spec's `defaultRoles` grants come from what each role must see and do across every SOW item, not only from the item's "User Roles this applies to" list: a role that reads an entity on another item's screen needs that entity's View.
 4. The `check` loop, run until it passes:
    ```
    dotnet run --project tools/<Code>.Scaffolder -c Release -- check
@@ -90,7 +100,7 @@ It never runs `generate`.
 
 **Passes when** `check` prints `Specs are valid.` (run it once more after the agent reports); every requirement's Source names a converted file that exists and a line within it, or, for a row the engineer added on the intake sheet only, a line of the approved sheet as `formats.md` says; and the sheet has its ten parts and `Status: draft`.
 
-**Sends** checkpoint 1's notification: "The intake sheet is ready: docs/project/intake-sheet.md. <n> guesses; the riskiest: <guess 1 in one sentence>. <n> open questions."
+**Sends** checkpoint 1's notification: "The intake sheet is ready: docs/project/intake-sheet.md. <n> guesses; the riskiest: <guess 1 in one sentence>. <n> open questions." The call ends with `design-intake: waiting on docs/project/intake-sheet.md`.
 
 ## Checkpoint 1
 
@@ -102,33 +112,37 @@ The engineer may also edit a pack file, a spec in `specs/entities/` or a role in
 
 ## Stage 3: Generate
 
-Done by intake-analyst (step 1), the skill (steps 2, 3 and 5) and conductor-implementer (step 4).
+Done by intake-analyst (step 1), the skill (steps 2, 3 and 5) and conductor-implementer (step 4). A failing check is fixed and run again (see "A failing check" and "Framework defects" in Terms).
 
-1. **Apply the corrections.** Find stage 2's commit with `git log -1 --format=%H --grep="^Design intake stage 2: extract$"`. Dispatch intake-analyst for corrections with `git diff <that commit> HEAD -- docs/project/ specs/ <Code>.API/Configuration/default-roles.json`: the sheet's diff, and any pack file, spec or role the engineer edited. It carries each correction into the pack, the specs and the roles, with a `decisions.md` line for each (decided by: engineer). A correction it can't apply without guessing becomes an open question with its best guess, and the run goes on. The `check` loop passes again.
+1. **Apply the corrections, then declare the links.** Find stage 2's commit with `git log -1 --format=%H --grep="^Design intake stage 2: extract$"`. Dispatch intake-analyst for corrections with `git diff <that commit> HEAD -- docs/project/ specs/ <Code>.API/Configuration/default-roles.json`: the sheet's diff, and any pack file, spec or role the engineer edited. It carries each correction into the pack, the specs and the roles, with a `decisions.md` line for each (decided by: engineer). A correction it can't apply without guessing becomes an open question with its best guess, and the run goes on. Then it declares each link in the approved domain model's "Links to" column that the generator can write as a `type: link` field in its spec, as the fork's `CLAUDE.md` "Links" says, and leaves the rest hand-built. The `check` loop passes again.
+
+   The approved sheet is never rewritten: it is the record of what the engineer approved, and a line a correction made stale stays as it is. From here on the pack and the specs are current, and a later stage that reads the sheet reads it through stage 3's corrections in `decisions.md`.
 2. **Generate every entity**, following the fork's `CLAUDE.md` "Adding an entity" for all the specs at once:
    1. `dotnet run --project tools/<Code>.Scaffolder -c Release -- generate --skip-api`
    2. The build: `dotnet build <Code>.Web.sln -c Release -p:ShouldRunNpmInstall=false -p:ShouldRunBuildScript=false`
-   3. Regenerate `Initial`: delete `<Code>.Infrastructure/Migrations/*`, then `dotnet ef migrations add Initial --project <Code>.Infrastructure --startup-project <Code>.API --configuration Release`. If deleting is refused, add an additive migration with the same command and a new name, and say so in `decisions.md` and the stage's notes.
+   3. **A migration.** The fork's `CLAUDE.md` makes deleting migration files a person's job, so intake never regenerates `Initial`. Add an additive migration named for the change, such as `ClientEntities`: `dotnet ef migrations add <Name> --project <Code>.Infrastructure --startup-project <Code>.API --configuration Release`, with a `decisions.md` line. The run-log note, the stage's chat message and checkpoint 2's notification ask the engineer to regenerate `Initial` before the first deployment.
    4. `dotnet run --project tools/<Code>.Scaffolder -c Release -- generate`
    5. The new screens' baselines, in the active theme (see Baselines).
-   6. The checks. The first `npm test` writes the new stories' Storybook snapshots, and that diff only adds lines.
+   6. The checks. The first `npm test` writes the new stories' Storybook snapshots, and that diff only adds lines. Check it with `git diff --patience --numstat` on the snapshot file, since git's default diff can show an add-only change as removed lines. A fix that changes an example after that first `npm test` rewrites the snapshots the stage wrote with `npm test -- -u`; the diff from the stage's start commit still only adds lines.
 
    Companion rules the specs can't state are the build's work, not intake's.
 3. **Remove Order.** Once the client's entities pass, commit the stage's work so far (as `Design intake stage 3: generate, work so far`), so what the command changes is the whole diff, then run:
    ```
    dotnet run --project tools/<Code>.Scaffolder -c Release -- ready orders
    ```
-   It removes the demo entity, sets `client.yaml`'s `ready.orders: removed`, and prints its follow-ups. Run them in order: regenerate `Initial` (as in step 2.3), run `generate`, run `npm test -- -u` (the Storybook snapshot diff only removes lines), then the checks. The home page loses Order's queues, so rewrite its baseline (see Baselines, `-g home`) before the screenshots. From here on, no screen shows "Orders".
+   It removes the demo entity, sets `client.yaml`'s `ready.orders: removed`, and prints its follow-ups. Run them in order, with an additive migration (as in step 2.3, such as `RemoveOrders`) where it says to regenerate `Initial`: the migration, `generate`, `npm test -- -u` (the Storybook snapshot diff only removes lines, by `git diff --patience --numstat`), then the checks. The home page loses Order's queues, so rewrite its baselines (see Baselines, `-g home`) before the screenshots. From here on, no screen shows "Orders".
 
    When `client.yaml` already says `ready.orders: removed`, an earlier try at this stage removed Order. Skip `ready orders`, which refuses a second run with exit 1, and run its follow-ups.
-4. **Home queues.** conductor-implementer writes each entity's queues companion, `<Code>.React/src/app/<plural in kebab case>/<camelPlural>Queues.ts`, from the personas' questions ("what needs my approval", "what failed", "what's due"), so the home page answers them for each persona. Every filter a queue sets must be one the list shows that user, which `homeQueues.test.ts` checks. An entity no persona's question touches keeps its empty list. The home page's baseline is rewritten again.
+4. **Home queues.** One conductor-implementer unit, `home queues`, on `intake-generate` (see Working with agents), writes each entity's queues companion, `<Code>.React/src/app/<plural in kebab case>/<camelPlural>Queues.ts`, from the personas' questions ("what needs my approval", "what failed", "what's due"), so the home page answers them for each persona. Every filter a queue sets must be one the list shows that user, which `homeQueues.test.ts` checks. An entity no persona's question touches keeps its empty list. A question that touches an entity but that no list filter can answer, because it needs a field the spec doesn't have (such as when a record was created), is hand-built: the implementer's report names it, and so does the run-log note. The harness's home state for each role shows that role's queues, so the home's baselines are rewritten again (see Baselines, `-g home`).
+
+   The unit's commit is `Design intake stage 3: generate, home queues`. Its checks are the React checks (`npm run lint && npm run typecheck && npm test`, which runs `homeQueues.test.ts`) and `npm run screens -- --active`. If step 5 then fails in the unit's files, the unit runs again: `git switch -C intake-generate main`, the failure to the implementer, its checks, and the merge, as another round.
 5. **The last checks, then the push.** Run the checks. When every one passes, commit and push: this is intake's first push.
 
-**Writes:** the corrected pack, specs and roles; the generated slices and their companions; the queues; the migration; the OpenAPI document and API types; the Storybook snapshots and baselines; `client.yaml`'s `ready.orders`.
+**Writes:** the corrected pack, specs and roles, the links in the specs among them; the generated slices and their companions; the queues; the migrations; the OpenAPI document and API types; the Storybook snapshots and baselines; `client.yaml`'s `ready.orders`.
 
-**Passes when** `generate --check` passes, `ready.orders` is `removed`, and every check passes.
+**Passes when** `generate --check` passes, `ready.orders` is `removed`, every link the generator can write is declared, and every check passes.
 
-**Sends**, only when the corrections added questions: "Entities generated and pushed: <n> entities, <n> corrections applied. <n> questions added; the riskiest: Q-<n>, <question>."
+**Sends**, only when the corrections added questions: "Entities generated and pushed: <n> entities, <n> corrections applied. <n> questions added; the riskiest: Q-<n>, <question>." The chat message adds: "Before the first deployment, regenerate Initial: intake added <n> migrations."
 
 ## Stage 4: Brief
 
@@ -190,7 +204,7 @@ Steps:
 
 **Passes when** every direction passes the contract, contrast and README tests; the every-theme run passes, fingerprint included; the React checks pass; each direction has its 8 captures and a complete file with the steward's notes; and the README is written.
 
-**Sends** checkpoint 2's notification: "Directions are ready to pick: docs/project/design/directions/README.md. <n> directions: <letter and name>, ... Steward's flags: <one line each, or none>."
+**Sends** checkpoint 2's notification: "Directions are ready to pick: docs/project/design/directions/README.md. <n> directions: <letter and name>, ... Steward's flags: <one line each, or none>." When intake added migrations, it ends: "Before the first deployment, regenerate Initial: intake added <n> migrations." The call ends with `design-intake: waiting on docs/project/design/directions/README.md`.
 
 ## Checkpoint 2
 
@@ -240,14 +254,15 @@ Done by design-director.
    - API: each endpoint it calls, as `<METHOD> /api/<route>`, marked `existing` or `stub to write`.
    - State: `exists` (the generator wrote it), `planned` (hand-built, not started), `prototype` (stage 7 built it on stubs) or `built` (the build filled its endpoints).
 
-   The second has one row per link between entities in the approved domain model:
+   The second has one row per link in the approved domain model's "Links to" column, a hand-built entity's links included, and checks that stage 3 declared each one it could:
    ```
-   |From entity|Field|Points at|Required|Adds|
+   |From entity|Field|Points at|Required|Made by|
    |-|-|-|-|-|
    ```
-   - Adds: the pickers, filters, columns and detail links the link brings, and on which screens.
+   - Points at: the entity, or what it points at when that is no entity, such as the user.
+   - Made by: `spec` for a link stage 3 declared as a `type: link` field, which `generate` turns into the pickers, filters, columns and detail links; or `hand-built: <why>` for one the generator can't write, such as a link on a child row, to the user, or to an entity with no spec. Read each `spec` row's field in its spec. A link the generator could write that no spec declares is `hand-built: not declared at stage 3`, with a `decisions.md` line, and the run-log note names it: the fork's `CLAUDE.md` "Adding a link" adds it later as a spec change and `generate`.
 
-   The build, or the generator once it writes links, works from this table.
+   The build works from the `hand-built` rows.
 
 **Writes:** `src/themes/<lower>/`, `client.yaml` and `.env`, the brand mark, `open-questions.md`, the specs' tones and what `generate` rewrites, the route groups, the baselines, `conventions.md` and `screen-inventory.md`.
 
@@ -281,7 +296,7 @@ For each unit:
 
 The unit's own commit moves its inventory row to `prototype`. The unit's checks are the build, its integration tests, `npm run lint && npm run typecheck && npm test`, `npm run check:api` and `npm run screens -- --active`. A unit passes when its checks pass and the steward has reviewed it. Only then does it merge into `main`. The checks run once more at the stage's end.
 
-**No links, and nothing that blocks them.** A unit never adds a link between entities, never ejects a generated file, and never hand-writes a picker or filter into a generated page. A generated form or list shows only its entity's own fields until the link is added. That keeps every link addable later as a spec change and `generate`. The links wait in the inventory's links table.
+**No links of its own.** Stage 3 declared every link the generator can write. A unit never adds a link field to a spec, never ejects a generated file, and never hand-writes a picker or filter into a generated page. The inventory's `hand-built` links wait for the build.
 
 **Writes:** the endpoints, models and permissions, with their integration tests; the OpenAPI document and API types; the pages, routes and nav items; the fixtures, harness answers and screen states; the stories, Vitest tests, Storybook snapshots and baselines; `default-roles.json`; and the inventory rows.
 
