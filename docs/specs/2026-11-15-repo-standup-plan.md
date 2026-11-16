@@ -211,6 +211,7 @@ Also: a foreground `sleep` is blocked. The full results are in the shared notes 
   - `Reads_both_run_log_shapes`:
     - `- 2026-11-20 | design-intake 3 generate | 41 min | unknown tokens | 6 entities` gives `HasTime == false`, `Tokens == null` and `Outcome == null`.
     - `- 2026-11-21 14:05 | repo-standup workflows U-7 | 38 min | 212000 tokens | merged: opus 150000, sonnet 62000` gives the unit, the outcome and both models.
+  - `Indented_lines_belong_to_the_line_above`: a design intake stage 7 line followed by two indented `  - ` lines gives one `RunLogLine` whose `Note` holds both, and no diagnostic.
   - `Reads_modules_from_client_yaml`: `modules: []` gives none.
   - `Missing_pack_files_are_empty_not_errors`: only `requirements.md` present gives empty lists and no diagnostic.
 - [ ] **Step 2: Run them and see them fail.** `dotnet test tools/PellFramework.Scaffolder.Tests -c Release --filter "FullyQualifiedName~Scoreboard"`.

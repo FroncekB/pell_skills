@@ -199,7 +199,7 @@ Each finding of medium severity or more becomes a `fix` unit with its risk. Lowe
 
 |Kind|One unit per|Risk at start|
 |-|-|-|
-|`link`|row of the screen inventory's links table not yet in a spec: a spec edit and `generate`|generated|
+|`link`|row of the screen inventory's links table not yet in a spec: a spec edit and `generate`. Design intake's stage 3 now declares links as `type: link` in the specs, so there are usually none.|generated|
 |`workflow`|workflow (`WF-<n>`), or a group of its steps when it has more than about 8 in-scope requirements. It replaces the `NotBuiltException` stubs its screens call, writes the business rules, removes the `test.fail()` marks of the scenarios it makes pass, and writes tagged integration and unit tests for the requirements proven below the UI.|standard, or high|
 |`rule`|entity, for in-scope requirements in no workflow|standard, or high|
 |`integration`|integration (`INT-<n>`). Its first dependency is an open question asking for sandbox access, kept in user secrets, never the repo. Its `Blocks` line lists every requirement that depends on the integration, so the unit and those requirements wait, Blocked-on-access, until the engineer answers. Nothing is built against an API the run can't call **(Brandon)**.|high|
@@ -369,6 +369,7 @@ Verdict is `pass` or `fail`. Evidence names the captures.
 - The note ends with the tokens by model (`opus <n>, sonnet <n>`).
 - When the conductor's own tokens are unknown, the note says `workers only`.
 - The command reads both line shapes.
+- Design intake writes a list in a note as indented lines under its run-log line, for example stage 7's unflagged design-review findings. The command treats those lines as part of the line above them.
 
 **`decisions.md`** and **`open-questions.md`** use design intake's formats unchanged. The orchestrator appends, never rewrites.
 
