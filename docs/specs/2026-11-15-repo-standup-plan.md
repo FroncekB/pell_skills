@@ -136,7 +136,7 @@ A check, not code. Its results set the token accounting (Task 12) and the notifi
 - [ ] **Step 1: Make a scratch fork.**
   - From a framework worktree at `react`, run the fork tool into an empty folder that has had `git init`, such as `Repo-Standup-Skill/repo-standup-platform-check`, with `--repo pellsoftware/platform-check`.
   - Commit the fork. Add no remote.
-  - Install the guard as Task 13's setup will: `guard.mjs`, `shell-words.mjs`, `pre-push.mjs` and `client-repo` into `.claude/repo-standup/`, `settings.local.json` into `.claude/`, and the `pre-push` shim into `.git/hooks/`. Add `.claude/repo-standup/` and `.claude/settings.local.json` to `.git/info/exclude`.
+  - Install the guard as Task 13's setup will: `guard.mjs`, `shell-words.mjs`, `protected-paths.mjs`, `pre-push.mjs` and `client-repo` into `.claude/repo-standup/`, `settings.local.json` into `.claude/`, and the `pre-push` shim into `.git/hooks/`. Add `.claude/repo-standup/` and `.claude/settings.local.json` to `.git/info/exclude`.
 - [ ] **Step 2: Ask Brandon** to open a Claude Code session in that folder with auto mode on, and Remote Control connected.
 - [ ] **Step 3: In that session, check and record:**
   1. `git push --force --dry-run repo-standup-guard-check main` is denied with the canary reason, both through the Bash tool and through the PowerShell tool.
@@ -528,7 +528,7 @@ Every file below is a prompt. Each task ends with `claude plugin validate ./plug
 **`SKILL.md` holds**, kept short, the spec's sections as rules:
 - what the skill is
 - setup, once per fork:
-  - copy `hooks/guard.mjs`, `hooks/shell-words.mjs` and `hooks/pre-push.mjs` into `.claude/repo-standup/`, and `hooks/settings.local.json` into `.claude/`
+  - copy `hooks/guard.mjs`, `hooks/shell-words.mjs`, `hooks/protected-paths.mjs` and `hooks/pre-push.mjs` into `.claude/repo-standup/`, and `hooks/settings.local.json` into `.claude/`
   - write `client.yaml`'s `repository.bitbucket` to `.claude/repo-standup/client-repo`, the only place both guard layers read the allowed repo from; with no such file every push is denied. The copies must be made before the guard is live, since it denies writes to these paths.
   - copy `hooks/pre-push` into `.git/hooks/pre-push`; when `core.hooksPath` is set, stop and tell the engineer, since git would skip that hook
   - add `.claude/repo-standup/` and `.claude/settings.local.json` to `.git/info/exclude`
