@@ -146,6 +146,14 @@ A check, not code. Its results set the token accounting (Task 12) and the notifi
 - [ ] **Step 4: Write the results** to `project-3-platform-check.md` in the shared notes folder, outside both repos. If item 2 fails, ask Brandon what the fallback is before Task 13. If item 4 fails, Task 12's run-log lines carry `workers only`.
 - [ ] **Step 5: Delete the scratch folder.** No commit in either repo.
 
+**Result (2026-11-16, with Brandon).**
+1. The guard: the canary is denied in Bash and in PowerShell, and the normal commands run.
+2. The push notification: the tool exists, but returned "mobile push is disabled in /config", because Brandon has it off. His call: assume it works.
+3. A worker's tokens arrive as `subagent_tokens` in its completion notice's `<usage>` block.
+4. The session reads its own usage with `mcp__ccd_session_mgmt__get_usage`, a desktop-app tool loaded through ToolSearch.
+
+Also: a foreground `sleep` is blocked. The full results are in the shared notes folder's `project-3-platform-check.md`.
+
 # Part A: Framework (`pell_web_app_framework`, branch `orchestrator`)
 
 ### Task 3: Test results to files
@@ -465,7 +473,11 @@ Every file below is a prompt. Each task ends with `claude plugin validate ./plug
 - Create: `plugins/pell/skills/repo-standup/rates.json`
 
 **Interfaces:**
-- Consumes the shapes Task 4's reader parses, and Task 2's results on token accounting.
+- Consumes the shapes Task 4's reader parses, and Task 2's results on token accounting. A unit's tokens are two figures added together:
+  - every `subagent_tokens` from the completion notices of the workers it dispatched
+  - the conductor's own share: the difference in `mcp__ccd_session_mgmt__get_usage` between the unit's start and its end
+
+  When that tool isn't loadable, the line's note says `workers only`.
 - Produces the formats every later task and the scoreboard rely on:
   - **`status.md`**, with the spec's lines in order.
   - **`queue.md`**, with the header `|Unit|Kind|Title|Requirements|Depends on|Risk|State|Attempts|Parks|`, the kinds, risks and states. An `integration` unit's `Depends on` lists its `INT-<n>` and its access `Q-<n>`.
@@ -535,6 +547,10 @@ Every file below is a prompt. Each task ends with `claude plugin validate ./plug
   - ask for the stop date
   - write `status.md`
 - the guard check
+- the notification check, from Task 2:
+  - At setup, and again at any session start where the last notification wasn't sent, the skill sends one test `PushNotification`.
+  - If the tool reports mobile push disabled, it tells the engineer to turn on mobile push in Claude Code's config and connect Remote Control. The run carries on, with notifications going to chat and the run log until then.
+- never a foreground `sleep`: any wait uses a background command or Monitor
 - where the run stands (the spec's table)
 - phases 2 to 5 through design intake
 - where the engineer answers: fetch and fast-forward at each unit boundary, and rebase on a rejected push
