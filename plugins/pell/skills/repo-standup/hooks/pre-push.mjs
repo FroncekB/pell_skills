@@ -1,10 +1,10 @@
 // Git pre-push hook, the second layer behind guard.mjs. Git hands it the URL it
 // really pushes to and each ref, so it also catches pushes from scripts and
-// aliases that the command-text layer cannot see. Node standard library only.
+// aliases that the command-text layer cannot see. It reads the client repo from
+// .claude/repo-standup/client-repo, which setup pins. Node standard library only.
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
-import { FRAMEWORK_REPO, PREFIX, readClientRepo, repoFromUrl } from './guard.mjs';
+import { FRAMEWORK_REPO, PREFIX, readClientRepo, repoFromUrl, runsDirectly } from './guard.mjs';
 
 const ZERO = /^0+$/;
 const refuse = (why) => ({ allow: false, reason: PREFIX + why });
@@ -15,7 +15,7 @@ export function decidePush(url, lines, { clientRepo, isAncestor }) {
   const name = repoFromUrl(url ?? '');
   if (name === FRAMEWORK_REPO) return refuse('the push URL is the framework repo');
   if (!clientRepo || name !== clientRepo.toLowerCase()) {
-    return refuse(`the push URL is not the client repo (${clientRepo ?? 'no client.yaml repository.bitbucket'})`);
+    return refuse(`the push URL is not the client repo (${clientRepo ?? 'none pinned in .claude/repo-standup/client-repo'})`);
   }
   for (const line of lines) {
     const fields = line.trim().split(/\s+/);
@@ -36,11 +36,11 @@ function git(args) {
 }
 
 function main() {
-  const url = process.argv[3];
+  const url = (process.argv[3] ?? '').trim();
   let result;
   try {
     const top = git(['rev-parse', '--show-toplevel']).stdout.trim();
-    const lines = readFileSync(0, 'utf8').split(/\r?\n/).filter(Boolean);
+    const lines = readFileSync(0, 'utf8').split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     result = decidePush(url, lines, {
       clientRepo: top ? readClientRepo(top) : null,
       isAncestor: (remoteSha, localSha) => {
@@ -57,4 +57,4 @@ function main() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+if (runsDirectly(import.meta.url)) main();

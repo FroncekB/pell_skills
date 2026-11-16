@@ -88,9 +88,10 @@ test('integration: the installed hook refuses a push whose URL is not the client
   git(work, 'config', 'user.email', 't@example.test');
   git(work, 'config', 'user.name', 't');
   git(work, 'config', 'commit.gpgsign', 'false');
-  writeFileSync(path.join(work, 'client.yaml'), 'repository:\n  bitbucket: pellsoftware/acme\n');
   const fork = path.join(work, '.claude', 'repo-standup');
   mkdirSync(fork, { recursive: true });
+  writeFileSync(path.join(fork, 'client-repo'), 'pellsoftware/acme\n');
+  copyFileSync(path.join(HOOKS, 'shell-words.mjs'), path.join(fork, 'shell-words.mjs'));
   copyFileSync(path.join(HOOKS, 'guard.mjs'), path.join(fork, 'guard.mjs'));
   copyFileSync(path.join(HOOKS, 'pre-push.mjs'), path.join(fork, 'pre-push.mjs'));
   const hook = path.join(work, '.git', 'hooks', 'pre-push');
@@ -101,6 +102,24 @@ test('integration: the installed hook refuses a push whose URL is not the client
   assert.equal(git(work, 'commit', '-q', '-m', 'init').status, 0);
   const push = git(work, 'push', 'origin', 'main');
   assert.notEqual(push.status, 0, 'the push should be refused');
-  assert.match(push.stderr, /repo-standup guard: /);
+  assert.match(push.stderr, /repo-standup guard: the push URL is not the client repo/);
   assert.equal(git(root, '--git-dir', remote, 'rev-parse', '--verify', '-q', 'refs/heads/main').status, 1);
+});
+
+test('the hook trims CR from its URL argument and stdin lines (a CRLF checkout)', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'pre-push-cr-'));
+  assert.equal(git(dir, 'init', '-q').status, 0);
+  mkdirSync(path.join(dir, '.claude', 'repo-standup'), { recursive: true });
+  writeFileSync(path.join(dir, '.claude', 'repo-standup', 'client-repo'), 'pellsoftware/acme\n');
+  const r = spawnSync(
+    'node',
+    [path.join(HOOKS, 'pre-push.mjs'), 'origin', 'git@bitbucket.org:pellsoftware/acme.git\r'],
+    { cwd: dir, encoding: 'utf8', input: `refs/heads/main ${A} refs/heads/main ${ZERO}\r\n` },
+  );
+  assert.equal(r.status, 0, r.stderr);
+});
+
+test('the pre-push shim is pinned to LF endings in .gitattributes', () => {
+  const attributes = readFileSync(fileURLToPath(new URL('../../.gitattributes', import.meta.url)), 'utf8');
+  assert.match(attributes, /^plugins\/pell\/skills\/repo-standup\/hooks\/pre-push text eol=lf$/m);
 });

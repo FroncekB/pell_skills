@@ -1,44 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { decide } from '../../plugins/pell/skills/repo-standup/hooks/guard.mjs';
-
-const GUARD = fileURLToPath(
-  new URL('../../plugins/pell/skills/repo-standup/hooks/guard.mjs', import.meta.url),
-);
-const SETTINGS = fileURLToPath(
-  new URL('../../plugins/pell/skills/repo-standup/hooks/settings.local.json', import.meta.url),
-);
-const PREFIX = 'repo-standup guard: ';
-const CLIENT = 'pellsoftware/acme';
-const CLIENT_ORIGIN = 'git@ssh.bitbucket.org:pellsoftware/acme.git';
-const FRAMEWORK_ORIGIN = 'git@ssh.bitbucket.org:pellsoftware/pell_web_app_framework.git';
-
-// A fake repo. `urls` are what `git remote get-url --push --all origin` prints;
-// `overrides` maps a -C folder to its own list.
-function fakeRepo({ urls = [CLIENT_ORIGIN], overrides = {}, clientRepo = CLIENT, push = [], mirror = false } = {}) {
-  return {
-    clientRepo,
-    pushUrlsFor: (dir) => (dir in overrides ? overrides[dir] : urls),
-    pushConfigFor: () => ({ push, mirror }),
-  };
-}
-
-function allowed(command, repo = fakeRepo(), tool = 'Bash') {
-  const result = decide(tool, command, repo);
-  assert.equal(result.allow, true, `expected allow: ${command} (${result.reason})`);
-}
-
-function denied(command, repo = fakeRepo(), tool = 'Bash', reason) {
-  const result = decide(tool, command, repo);
-  assert.equal(result.allow, false, `expected deny: ${command}`);
-  assert.ok(result.reason.startsWith(PREFIX), `bad reason prefix: ${result.reason}`);
-  if (reason) assert.equal(result.reason, reason);
-}
+import {
+  PREFIX, CLIENT_ORIGIN, FRAMEWORK_ORIGIN, SETTINGS,
+  fakeRepo, allowed, denied, runEntry, git, makeClientDir, pushIn,
+} from './helpers.mjs';
 
 const ORIGINS = [
   'git@ssh.bitbucket.org:pellsoftware/acme.git',
@@ -260,38 +227,9 @@ test('allows commands that are not a push', () => {
 test('the hook command uses the absolute project path', () => {
   const settings = JSON.parse(readFileSync(SETTINGS, 'utf8'));
   const entry = settings.hooks.PreToolUse[0];
-  assert.equal(entry.matcher, 'Bash|PowerShell');
+  assert.equal(entry.matcher, 'Bash|PowerShell|Edit|Write|NotebookEdit');
   assert.equal(entry.hooks[0].command, 'node "$CLAUDE_PROJECT_DIR/.claude/repo-standup/guard.mjs"');
 });
-
-function runEntry(payload, env = {}) {
-  return spawnSync('node', [GUARD], {
-    input: JSON.stringify(payload),
-    encoding: 'utf8',
-    env: { ...process.env, ...env },
-  });
-}
-
-function git(cwd, ...args) {
-  const r = spawnSync('git', args, { cwd, encoding: 'utf8' });
-  assert.equal(r.status, 0, `git ${args.join(' ')}: ${r.stderr}`);
-  return r.stdout;
-}
-
-function makeClientDir(origin = 'git@bitbucket.org:pellsoftware/acme.git') {
-  const dir = mkdtempSync(path.join(tmpdir(), 'guard-entry-'));
-  git(dir, 'init', '-q');
-  git(dir, 'remote', 'add', 'origin', origin);
-  writeFileSync(path.join(dir, 'client.yaml'), 'repository:\n  bitbucket: pellsoftware/acme\n');
-  return dir;
-}
-
-function pushIn(dir, command = 'git push origin main') {
-  return runEntry(
-    { tool_name: 'Bash', tool_input: { command }, cwd: dir },
-    { CLAUDE_PROJECT_DIR: dir },
-  );
-}
 
 test('entry point prints the deny object for a denied push', () => {
   const out = runEntry({ tool_name: 'Bash', tool_input: { command: 'git push --force origin main' }, cwd: '.' });

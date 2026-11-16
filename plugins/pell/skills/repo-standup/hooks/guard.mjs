@@ -1,14 +1,18 @@
 // PreToolUse hook: deny any `git push` that is not "push only to the client
 // repo's main, never forced". It recognizes one push shape and denies anything
-// else that might push. Node standard library only.
+// else that might push. It is aimed at an agent's mistakes and plausible
+// workarounds, not at an adversary: the only complete enforcement is Bitbucket's
+// branch restrictions. Node standard library only.
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
+import { parseShell, stripRedirections } from './shell-words.mjs';
 
 export const PREFIX = 'repo-standup guard: ';
 export const FRAMEWORK_REPO = 'pellsoftware/pell_web_app_framework';
 const CANARY = 'repo-standup-guard-check';
+const EDIT_TOOLS = new Set(['Edit', 'Write', 'NotebookEdit']);
 const deny = (why) => ({ allow: false, reason: PREFIX + why });
 
 // git subcommands that run no alias. Anything else may be an alias for push.
@@ -27,119 +31,152 @@ const PUSH_OPTIONS = new Set([
   '-u', '--set-upstream', '-q', '--quiet', '-v', '--verbose', '--porcelain', '--progress', '--no-progress',
 ]);
 
+// Long options that run a program; git accepts any unambiguous prefix of them.
+const RUNNER_OPTIONS = ['--upload-pack', '--receive-pack', '--exec'];
+
+// git config keys that may be written. Every other write is denied.
+const SAFE_CONFIG_KEYS =
+  /^(user\.(name|email)|core\.(autocrlf|longpaths|eol|filemode|ignorecase)|pull\.(rebase|ff)|init\.defaultbranch|fetch\.prune|commit\.gpgsign|rerere\.enabled|merge\.ff)$/;
+const CONFIG_READ_FLAGS = new Set([
+  '--get', '--get-all', '--get-regexp', '--get-urlmatch', '-l', '--list', '--get-color', '--get-colorbool',
+  '--show-origin', '--show-scope', '--name-only', '-h', '--help',
+]);
+const CONFIG_WRITE_FLAGS = new Set(['--add', '--unset', '--unset-all', '--replace-all']);
+
 // Programs that run another command line from a string or from their arguments.
 const WRAPPER = /(^|[\s\\/])(env|xargs|bash|sh|zsh|ksh|dash|cmd|pwsh|powershell|node|python3?|ruby|perl|sudo|time|nohup|command|exec|eval|iex|invoke-expression|start|start-process|call|nice|timeout|watch|source)(\.exe)?(\s|$)/i;
+const INTERPRETERS = new Set(['sh', 'bash', 'zsh', 'ksh', 'dash', 'pwsh', 'powershell', 'cmd', 'iex', 'invoke-expression']);
+const ALWAYS_DENIED_COMMANDS = new Set(['iex', 'invoke-expression', 'eval']);
 
 // Quotes, backslashes, backticks and ^ vanish before a program sees its arguments.
 const normalize = (text) => text.replace(/["'\\`^]/g, '');
 const namesPush = (text) => /\bpush\b/i.test(normalize(text));
+const namesGit = (text) => /\bgit(\.exe)?\b/i.test(normalize(text));
+const commandName = (value) => value.split(/[\\/]/).pop().toLowerCase().replace(/\.exe$/, '');
+const plain = (word) => word.raw === word.value;
 
-// Split on && || ; | & and newlines outside quotes. `&` right after `>` or `<`
-// is a redirection (2>&1), not a separator.
-function splitSegments(command) {
-  const segments = [];
-  let current = '';
-  let quote = null;
-  for (let i = 0; i < command.length; i++) {
-    const ch = command[i];
-    if (quote) {
-      if (ch === quote) quote = null;
-      current += ch;
-    } else if (ch === '"' || ch === "'") {
-      quote = ch;
-      current += ch;
-    } else if (ch === '\n' || ch === ';' || ch === '|' || (ch === '&' && !/[<>]/.test(command[i - 1] ?? ''))) {
-      segments.push(current);
-      current = '';
-    } else {
-      current += ch;
-    }
+// Paths the agent may never write: git's own files, the guard, and its settings.
+const PROTECTED_PATH = /(^|[\s/"'=:(])\.(git|claude\/repo-standup|claude\/settings\.local\.json)(\/|$|[\s"');&|])/i;
+const protectedPath = (text) => {
+  const slashed = text.replace(/\\/g, '/');
+  return PROTECTED_PATH.test(slashed) || PROTECTED_PATH.test(slashed.replace(/["'`^]/g, ''));
+};
+
+function decideEdit(filePath) {
+  const p = String(filePath ?? '').replace(/\\/g, '/');
+  if (/(^|\/)\.git(\/|$)/.test(p) || /(^|\/)\.claude\/repo-standup(\/|$)/.test(p) || /(^|\/)\.claude\/settings\.local\.json$/.test(p)) {
+    return deny('writes under .git/, .claude/repo-standup/ and .claude/settings.local.json are not allowed');
   }
-  segments.push(current);
-  return segments
-    .map((s) => s.trim().replace(/^[({\s]+/, '').replace(/[)}\s]+$/, ''))
-    .filter(Boolean);
+  return { allow: true };
 }
 
-// Split a segment into words on whitespace outside quotes. Quotes stay in the words.
-function rawTokens(segment) {
-  const tokens = [];
-  let current = '';
-  let quote = null;
-  for (const ch of segment) {
-    if (quote) {
-      if (ch === quote) quote = null;
-      current += ch;
-    } else if (ch === '"' || ch === "'") {
-      quote = ch;
-      current += ch;
-    } else if (/\s/.test(ch)) {
-      if (current) tokens.push(current);
-      current = '';
-    } else {
-      current += ch;
+// The checks for a git subcommand other than push.
+function checkRunners(sub, args) {
+  const values = args.map((a) => a.value);
+  for (const v of values) {
+    const name = v.split('=')[0];
+    if (v.startsWith('--') && name.length >= 5 && RUNNER_OPTIONS.some((o) => o.startsWith(name))) {
+      return deny(`git option ${name} runs a program`);
+    }
+    if (sub === 'rebase' && /^-x/.test(v)) return deny('git rebase -x runs a command');
+    if ((sub === 'clone' || sub === 'ls-remote') && /^-u/.test(v)) return deny(`git ${sub} -u runs a program`);
+    if (sub === 'grep' && (/^-O/.test(v) || (v.startsWith('--') && name.length >= 6 && '--open-files-in-pager'.startsWith(name)))) {
+      return deny('git grep -O runs a program');
     }
   }
-  if (current) tokens.push(current);
-  return tokens;
+  if (sub === 'submodule' && values.includes('foreach')) return deny('git submodule foreach runs a command');
+  if (sub === 'bisect' && values.includes('run')) return deny('git bisect run runs a command');
+  if (sub === 'config') return checkConfig(values);
+  return null;
 }
 
-const unquote = (token) => token.replace(/["']/g, '');
-const isGit = (word) => /^git(\.exe)?$/i.test(word.split(/[\\/]/).pop());
-
-// Index of git's subcommand behind its global options, or -1.
-function subcommandIndex(tokens) {
-  let i = 1;
-  while (i < tokens.length && tokens[i].startsWith('-')) {
-    i += ['-C', '-c', '--namespace', '--exec-path', '--git-dir', '--work-tree'].includes(tokens[i]) ? 2 : 1;
+function checkConfig(values) {
+  if (values.some((v) => ['-e', '--edit', '-f', '--blob', '--rename-section', '--remove-section'].includes(v) || v.startsWith('--file'))) {
+    return deny('this git config form is not allowed');
   }
-  return i < tokens.length ? i : -1;
+  if (values.some((v) => CONFIG_READ_FLAGS.has(v))) return null;
+  const keys = values.filter((v) => !v.startsWith('-'));
+  const writes = keys.length > 1 || values.some((v) => CONFIG_WRITE_FLAGS.has(v));
+  if (!writes) return null;
+  if (!keys[0] || !SAFE_CONFIG_KEYS.test(keys[0].toLowerCase())) return deny(`git config may not write ${keys[0] ?? 'that key'}`);
+  return null;
 }
 
 // Judge one segment. Returns { allow: false, reason }, { push } for a push
-// segment's raw tokens and subcommand index, or null for a harmless segment.
-function judgeSegment(segment) {
-  const tokens = rawTokens(segment);
-  if (tokens.length === 0) return null;
-  if (/[$%]/.test(tokens[0])) return deny('the command word is expanded');
-  const pushNamed = namesPush(segment);
+// segment, or null for a harmless one.
+function judgeSegment(seg) {
+  if (seg.dynamicCall) return deny('dynamic execution: & followed by a variable or expression');
+  let words = stripRedirections(seg.words);
+  if (words.length === 0) return null;
+  const text = words.map((w) => w.raw).join(' ');
+  const pushNamed = namesPush(text);
+  const gitNamed = namesGit(text);
 
-  if (!isGit(unquote(tokens[0]))) {
+  let assigns = 0;
+  while (assigns < words.length && /^[A-Za-z_]\w*=/.test(words[assigns].raw)) assigns += 1;
+  if (assigns > 0) {
+    if (assigns === words.length) return null;
+    if (pushNamed || gitNamed) return deny('an environment assignment before a command that names git or push');
+    words = words.slice(assigns);
+  }
+
+  // PowerShell assignment: judge what follows the `=` as the command.
+  const first = words[0].raw;
+  const inline = /^\$[\w:{}.]+(?:\+|-)?=(.*)$/s.exec(first);
+  if (inline || (/^\$[\w:{}.]+$/.test(first) && /^(\+|-)?=$/.test(words[1]?.raw ?? ''))) {
+    const rest = words.slice(inline ? 1 : 2);
+    if (inline && inline[1]) rest.unshift({ raw: inline[1], value: inline[1] });
+    return rest.length > 0 ? judgeSegment({ words: rest, piped: seg.piped, dynamicCall: false }) : null;
+  }
+
+  if (/[$%]/.test(first)) return deny('the command word is a variable or expression');
+  const name = commandName(words[0].value);
+  if (ALWAYS_DENIED_COMMANDS.has(name)) return deny(`${name} evaluates text as code`);
+  if (seg.piped && INTERPRETERS.has(name)) return deny('a pipe into an interpreter runs text as code');
+
+  if (name !== 'git') {
     if (pushNamed) return deny('a program other than git names push');
-    if (/\bgit(\.exe)?\b/i.test(normalize(segment)) && (WRAPPER.test(normalize(segment)) || /^[A-Za-z_]\w*=/.test(tokens[0]))) {
-      return deny('a wrapper runs git');
-    }
+    if (gitNamed && WRAPPER.test(normalize(text))) return deny('a wrapper runs git');
     return null;
   }
 
-  const at = subcommandIndex(tokens);
-  if (at === -1) return pushNamed ? deny('git names push without a subcommand') : null;
-  const sub = tokens[at];
-  if (!/^[a-z0-9-]+$/.test(sub) || !BUILTINS.has(sub)) return deny(`git subcommand "${sub}" is not a plain builtin`);
-  if (sub !== 'push') {
-    if (pushNamed && /\$\(|`/.test(segment)) return deny('command substitution next to push');
-    return null;
+  let at = 1;
+  const dirs = [];
+  while (at < words.length && words[at].raw.startsWith('-')) {
+    if (words[at].raw === '-C' && words[at + 1]) {
+      dirs.push(words[at + 1]);
+      at += 2;
+    } else if (at === words.length - 1 && ['--version', '--help'].includes(words[at].raw)) {
+      return null;
+    } else {
+      return deny(`git global option ${words[at].raw} is not allowed`);
+    }
   }
-  return { push: { tokens, at } };
+  if (at >= words.length) return pushNamed ? deny('git names push without a subcommand') : null;
+
+  const sub = words[at];
+  if (!/^[a-z0-9-]+$/.test(sub.raw) || !BUILTINS.has(sub.raw)) return deny(`git subcommand "${sub.raw}" is not a plain builtin`);
+  if (sub.raw !== 'push') return checkRunners(sub.raw, words.slice(at + 1));
+  return { push: { words, at, dirs } };
 }
 
 // Check a push segment's shape. Returns { dir } or { deny }.
-function checkPushShape({ tokens, at }) {
-  const before = tokens.slice(1, at);
+function checkPushShape({ words, at, dirs }) {
+  if (dirs.length > 1) return { deny: deny('git push with several -C options cannot be checked') };
   let dir = '.';
-  if (before.length === 2 && before[0] === '-C') {
-    dir = unquote(before[1]);
-    if (!dir || dir.startsWith('-') || /[$%{}*?[\]~`]/.test(dir)) return { deny: deny('the -C folder is not a literal path') };
-  } else if (before.length !== 0) {
-    return { deny: deny('git global options other than -C are not allowed with push') };
+  if (dirs.length === 1) {
+    const d = dirs[0];
+    const quoted = /^["']/.test(d.raw);
+    if (!d.value || d.value.startsWith('-') || /[$%{}*?[\]~`]/.test(d.value) || (!quoted && /\\/.test(d.raw))) {
+      return { deny: deny('the -C folder is not a literal path') };
+    }
+    dir = d.value;
   }
-
   const options = [];
   const positionals = [];
-  for (const arg of tokens.slice(at + 1)) {
-    if (arg === '2>&1') continue;
-    if (!/^[A-Za-z0-9:_-]+$/.test(arg)) return { deny: deny(`push argument "${arg}" is not plain text`) };
-    (arg.startsWith('-') ? options : positionals).push(arg);
+  for (const arg of words.slice(at + 1)) {
+    if (!/^[A-Za-z0-9:_-]+$/.test(arg.raw)) return { deny: deny(`push argument "${arg.raw}" is not plain text`) };
+    (arg.raw.startsWith('-') ? options : positionals).push(arg.raw);
   }
   const badOption = options.find((o) => !PUSH_OPTIONS.has(o));
   if (badOption) return { deny: deny(`push option ${badOption} is not allowed`) };
@@ -157,11 +194,21 @@ export function repoFromUrl(url) {
   return m ? m[1].toLowerCase() : null;
 }
 
+// `command` is the shell command line, or the file path for Edit, Write and NotebookEdit.
 export function decide(toolName, command, repo) {
-  const text = String(command ?? '');
-  if (text.includes(CANARY) && namesPush(text)) return deny('canary');
+  if (EDIT_TOOLS.has(toolName)) return decideEdit(command);
 
-  const segments = splitSegments(text);
+  const text = String(command ?? '');
+  const flat = normalize(text);
+  if (text.includes(CANARY) && namesPush(text)) return deny('canary');
+  if (/--no-verify|core\.hookspath/i.test(flat)) return deny('--no-verify and core.hooksPath are not allowed');
+  if (protectedPath(text)) return deny('commands may not name .git/, .claude/repo-standup/ or .claude/settings.local.json');
+
+  const { segments, problems } = parseShell(text);
+  if (problems.length > 0 && /\b(git|push)\b/i.test(flat)) {
+    return deny(`cannot classify the command (${problems[0]}), and it names git or push`);
+  }
+
   for (const segment of segments) {
     const verdict = judgeSegment(segment);
     if (!verdict) continue;
@@ -172,7 +219,7 @@ export function decide(toolName, command, repo) {
     if (segments.length !== 1) return deny('a push must be the only command, with no cd, env or other command around it');
 
     const client = repo.clientRepo ? repo.clientRepo.toLowerCase() : null;
-    if (!client) return deny('no client.yaml repository.bitbucket');
+    if (!client) return deny('no pinned client repo in .claude/repo-standup/client-repo');
     const urls = repo.pushUrlsFor(shape.dir);
     if (urls.length === 0) return deny('origin has no push URL');
     for (const url of urls) {
@@ -183,6 +230,7 @@ export function decide(toolName, command, repo) {
     const config = repo.pushConfigFor(shape.dir);
     if (config.push.length > 0) return deny('remote.origin.push is set');
     if (config.mirror) return deny('remote.origin.mirror is set');
+    if (config.submodules) return deny('the repo has submodules, which a push could recurse into');
   }
   return { allow: true };
 }
@@ -193,24 +241,28 @@ function runGit(cwd, args) {
   return { status: r.status, lines: r.stdout.split(/\r?\n/).filter(Boolean) };
 }
 
-// Reads repository.bitbucket from client.yaml with a line read, not a YAML parser.
+// The client repo as setup pinned it, from .claude/repo-standup/client-repo.
+// Never from client.yaml, which the agent can edit.
 export function readClientRepo(projectDir) {
-  let text;
   try {
-    text = readFileSync(path.join(projectDir, 'client.yaml'), 'utf8');
+    const line = readFileSync(path.join(projectDir, '.claude', 'repo-standup', 'client-repo'), 'utf8')
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .find(Boolean);
+    return line || null;
   } catch {
     return null;
   }
-  let inRepository = false;
-  for (const line of text.split(/\r?\n/)) {
-    if (/^repository:\s*(#.*)?$/.test(line)) inRepository = true;
-    else if (/^\S/.test(line)) inRepository = false;
-    else if (inRepository) {
-      const m = /^\s+bitbucket:\s*(.*)$/.exec(line);
-      if (m) return m[1].replace(/\s+#.*$/, '').trim().replace(/^["']|["']$/g, '') || null;
-    }
+}
+
+// True when this module is the script being run, even through a junction or symlink.
+export function runsDirectly(metaUrl) {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(fileURLToPath(metaUrl)) === realpathSync(process.argv[1]);
+  } catch {
+    return false;
   }
-  return null;
 }
 
 function denyOutput(reason) {
@@ -225,42 +277,64 @@ function denyOutput(reason) {
   );
 }
 
+// Builds the real repo lookups. Each throws when git cannot answer, which the
+// caller turns into a deny.
+function realRepo(cwd) {
+  const at = (dir) => path.resolve(cwd, dir || '.');
+  const config = (where, key, extra = []) => {
+    const r = runGit(where, ['config', ...extra, '--get-all', key]);
+    if (r.status !== 0 && r.status !== 1) throw new Error('git config failed');
+    return r.lines;
+  };
+  return {
+    get clientRepo() {
+      const top = process.env.CLAUDE_PROJECT_DIR || runGit(cwd, ['rev-parse', '--show-toplevel']).lines[0];
+      return top ? readClientRepo(top) : null;
+    },
+    pushUrlsFor(dir) {
+      const r = runGit(at(dir), ['remote', 'get-url', '--push', '--all', 'origin']);
+      if (r.status !== 0) throw new Error('git remote get-url failed');
+      return r.lines;
+    },
+    pushConfigFor(dir) {
+      const where = at(dir);
+      const top = runGit(where, ['rev-parse', '--show-toplevel']).lines[0];
+      const recursing = ['push.recurseSubmodules', 'submodule.recurse']
+        .flatMap((key) => config(where, key))
+        .some((v) => !['false', 'no', 'check', 'off', '0'].includes(v.toLowerCase()));
+      return {
+        push: config(where, 'remote.origin.push'),
+        mirror: config(where, 'remote.origin.mirror', ['--type=bool']).includes('true'),
+        submodules: recursing || Boolean(top && existsSync(path.join(top, '.gitmodules'))),
+      };
+    },
+  };
+}
+
 function main() {
   let input;
   try {
-    input = JSON.parse(readFileSync(0, 'utf8'));
+    input = JSON.parse(readFileSync(0, 'utf8').replace(/^\uFEFF/, ''));
   } catch {
+    denyOutput(`${PREFIX}the hook input did not parse`);
     return;
   }
-  const command = input?.tool_input?.command;
-  if (typeof command !== 'string' || !/\b(git|push)\b/i.test(normalize(command))) return;
+  const tool = input?.tool_name;
+  const toolInput = input?.tool_input ?? {};
+  const target = EDIT_TOOLS.has(tool) ? (toolInput.file_path ?? toolInput.notebook_path ?? toolInput.path) : toolInput.command;
+  if (tool !== 'Bash' && tool !== 'PowerShell' && !EDIT_TOOLS.has(tool)) return;
+  if (typeof target !== 'string') {
+    denyOutput(`${PREFIX}the tool call has no ${EDIT_TOOLS.has(tool) ? 'file path' : 'command'} to judge`);
+    return;
+  }
   try {
-    const cwd = path.resolve(input.cwd || '.');
-    const resolve = (dir) => path.resolve(cwd, dir || '.');
-    const repo = {
-      get clientRepo() {
-        const top = process.env.CLAUDE_PROJECT_DIR || runGit(cwd, ['rev-parse', '--show-toplevel']).lines[0];
-        return top ? readClientRepo(top) : null;
-      },
-      pushUrlsFor(dir) {
-        const r = runGit(resolve(dir), ['remote', 'get-url', '--push', '--all', 'origin']);
-        if (r.status !== 0) throw new Error('git remote get-url failed');
-        return r.lines;
-      },
-      pushConfigFor(dir) {
-        const where = resolve(dir);
-        const push = runGit(where, ['config', '--get-all', 'remote.origin.push']);
-        if (push.status !== 0 && push.status !== 1) throw new Error('git config failed');
-        const mirror = runGit(where, ['config', '--type=bool', '--get-all', 'remote.origin.mirror']);
-        if (mirror.status !== 0 && mirror.status !== 1) throw new Error('git config failed');
-        return { push: push.lines, mirror: mirror.lines.includes('true') };
-      },
-    };
-    const result = decide(input.tool_name, command, repo);
+    const result = decide(tool, target, realRepo(path.resolve(input.cwd || '.')));
     if (!result.allow) denyOutput(result.reason);
   } catch (error) {
-    if (namesPush(command)) denyOutput(`${PREFIX}internal error while judging a push (${error.message})`);
+    if (EDIT_TOOLS.has(tool) || /\b(git|push)\b/i.test(normalize(target))) {
+      denyOutput(`${PREFIX}internal error while judging the command (${error.message})`);
+    }
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();
+if (runsDirectly(import.meta.url)) main();
