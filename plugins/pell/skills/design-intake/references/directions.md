@@ -131,7 +131,7 @@ Other rules:
 
 - Tokens only. No raw colors or sizes outside the contract.
 - Fonts load from an `@fontsource-variable` package under the SIL Open Font License 1.1 (`OFL-1.1`); the README test fails any other license. A font without such a package cannot load, so the brief names the closest open font that has one, and the theme uses that. Install it at an exact version published at least 14 days ago.
-- Print uses paper values and the contract's print density, so the client's widest generated list fits on paper.
+- Print uses paper values and the print density, `print-table-size` and `print-cell-padding-x` in the print block, set so the client's widest generated list fits on paper.
 - The demo themes stay until the lock removes them. Never edit them.
 - When the brief has a touch group, each direction shows at least one screen in its touch density. The home's `touch` state does that in every theme.
 
@@ -143,7 +143,7 @@ The stage commits 8 captures per direction under `docs/project/design/directions
 
 |Page|Capture in the run|Committed as|
 |-|-|-|
-|home|the home in the home state of the main persona's role|`<letter>-home-light.png`, `<letter>-home-mobile.png`|
+|home|`home-as-<the main persona's role in kebab case>.png`, the home in that role's state|`<letter>-home-light.png`, `<letter>-home-mobile.png`|
 |list|`<plural>-list-default.png`|`<letter>-list-light.png`, `<letter>-list-mobile.png`|
 |form|`<singular>-edit-default.png`, filled in; `<singular>-form-default.png` when the entity has no edit state|`<letter>-form-light.png`, `<letter>-form-mobile.png`|
 |detail|`<singular>-detail-default.png`|`<letter>-detail-light.png`, `<letter>-detail-mobile.png`|

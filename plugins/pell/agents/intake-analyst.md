@@ -109,7 +109,7 @@ After writing the specs and the roles, run:
 dotnet run --project tools/<Code>.Scaffolder -c Release -- check
 ```
 
-It writes nothing. It prints `<file>:<line>:<column>: <message>` for each problem and exits 1, or prints `Specs are valid.` and exits 0. Fix each problem at the line it names, and run it again until it passes. A fix that needs a guess gets one, visible as always. Never hand back a failing check. If the scaffolder has no `check` command, stop and say so in your summary: the fork predates intake's framework changes.
+It writes nothing. It prints `<file>:<line>:<column>: <message>` for each problem and exits 1, or prints `Specs are valid.` and exits 0. Fix each problem at the line it names, and run it again until it passes. A line that starts `warning:` fails nothing, but answer each one: a list with more than 7 columns, which paper can't hold at the themes' print density, is trimmed to what the personas scan, or a `decisions.md` line says why it stays. A fix that needs a guess gets one, visible as always. Never hand back a failing check. If the scaffolder has no `check` command, stop and say so in your summary: the fork predates intake's framework changes.
 
 ## The roles
 
