@@ -455,6 +455,26 @@ A Node script, `hooks/guard.mjs` in the skill, copied into the fork at setup. Ru
 - It fails closed: a command that names `push` and that it can't parse is denied.
 - It recognizes the canary remote `repo-standup-guard-check` and denies it with a message the guard check looks for.
 
+**Hardening after two security reviews (2026-11-16, Claude's call).** The command-text layer above failed open on several things: config overrides, aliases, wrappers, abbreviated options, shell escapes, a `cd` before the push, and push URLs. It now recognizes one push shape and denies anything else that might push. Where this list and the rules above differ, this list wins.
+- **The only allowed pushes** are `git push origin main`, `git push -u origin main` and `git push origin main:main`, with `-C <dir>` the only git global option. Bare `git push`, `git push origin` and `HEAD:main` are denied.
+- **The push must be the only segment of its command.** Nothing may set the directory or environment before it: no `cd`, `pushd`, `Set-Location`, `VAR=`, `env` or `$env:` anywhere in the command.
+- **Push options come from an allowlist:** `-u`, `--set-upstream`, `-q`, `--quiet`, `-v`, `--verbose`, `--porcelain`, `--progress`, `--no-progress`. Anything else is denied, abbreviations included.
+- **Detection runs on normalized text,** with quotes, backslashes, backticks and `^` removed:
+  - A segment whose normalized text names `push` must be the allowed shape, or git with a plain builtin subcommand other than push, as in `git log --grep push`.
+  - Any other program naming push is denied: shells, `env`, `xargs`, interpreters, `npm`, `eval`.
+  - Every git segment's raw subcommand must be a plain `[a-z0-9-]+` builtin, which blocks aliases and escaped names.
+- **The remote:**
+  - Every URL from `git remote get-url --push --all origin` must name the client repo.
+  - A push is denied when `remote.origin.push` or `remote.origin.mirror` is set.
+- **The hook command is absolute,** `node "$CLAUDE_PROJECT_DIR/.claude/repo-standup/guard.mjs"`. An internal error while judging a command that names push denies it. A guard that fails to start at all is caught by the session's canary check.
+- **A second layer, a git `pre-push` hook,** goes into the fork's `.git/hooks/` at setup. Git hands it the URL it really pushes to and each ref. It refuses:
+  - a URL that isn't the client repo
+  - any ref but `refs/heads/main`
+  - a delete
+  - anything that isn't a fast-forward, or that it can't check because the remote commit isn't present locally
+
+  It catches pushes from scripts and aliases that the command-text layer can't see. What's left is a script that passes `--no-verify` or changes `core.hooksPath`, and auto mode's judgment is the last layer for that.
+
 Its tests are Node's built-in test runner, `tests/repo-standup/guard.test.mjs` at the repository root, outside the shipped plugin **(Claude's call)**: a first runnable test in this repo, so the architecture spec records the pattern.
 
 ## The handoff package

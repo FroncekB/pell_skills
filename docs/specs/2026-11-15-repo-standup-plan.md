@@ -103,6 +103,32 @@ These two run first: the spec's first task is proving the platform, and that nee
 - [ ] **Step 4: Run the tests and see them pass.** `node --test tests/repo-standup/`. Expected: PASS.
 - [ ] **Step 5: Commit** `Add the repo-standup push guard`.
 
+**Amended 2026-11-16, after two security reviews.** The spec's "Hardening after two security reviews" list governs, and it overrides the steps above where they differ:
+- **Allowed and denied tests that flip:**
+  - `git push`, `git push origin` and `HEAD:main` are now denied.
+  - `npm run push-notes` is now denied.
+- **Tests to add,** each denied unless it says otherwise:
+  - `git -c remote.origin.pushurl=<framework url> push origin main`, `git -c alias.x="push --force" x`, and a config alias (`git x`)
+  - `bash -c "git push -f"`, `sh -c …`, `pwsh -c …`, `powershell -Command …`, `cmd /c …`, `env git push origin main`, `xargs git push -f`, `node -e …`
+  - `git push --receive-pack=x origin main`, `--exec=x`, `--no-verify`, `--repo=x`, and abbreviations `--forc`, `--del`, `--mir`
+  - `git p\ush -f`, `git "pu"sh -f`, and PowerShell ``git pu`sh -f``
+  - `cd ../other && git push origin main`, `GIT_DIR=x git push origin main`, `$env:GIT_DIR='x'; git push origin main`
+  - origin whose `--push --all` URLs include one that isn't the client repo
+  - `remote.origin.push` or `remote.origin.mirror` set
+  - still allowed: `git log --grep push`, `git stash push`, `git commit -m "push the fix"`, and the quoted Windows `-C` path
+- **`decide`'s `repo` gains** `pushUrlsFor(dir): string[]` (from `git remote get-url --push --all origin`) and `pushConfigFor(dir): { push: string[], mirror: boolean }`, in place of `originUrlFor`.
+- **The hook command** in `settings.local.json` becomes `node "$CLAUDE_PROJECT_DIR/.claude/repo-standup/guard.mjs"`. Any internal error while judging a command that names push prints a deny.
+- **The pre-push layer:**
+  - Create `plugins/pell/skills/repo-standup/hooks/pre-push.mjs` and `plugins/pell/skills/repo-standup/hooks/pre-push`, an `sh` shim that runs `exec node "$(git rev-parse --show-toplevel)/.claude/repo-standup/pre-push.mjs" "$@"`.
+  - It exports `decidePush(url, lines, { clientRepo, isAncestor })`, where `lines` are git's stdin lines (`<local ref> <local sha> <remote ref> <remote sha>`).
+  - It refuses with exit 1:
+    - a URL that isn't the client repo
+    - any remote ref but `refs/heads/main`
+    - a delete (all-zero local sha)
+    - a remote sha that isn't an ancestor of the local sha, or isn't present locally
+  - Test it in `tests/repo-standup/pre-push.test.mjs` with unit cases. Add one integration case: a temp repo whose `.git/hooks/pre-push` is the shim, with a local bare remote, refuses the push because its URL isn't the client repo.
+- **Run the tests with the glob,** `node --test tests/repo-standup/*.test.mjs`. A folder argument fails on Node 22.23.
+
 ### Task 2: Prove the platform (with Brandon)
 
 A check, not code. Its results set the token accounting (Task 12) and the notification fallback (Task 13).
@@ -502,8 +528,9 @@ Every file below is a prompt. Each task ends with `claude plugin validate ./plug
 **`SKILL.md` holds**, kept short, the spec's sections as rules:
 - what the skill is
 - setup, once per fork:
-  - copy `hooks/guard.mjs` and `hooks/settings.local.json` into `.claude/repo-standup/` and `.claude/`
-  - add both to `.git/info/exclude`
+  - copy `hooks/guard.mjs` and `hooks/pre-push.mjs` into `.claude/repo-standup/`, and `hooks/settings.local.json` into `.claude/`
+  - copy `hooks/pre-push` into `.git/hooks/pre-push`; when `core.hooksPath` is set, stop and tell the engineer, since git would skip that hook
+  - add `.claude/repo-standup/` and `.claude/settings.local.json` to `.git/info/exclude`
   - ask for the stop date
   - write `status.md`
 - the guard check
@@ -563,12 +590,12 @@ Every file below is a prompt. Each task ends with `claude plugin validate ./plug
 - Modify: `CLAUDE.md`:
   - the exception for `repo-standup`, beside design intake's: it writes, commits and pushes in its fork without `(y/n)`
   - `handoff-writer` added to the mechanical-agent and producer exceptions
-  - a line on `node --test tests/`
+  - a line on `node --test "tests/**/*.test.mjs"`
 
 - [ ] **Step 1: Make the edits.**
 - [ ] **Step 2: Verify.**
   - `claude plugin validate ./plugins/pell` passes.
-  - `node --test tests/` passes.
+  - `node --test "tests/**/*.test.mjs"` passes.
   - `grep -rn "repo-standup" README.md plugins/pell/README.md docs/specs/2026-05-27-pell-skills-architecture.md CLAUDE.md` shows each place.
 - [ ] **Step 3: Commit** `Document repo-standup and bump the plugin`.
 
