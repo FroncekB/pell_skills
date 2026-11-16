@@ -11,7 +11,9 @@ import {
   containsProtected, insideClaudeDir, isProtected, mixesGlobWithDotFolder, namesHomeGitConfig, namesProtectedPath,
   pathContext,
 } from './protected-paths.mjs';
-import { commandName, nestedCode, parseShell, stripRedirections, stripWrappers } from './shell-words.mjs';
+import {
+  commandName, nestedCode, parseShell, stripPsAssignment, stripRedirections, stripWrappers,
+} from './shell-words.mjs';
 
 export const PREFIX = 'repo-standup guard: ';
 export const FRAMEWORK_REPO = 'pellsoftware/pell_web_app_framework';
@@ -66,7 +68,11 @@ const CODE_FLAGS = {
 const SPAWNING_CODE = /git|push|child_process|spawn|exec|subprocess|system/i;
 
 // Words that precede a command without being one.
-const KEYWORDS = new Set(['!', 'then', 'do', 'else', 'elif', 'time', 'if', 'while', 'until']);
+const KEYWORDS = new Set(['!', 'then', 'do', 'else', 'elif', 'elseif', 'time', 'if', 'while', 'until']);
+// PowerShell if/elseif conditions that only test the last command's success.
+const SUCCESS_CONDITION = /^(-not )?\$\?$|^\$lastexitcode -(eq|ne) 0$/i;
+// A command line naming the .git or .claude folder, for xargs deletes.
+const NAMES_DOT_FOLDER = /(^|[^\w.-])\.(git|claude)(?![\w.-])/i;
 const DELETE_VERBS = new Set([
   'rm', 'rmdir', 'del', 'erase', 'rd', 'remove-item', 'ri', 'unlink',
   'mv', 'move', 'move-item', 'mi', 'ren', 'rename', 'rename-item', 'rni',
@@ -100,7 +106,8 @@ function pathCandidates(word) {
 }
 
 // Segment-level path rules: protected paths, globs, deletes, cd and links.
-function checkPaths(seg, ctx) {
+// `line` is the whole command line.
+function checkPaths(seg, ctx, line) {
   const words = seg.words;
   for (const w of words) {
     if (mixesGlobWithDotFolder(w.raw)) return deny('a glob or variable could name a protected folder');
@@ -109,12 +116,17 @@ function checkPaths(seg, ctx) {
       if (isProtected(p, ctx)) return deny(`${p} is a protected path (.git, the guard's files, or a settings file)`);
     }
   }
-  const command = stripWrappers(stripKeywords(stripRedirections(words)).filter((w) => !/^[A-Za-z_]\w*=/.test(w.raw))).words;
+  const plain = stripKeywords(stripRedirections(words));
+  const unwrapped = stripWrappers((stripPsAssignment(plain) ?? plain).filter((w) => !/^[A-Za-z_]\w*=/.test(w.raw)));
+  const command = unwrapped.words;
   if (command.length === 0) return null;
   const name = commandName(command[0].value);
   const args = command.slice(1).flatMap(pathCandidates);
   if (DELETE_VERBS.has(name) && args.some((p) => containsProtected(p, ctx))) {
     return deny('deleting or moving a folder that holds a protected path is not allowed');
+  }
+  if (DELETE_VERBS.has(name) && unwrapped.wrappers.includes('xargs') && NAMES_DOT_FOLDER.test(line)) {
+    return deny('xargs runs a delete or move on a line that names .git or .claude');
   }
   if (CD_VERBS.has(name) && args.some((p) => insideClaudeDir(p, ctx))) return deny('entering the .claude folder is not allowed');
   if (LINK_VERBS.has(name)) return deny('creating links is not allowed');
@@ -169,6 +181,7 @@ function judgeSegment(seg, env) {
   let words = stripKeywords(stripRedirections(seg.words));
   if (words.length === 0) return null;
   const text = words.map((w) => w.raw).join(' ');
+  if (seg.condition && SUCCESS_CONDITION.test(text)) return null;
   // A heredoc body is stdin, not words, but it still counts as naming push.
   const heredocs = seg.words.map((w) => w.heredoc ?? '').join('\n');
   const pushNamed = namesPush(text) || namesPush(heredocs);
@@ -184,13 +197,8 @@ function judgeSegment(seg, env) {
   }
 
   // PowerShell assignment: judge what follows the `=` as the command.
-  const first = words[0].raw;
-  const inline = /^\$[\w:{}.]+(?:\+|-)?=(.*)$/s.exec(first);
-  if (inline || (/^\$[\w:{}.]+$/.test(first) && /^(\+|-)?=$/.test(words[1]?.raw ?? ''))) {
-    const rest = words.slice(inline ? 1 : 2);
-    if (inline && inline[1]) rest.unshift({ raw: inline[1], value: inline[1] });
-    return rest.length > 0 ? judgeSegment({ words: rest, piped: seg.piped, dynamicCall: false }, env) : null;
-  }
+  const assigned = stripPsAssignment(words);
+  if (assigned) return assigned.length > 0 ? judgeSegment({ words: assigned, piped: seg.piped, dynamicCall: false }, env) : null;
 
   const unwrapped = stripWrappers(words);
   if (unwrapped.problem) return deny(unwrapped.problem);
@@ -295,14 +303,15 @@ export function decide(toolName, command, repo) {
   if (text.includes(CANARY) && namesPush(text)) return deny('canary');
   if (/--no-verify|core\.hookspath/i.test(flat)) return deny('--no-verify and core.hooksPath are not allowed');
 
-  const { segments, problems } = parseShell(text, powershell ? 'powershell' : 'bash');
+  const { segments, problems, fatal } = parseShell(text, powershell ? 'powershell' : 'bash');
+  if (fatal.length > 0) return deny(`cannot judge the command (${fatal[0]})`);
   if (problems.length > 0 && /\b(git|push)\b/i.test(flat)) {
     return deny(`cannot classify the command (${problems[0]}), and it names git or push`);
   }
 
   const env = { tool: toolName, repo, ctx };
   for (const segment of segments) {
-    const pathVerdict = checkPaths(segment, ctx);
+    const pathVerdict = checkPaths(segment, ctx, text);
     if (pathVerdict) return pathVerdict;
     const verdict = judgeSegment(segment, env);
     if (!verdict) continue;

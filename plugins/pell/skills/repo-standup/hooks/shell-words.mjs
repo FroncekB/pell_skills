@@ -3,11 +3,14 @@
 // what it cannot classify. It runs nothing. Node standard library only.
 //
 // parseShell(text, shell) returns
-//   segments: [{ words, piped, dynamicCall }]
+//   segments: [{ words, piped, dynamicCall, condition }]
 //     words:       [{ raw, value }]  raw keeps quotes and escapes, value drops them
 //     piped:       the segment follows a single `|`
 //     dynamicCall: the segment starts with `&` followed by `$`, `(` or `{`
+//     condition:   the segment is a PowerShell `if (...)` or `elseif (...)` condition
 //   problems: strings naming input the lexer cannot classify
+//   fatal:    input the lexer may split differently from the shell, which is
+//             denied whatever the command names
 //
 // shell is 'bash' or 'powershell'. They differ on the escape character (`\` in
 // Bash, the backtick in PowerShell), on backticks (command substitution in Bash),
@@ -22,7 +25,7 @@
 // are parsed as nested commands.
 
 export function parseShell(text, shell = 'bash') {
-  const out = { segments: [], problems: [] };
+  const out = { segments: [], problems: [], fatal: [] };
   const ps = shell === 'powershell';
   let source = String(text);
   if (ps) source = source.replace(/[\u201C\u201D\u201E\u201F]/g, '"').replace(/[\u2018\u2019\u201A\u201B]/g, "'");
@@ -81,13 +84,15 @@ function heredocBodies(text, start, pending) {
 }
 
 // Index of the `)` matching the `(` at `open`, skipping quotes, escapes and Bash
-// heredoc bodies; -1 when unmatched.
-function matchParen(text, open, ps = false) {
+// heredoc bodies; -1 when unmatched. Inside (( )), and throughout when `arith`
+// is set, `<<` is a shift, not a heredoc.
+function matchParen(text, open, ps = false, arith = false) {
   let depth = 1;
+  let arithAt = arith ? 0 : -1; // the depth at which an open (( )) closes
   let pending = [];
   for (let i = open + 1; i < text.length; i++) {
     const c = text[i];
-    if (!ps && c === '<' && heredocOp(text, i)) {
+    if (!ps && arithAt === -1 && c === '<' && heredocOp(text, i)) {
       const op = heredocOp(text, i);
       pending.push(op);
       i = op.end - 1;
@@ -100,18 +105,26 @@ function matchParen(text, open, ps = false) {
       i = end === -1 ? text.length : end;
     } else if (c === '"') {
       for (i += 1; i < text.length && text[i] !== '"'; i++) if (text[i] === '\\' || text[i] === '`') i += 1;
-    } else if (c === '(') depth += 1;
-    else if (c === ')' && --depth === 0) return i;
+    } else if (c === '(') {
+      if (!ps && arithAt === -1 && text[i + 1] === '(') arithAt = depth;
+      depth += 1;
+    } else if (c === ')') {
+      depth -= 1;
+      if (depth === 0) return i;
+      if (depth === arithAt) arithAt = -1;
+    }
   }
   return -1;
 }
 
-function lex(text, out, ps) {
+// `arith` marks text inside (( )) or $(( )), where `<<` is a shift.
+function lex(text, out, ps, arith = false) {
   const n = text.length;
   let words = [];
   let cur = null;
   let piped = false;
   let dynamicCall = false;
+  let condition = false; // the next segment is a PowerShell if/elseif condition
   let i = 0;
 
   const word = () => (cur ??= { raw: '', value: '' });
@@ -127,23 +140,26 @@ function lex(text, out, ps) {
   const endSegment = (nextPiped) => {
     endWord();
     if (words.length > 0 || dynamicCall) {
-      out.segments.push({ words, piped, dynamicCall });
+      out.segments.push({ words, piped, dynamicCall, condition });
       piped = nextPiped;
     } else {
       piped = piped || nextPiped;
     }
     words = [];
     dynamicCall = false;
+    condition = false;
   };
   const separator = (length, nextPiped = false) => {
     endSegment(nextPiped);
     i += length;
   };
   // Parse the code between `open` + 1 and its matching `)`; returns the index after it.
+  // A second `(` right after `open` makes it arithmetic.
   const nestedParen = (open) => {
-    const close = matchParen(text, open, ps);
+    const arithmetic = !ps && text[open + 1] === '(';
+    const close = matchParen(text, open, ps, arithmetic);
     if (close === -1) out.problems.push('unmatched parenthesis');
-    lex(text.slice(open + 1, close === -1 ? n : close), out, ps);
+    lex(text.slice(open + 1, close === -1 ? n : close), out, ps, arithmetic);
     return close === -1 ? n : close + 1;
   };
   // Bash backticks hold a nested command; returns the index after the closing backtick.
@@ -180,8 +196,21 @@ function lex(text, out, ps) {
     }
     if (c === '\n' || c === '\r' || c === ';') { separator(1); continue; }
     if (c === '|') { separator(next === '|' ? 2 : 1, next !== '|'); continue; }
-    if (c === '(' || c === ')') { separator(1); continue; }
-    if ((c === '{' || c === '}') && !cur) { separator(1); continue; }
+    if (!ps && c === '(' && next === '(') {
+      // A (( )) arithmetic command.
+      endSegment(false);
+      i = nestedParen(i);
+      continue;
+    }
+    if (c === '(' || c === ')') {
+      endWord();
+      const opensCondition = ps && c === '(' && words.length === 1 && /^(if|elseif)$/i.test(words[0].raw);
+      separator(1);
+      condition = opensCondition;
+      continue;
+    }
+    // PowerShell ends a block at `}` even inside a word.
+    if ((c === '{' && !cur) || (c === '}' && (!cur || ps))) { separator(1); continue; }
 
     if (c === '&') {
       if (next === '&') { separator(2); continue; }
@@ -211,9 +240,10 @@ function lex(text, out, ps) {
       i = end === -1 ? n : end + 2;
       continue;
     }
-    if (!ps && heredocOp(text, i)) {
+    if (!ps && !arith && heredocOp(text, i)) {
       const op = heredocOp(text, i);
-      if (!op.delim) out.problems.push('heredoc without a delimiter');
+      // Bash and this parser could disagree on where the body ends ($'EOF' is one case).
+      if (!/^[A-Za-z0-9_-]+$/.test(op.delim)) out.fatal.push('a heredoc delimiter other than letters, digits, _ and -');
       endWord();
       op.word = { raw: text.slice(i, op.end), value: op.delim, heredoc: '' };
       words.push(op.word);
@@ -352,9 +382,10 @@ function lexExpansions(body, out) {
   for (let i = 0; i < body.length; i++) {
     if (body[i] === '\\') i += 1;
     else if (body[i] === '$' && body[i + 1] === '(') {
-      const close = matchParen(body, i + 1);
+      const arithmetic = body[i + 2] === '(';
+      const close = matchParen(body, i + 1, false, arithmetic);
       if (close === -1) out.problems.push('unmatched parenthesis');
-      lex(body.slice(i + 2, close === -1 ? body.length : close), out, false);
+      lex(body.slice(i + 2, close === -1 ? body.length : close), out, false, arithmetic);
       i = close === -1 ? body.length : close;
     } else if (body[i] === '`') {
       const close = body.indexOf('`', i + 1);
@@ -436,15 +467,30 @@ const WRAPPER_VALUE_OPTIONS = {
     '--max-procs', '--max-chars', '--process-slot-var'],
 };
 
+// The words after a leading PowerShell assignment (`$x = ...`, `$x=...`,
+// `$a = $b = ...`), or null when the words start with none.
+export function stripPsAssignment(words) {
+  let rest = words;
+  for (;;) {
+    const first = rest[0]?.raw ?? '';
+    const inline = /^\$[\w:{}.]+(?:\+|-)?=(.*)$/s.exec(first);
+    if (inline) rest = inline[1] ? [{ raw: inline[1], value: inline[1] }, ...rest.slice(1)] : rest.slice(1);
+    else if (/^\$[\w:{}.]+$/.test(first) && /^(\+|-)?=$/.test(rest[1]?.raw ?? '')) rest = rest.slice(2);
+    else return rest === words ? null : rest;
+  }
+}
+
 // The words left once leading wrappers (env, nohup, timeout, nice, sudo, command,
-// exec, xargs) and their options are skipped: { words, wrapped, problem }.
+// exec, xargs) and their options are skipped: { words, wrapped, wrappers, problem }.
 export function stripWrappers(words) {
   let rest = words;
   let wrapped = false;
+  const wrappers = [];
   while (rest.length > 0 && Object.hasOwn(WRAPPER_VALUE_OPTIONS, commandName(rest[0].value))) {
     const name = commandName(rest[0].value);
     const valued = WRAPPER_VALUE_OPTIONS[name];
     wrapped = true;
+    wrappers.push(name);
     let i = 1;
     while (i < rest.length) {
       const v = rest[i].value;
@@ -453,14 +499,14 @@ export function stripWrappers(words) {
       i += 1;
       if (v === '--') break;
       if (name === 'env' && (/^-[^-]*S/.test(v) || v.startsWith('--split-string'))) {
-        return { words: [], wrapped, problem: 'env -S splits a string into a command' };
+        return { words: [], wrapped, wrappers, problem: 'env -S splits a string into a command' };
       }
       if (valued.includes(v)) i += 1;
     }
     if (name === 'timeout') i += 1;
     rest = rest.slice(i);
   }
-  return { words: rest, wrapped };
+  return { words: rest, wrapped, wrappers };
 }
 
 // Remove redirections (2>&1, 2>$null, *>$null, > file, < file) from a segment's words.
