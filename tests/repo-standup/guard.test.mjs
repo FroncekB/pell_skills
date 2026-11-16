@@ -1,20 +1,30 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { decide } from '../../plugins/pell/skills/repo-standup/hooks/guard.mjs';
 
 const GUARD = fileURLToPath(
   new URL('../../plugins/pell/skills/repo-standup/hooks/guard.mjs', import.meta.url),
 );
+const SETTINGS = fileURLToPath(
+  new URL('../../plugins/pell/skills/repo-standup/hooks/settings.local.json', import.meta.url),
+);
 const PREFIX = 'repo-standup guard: ';
 const CLIENT = 'pellsoftware/acme';
 const CLIENT_ORIGIN = 'git@ssh.bitbucket.org:pellsoftware/acme.git';
+const FRAMEWORK_ORIGIN = 'git@ssh.bitbucket.org:pellsoftware/pell_web_app_framework.git';
 
-function fakeRepo(origin = CLIENT_ORIGIN, overrides = {}, clientRepo = CLIENT) {
+// A fake repo. `urls` are what `git remote get-url --push --all origin` prints;
+// `overrides` maps a -C folder to its own list.
+function fakeRepo({ urls = [CLIENT_ORIGIN], overrides = {}, clientRepo = CLIENT, push = [], mirror = false } = {}) {
   return {
     clientRepo,
-    originUrlFor: (dir) => (dir in overrides ? overrides[dir] : origin),
+    pushUrlsFor: (dir) => (dir in overrides ? overrides[dir] : urls),
+    pushConfigFor: () => ({ push, mirror }),
   };
 }
 
@@ -37,17 +47,25 @@ const ORIGINS = [
   'https://someone@bitbucket.org/pellsoftware/acme',
 ];
 
-test('allows pushes to the client repo main', () => {
-  for (const origin of ORIGINS) {
-    for (const cmd of ['git push', 'git push origin', 'git push origin main', 'git push -u origin main']) {
-      allowed(cmd, fakeRepo(origin));
+test('allows only the three push shapes, for every origin URL form', () => {
+  for (const url of ORIGINS) {
+    for (const cmd of [
+      'git push origin main',
+      'git push -u origin main',
+      'git push origin main:main',
+      'git push --set-upstream origin main',
+      'git push -q origin main',
+      'git push --verbose origin main',
+      'git push --porcelain --no-progress origin main',
+      'git push origin main 2>&1',
+    ]) {
+      allowed(cmd, fakeRepo({ urls: [url] }));
     }
   }
 });
 
-test('allows main refspec spellings and redirections', () => {
-  allowed('git push origin HEAD:main');
-  allowed('git push origin main 2>&1');
+test('denies bare pushes and other refspecs the old guard allowed', () => {
+  for (const cmd of ['git push', 'git push origin', 'git push origin HEAD:main', 'git push -u origin']) denied(cmd);
 });
 
 test('denies forced pushes', () => {
@@ -59,7 +77,7 @@ test('denies forced pushes', () => {
   ]) denied(cmd);
 });
 
-test('denies other branches, deletes, and bulk pushes', () => {
+test('denies other branches, deletes, bulk pushes and other remotes', () => {
   for (const cmd of [
     'git push origin staging',
     'git push origin main:staging',
@@ -67,52 +85,183 @@ test('denies other branches, deletes, and bulk pushes', () => {
     'git push --mirror',
     'git push --all',
     'git push --tags',
+    'git push upstream main',
   ]) denied(cmd);
 });
 
-test('denies a remote other than origin', () => {
-  denied('git push upstream main');
+test('denies push options outside the allowlist, abbreviations included', () => {
+  for (const cmd of [
+    'git push --receive-pack=x origin main',
+    'git push --exec=x origin main',
+    'git push --no-verify origin main',
+    'git push --repo=x origin main',
+    'git push --forc origin main',
+    'git push --del origin main',
+    'git push --mir',
+    'git push -o x origin main',
+    'git push --dry-run origin main',
+  ]) denied(cmd);
 });
 
-test('denies when origin is the framework repo or not the client repo', () => {
-  const framework = 'git@ssh.bitbucket.org:pellsoftware/pell_web_app_framework.git';
-  denied('git push origin main', fakeRepo(framework, {}, 'pellsoftware/pell_web_app_framework'));
-  denied('git push origin main', fakeRepo(framework));
-  denied('git push origin main', fakeRepo(CLIENT_ORIGIN, {}, null));
-  denied('git push origin main', fakeRepo(null));
-});
-
-test('finds git push inside compound commands and PowerShell calls', () => {
-  denied('cd x && git push -f');
-  denied('echo a; git push --force origin main');
+test('denies git global options other than -C', () => {
+  denied('git -c remote.origin.pushurl=git@bitbucket.org:pellsoftware/pell_web_app_framework.git push origin main');
   denied('git -c a=b push -f origin main');
-  denied('& git push --force origin main', fakeRepo(), 'PowerShell');
-  denied('(git push -f)');
+  denied('git --namespace=x push origin main');
+  denied('git --exec-path=x push origin main');
+  denied('git --git-dir=x push origin main');
+  denied('git --work-tree=x push origin main');
+  denied('git -C a -C b push origin main');
 });
 
-test('resolves origin from the -C folder', () => {
-  const dir = 'C:\Users\a b\fork';
-  const cmd = 'git -C "C:\Users\a b\fork" push origin main';
-  allowed(cmd, fakeRepo('git@bitbucket.org:other/thing.git', { [dir]: CLIENT_ORIGIN }));
-  denied(cmd, fakeRepo(CLIENT_ORIGIN, { [dir]: 'git@bitbucket.org:other/thing.git' }));
+test('denies aliases, config aliases and non-builtin subcommands', () => {
+  denied('git -c alias.x="push --force" x');
+  denied('git x');
+  denied('git ps');
 });
 
-test('denies pushes it cannot parse', () => {
+test('denies wrappers and interpreters that name push', () => {
+  for (const [cmd, tool] of [
+    ['bash -c "git push -f"', 'Bash'],
+    ['sh -c "git push -f"', 'Bash'],
+    ["sh -c 'git push -f'", 'Bash'],
+    ['pwsh -c "git push -f"', 'PowerShell'],
+    ['powershell -Command "git push -f"', 'PowerShell'],
+    ['cmd /c git push -f', 'PowerShell'],
+    ['env git push origin main', 'Bash'],
+    ['xargs git push -f', 'Bash'],
+    ['node -e "require(\'child_process\').execSync(\'git push -f\')"', 'Bash'],
+    ['npm run push-notes', 'Bash'],
+    ['eval "git push -f"', 'Bash'],
+    ['echo push', 'Bash'],
+  ]) denied(cmd, fakeRepo(), tool);
+});
+
+test('denies nested interpreters and string evaluators that name push', () => {
+  const cases = [
+    ['bash -c "git push origin main"', 'Bash'],
+    ['/bin/bash -c "git push origin main"', 'Bash'],
+    ['sh -c "git push origin main"', 'Bash'],
+    ['/usr/bin/sh -c "git push origin main"', 'Bash'],
+    ['zsh -c "git push origin main"', 'Bash'],
+    ['ksh -c "git push origin main"', 'Bash'],
+    ['dash -c "git push origin main"', 'Bash'],
+    ['cmd /c git push origin main', 'PowerShell'],
+    ['cmd.exe /k git push origin main', 'PowerShell'],
+    ['C:\\Windows\\System32\\cmd.exe /c git push origin main', 'PowerShell'],
+    ['pwsh -c "git push origin main"', 'PowerShell'],
+    ['pwsh -Command "git push origin main"', 'PowerShell'],
+    ['powershell -Command "git push origin main"', 'PowerShell'],
+    ['C:\\Program Files\\PowerShell\\7\\pwsh.exe -Command "git push origin main"', 'PowerShell'],
+    ['C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -EncodedCommand git push', 'PowerShell'],
+    ['iex "git push origin main"', 'PowerShell'],
+    ['Invoke-Expression "git push origin main"', 'PowerShell'],
+    ['source push.sh', 'Bash'],
+    ['. ./push.sh', 'Bash'],
+    ['eval "git push origin main"', 'Bash'],
+  ];
+  for (const [cmd, tool] of cases) denied(cmd, fakeRepo(), tool);
+});
+
+test('denies expansion characters in a push segment, the -C value included', () => {
+  for (const cmd of [
+    'git -C $HOME push origin main',
+    'git -C ${DIR} push origin main',
+    'git -C ~/fork push origin main',
+    'git -C ../f* push origin main',
+    'git -C ../f? push origin main',
+    'git -C [a]b push origin main',
+    'git -C %CD% push origin main',
+    'git -C "$HOME/fork" push origin main',
+    'git push origin ma*',
+    'git push origin m?in',
+    'git push origin ma[i]n',
+    'git push origin ~main',
+    'git push origin {main,x}',
+    'git push -u* origin main',
+    'git push origin $BRANCH',
+    'git push origin %BRANCH%',
+  ]) denied(cmd);
+});
+
+test('denies wrappers around a non-push git alias', () => {
+  denied('env git x');
+  denied('bash -c "git x"');
+  denied('xargs git x');
+});
+
+test('denies shell escapes that reach git as push', () => {
+  denied('git p\\ush -f');
+  denied('git "pu"sh -f');
+  denied("git 'pu'sh origin main");
+  denied('git pu`sh -f', fakeRepo(), 'PowerShell');
+  denied('git pu^sh -f', fakeRepo(), 'PowerShell');
+  denied('git $(echo push) -f');
   denied('git push $(echo --force)');
-  denied('eval "git push -f"');
   denied('git push `echo -f`');
 });
 
-test('denies --git-dir and --work-tree pushes, whose origin cannot be checked', () => {
-  denied('git --git-dir=x push origin main');
+test('denies a push that follows anything else in the command', () => {
+  denied('cd ../other && git push origin main');
+  denied('cd x && git push -f');
+  denied('echo a; git push --force origin main');
+  denied('git status && git push origin main');
+  denied('git push origin main && git status');
+  denied('git push origin main | cat');
+  denied('(git push -f)');
+  denied('git push origin main\ngit push -f');
+});
+
+test('denies environment and directory context', () => {
+  denied('GIT_DIR=x git push origin main');
+  denied("$env:GIT_DIR='x'; git push origin main", fakeRepo(), 'PowerShell');
+  denied('env GIT_DIR=x git push origin main');
+  denied('pushd ../other; git push origin main', fakeRepo(), 'PowerShell');
+  denied('Set-Location ../other; git push origin main', fakeRepo(), 'PowerShell');
+  denied('$p = "git"; & $p push origin main', fakeRepo(), 'PowerShell');
+  denied('& git push --force origin main', fakeRepo(), 'PowerShell');
+});
+
+test('denies when any push URL is not the client repo', () => {
+  denied('git push origin main', fakeRepo({ urls: [FRAMEWORK_ORIGIN] }));
+  denied('git push origin main', fakeRepo({ urls: [FRAMEWORK_ORIGIN], clientRepo: 'pellsoftware/pell_web_app_framework' }));
+  denied('git push origin main', fakeRepo({ urls: [CLIENT_ORIGIN, 'git@bitbucket.org:other/thing.git'] }));
+  denied('git push origin main', fakeRepo({ urls: [] }));
+  denied('git push origin main', fakeRepo({ clientRepo: null }));
+});
+
+test('denies when remote.origin.push or remote.origin.mirror is set', () => {
+  denied('git push origin main', fakeRepo({ push: ['refs/heads/*:refs/heads/*'] }));
+  denied('git push origin main', fakeRepo({ mirror: true }));
+});
+
+test('resolves URLs from the -C folder', () => {
+  const dir = 'C:\\Users\\a b\\fork';
+  const cmd = 'git -C "C:\\Users\\a b\\fork" push origin main';
+  allowed(cmd, fakeRepo({ urls: ['git@bitbucket.org:other/thing.git'], overrides: { [dir]: [CLIENT_ORIGIN] } }));
+  denied(cmd, fakeRepo({ urls: [CLIENT_ORIGIN], overrides: { [dir]: ['git@bitbucket.org:other/thing.git'] } }));
 });
 
 test('the canary is denied first, with its own reason', () => {
   denied('git push --force --dry-run repo-standup-guard-check main', fakeRepo(), 'Bash', 'repo-standup guard: canary');
 });
 
-test('allows commands that are not a git push', () => {
-  for (const cmd of ['git status', 'npm run push-notes', 'git log --grep push']) allowed(cmd);
+test('allows commands that are not a push', () => {
+  for (const cmd of [
+    'git status',
+    'git log --grep push',
+    'git stash push',
+    'git commit -m "push the fix"',
+    'git -C "C:\\Users\\a b\\fork" status',
+    'npm test',
+    'ls -la',
+  ]) allowed(cmd);
+});
+
+test('the hook command uses the absolute project path', () => {
+  const settings = JSON.parse(readFileSync(SETTINGS, 'utf8'));
+  const entry = settings.hooks.PreToolUse[0];
+  assert.equal(entry.matcher, 'Bash|PowerShell');
+  assert.equal(entry.hooks[0].command, 'node "$CLAUDE_PROJECT_DIR/.claude/repo-standup/guard.mjs"');
 });
 
 function runEntry(payload, env = {}) {
@@ -121,6 +270,27 @@ function runEntry(payload, env = {}) {
     encoding: 'utf8',
     env: { ...process.env, ...env },
   });
+}
+
+function git(cwd, ...args) {
+  const r = spawnSync('git', args, { cwd, encoding: 'utf8' });
+  assert.equal(r.status, 0, `git ${args.join(' ')}: ${r.stderr}`);
+  return r.stdout;
+}
+
+function makeClientDir(origin = 'git@bitbucket.org:pellsoftware/acme.git') {
+  const dir = mkdtempSync(path.join(tmpdir(), 'guard-entry-'));
+  git(dir, 'init', '-q');
+  git(dir, 'remote', 'add', 'origin', origin);
+  writeFileSync(path.join(dir, 'client.yaml'), 'repository:\n  bitbucket: pellsoftware/acme\n');
+  return dir;
+}
+
+function pushIn(dir, command = 'git push origin main') {
+  return runEntry(
+    { tool_name: 'Bash', tool_input: { command }, cwd: dir },
+    { CLAUDE_PROJECT_DIR: dir },
+  );
 }
 
 test('entry point prints the deny object for a denied push', () => {
@@ -136,4 +306,34 @@ test('entry point prints nothing for a command that is not a push', () => {
   const out = runEntry({ tool_name: 'Bash', tool_input: { command: 'git status' }, cwd: '.' });
   assert.equal(out.status, 0);
   assert.equal(out.stdout, '');
+});
+
+test('entry point allows a plain push to the client repo', () => {
+  const out = pushIn(makeClientDir());
+  assert.equal(out.status, 0);
+  assert.equal(out.stdout, '');
+});
+
+test('entry point denies when a pushurl points elsewhere', () => {
+  const dir = makeClientDir();
+  git(dir, 'config', 'remote.origin.pushurl', 'git@bitbucket.org:pellsoftware/pell_web_app_framework.git');
+  assert.equal(JSON.parse(pushIn(dir).stdout).hookSpecificOutput.permissionDecision, 'deny');
+});
+
+test('entry point denies when remote.origin.push or mirror is configured', () => {
+  const pushDir = makeClientDir();
+  git(pushDir, 'config', 'remote.origin.push', 'refs/heads/*:refs/heads/*');
+  assert.equal(JSON.parse(pushIn(pushDir).stdout).hookSpecificOutput.permissionDecision, 'deny');
+  const mirrorDir = makeClientDir();
+  git(mirrorDir, 'config', 'remote.origin.mirror', 'true');
+  assert.equal(JSON.parse(pushIn(mirrorDir).stdout).hookSpecificOutput.permissionDecision, 'deny');
+});
+
+test('entry point denies when the repo cannot be inspected', () => {
+  const dir = makeClientDir();
+  const out = runEntry(
+    { tool_name: 'Bash', tool_input: { command: 'git push origin main' }, cwd: path.join(dir, 'does-not-exist') },
+    { CLAUDE_PROJECT_DIR: dir },
+  );
+  assert.equal(JSON.parse(out.stdout).hookSpecificOutput.permissionDecision, 'deny');
 });
