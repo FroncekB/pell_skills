@@ -28,7 +28,7 @@ How to run each stage and checkpoint. `SKILL.md` decides which one runs, and hol
 
   **The unit's checks** run on the unit's branch after the implementer reports, before anything merges; each stage names them. When they pass (and, in stage 7, the steward has reviewed the unit), `git switch main` and `git merge --ff-only intake-<stage name>`. At the stage's end, `git branch -d intake-<stage name>` when it is still there. Units run one at a time, because they share the database and the port.
 
-  **Three failed rounds park a unit**, in stages 7 and 8, and stop stage 3. A round is one run of the unit's checks after the implementer reports. When a round fails, the implementer gets the failures and fixes them on the same branch, as for a revision; the round after a design review's revision counts too. A flake (Terms) is no failed round. In stage 3 the third failed round stops the stage, as a failing check does (Terms). In stages 7 and 8, after the third failed round:
+  **Three failed rounds park a unit** in stages 7 and 8, and stop stage 3 as a failing check does (Terms). A round is one run of the unit's checks after the implementer reports. When a round fails, the implementer gets the failures and fixes them on the same branch, as for a revision; the round after a design review's revision counts too. A flake (Terms) is no failed round. In stages 7 and 8, after the third failed round:
   1. `git switch main`, then `git branch -m intake-<stage name> parked/intake-<stage name>-<unit>`, with `<unit>` the unit's first screen's name (stage 7) or its workflow's name (stage 8) in kebab case. The unit is left as it is: unmerged, unpushed, its inventory rows unchanged.
   2. Add an open question, in `formats.md`'s format, saying what the unit needs to pass, with the check that failed in its If wrong, the unit's requirements in its Blocks, and the guess that the build finishes the unit from its branch. List it in those requirements' Depends on, and add a `decisions.md` line naming the unit.
   3. Go on to the next unit. A run that resumes the stage skips any unit with a `parked/` branch, and the stage's run-log note names each parked unit.
@@ -283,31 +283,31 @@ Done by design-director.
 
 Done by conductor-implementer, one unit at a time. conductor-design-steward reviews each unit.
 
-A unit is one screen inventory row that is `hand-built` and `planned`, or one workflow when its screens share an API, in the inventory's order. A run that stops part way resumes at the first `planned` row whose unit isn't parked. A unit that fails its checks three times is parked, and the stage goes on to the next row (see Working with agents).
+A unit is one screen inventory row that is `hand-built` and `planned`, or the rows that call a stub in common (`stub to write` on both), in the inventory's order. A unit of several rows runs at its first row's place and is named for its first screen. An endpoint that already exists joins no rows. A run that stops part way resumes at the first `planned` row whose unit isn't parked. A unit that fails its checks three times is parked, and the stage goes on to the next unit (see Working with agents).
 
-The implementer's brief adds to its own rules: a stub that throws `NotBuiltException` is the real contract, not a facade, and stays until the build fills it.
+The implementer's brief adds to its own rules: a stub that throws `NotBuiltException` is the real contract, not a facade, and stays until the build fills it. Offline use, sync and anything else a stub can't show are the build's.
 
 For each unit:
 
-1. **The API contract, first.** Each endpoint the screen needs is written for real in C#:
-   - its route under `/api/`, by the fork's `CLAUDE.md`
-   - its permission: a constant and a `PermissionDefinition` in `Permissions.All`, on the action as `[RequirePermission(Permissions.<Name>)]`
+1. **The API contract, first.** Each endpoint the screen needs is written for real in C#. That includes one the inventory missed, such as an image the screen shows: write it as a stub too, and add it to the row.
+   - its route under `/api/`, by the fork's `CLAUDE.md`. A stub that adds input to a generated action is a resource of its own (stage 6, step 8).
+   - its permission: the existing one that says who may do it, or a new constant in a group of its own with its `PermissionDefinition` in `Permissions.All`, since a new key in an entity's group breaks that entity's generated permission tests. On the action as `[RequirePermission(Permissions.<Name>)]`, or `[RequireAnyPermission(Permissions.<A>, Permissions.<B>)]` where two grants open it.
    - its request and response models, `sealed class` with `required` members, the response declared with `[ProducesResponseType<T>(StatusCodes.Status200OK)]`
-   - an action that throws `NotBuiltException` (in `<Code>.Domain/Exceptions`), which answers 501 "This part of the app isn't built yet."
+   - an action that throws `NotBuiltException` (in `<Code>.Domain/Exceptions`), which answers 501 "This part of the app isn't built yet." A stub on one record first checks the record's scope through the entity's generated `Visible...` or `...ToChange` helpers, as the fork's `CLAUDE.md` asks of a companion action, so a record out of scope answers 404 before the 501, and a change takes `If-Match`. The entity's generated scope test finds it, and its hand-written part gives a valid body for each new request type.
    - integration tests for 401, 403 and the 501
 
    Then refresh the OpenAPI document (the "Refresh the OpenAPI document" row of Standard commands) and the React types with `npm run generate:api`, so the page and its fixtures use the generated types.
-2. **The page**, composed from the framework's patterns in `src/shared`, with its route, nav item and permission guard. A page in a touch group sits under its `DensityGroup` route group. A persona whose first page isn't the attention-queue home gets it from the home route by permission.
-3. **Fixtures** in `<Code>.React/src/test/fixtures/`, typed by the generated types and written in the glossary's words. The harness's answers go in `screens/fixtures.ts`, and the screen states in `screens/routes.ts`.
-4. **A story and a Vitest test.** Register the story in `STORY_MODULES` in `src/test/storybook-snapshots.test.tsx`, and render the test with `renderWithProviders`. Then the design lint (`npm run lint`) and the screenshots in the client theme (see Baselines).
-5. **The grants.** The new permissions go to the roles, in `default-roles.json`, of the personas that use the screen.
-6. **Design review**, on the unit's branch, before the unit merges. Once the unit's checks pass (below), conductor-design-steward reviews the captures that run wrote, against the brief and `conventions.md`. A unit it flags gets one revision on the same branch (see Working with agents), then its checks run again, with no second review.
+2. **The page**, composed from the framework's patterns in `src/shared`, with its route, its permission guard, and a nav item when the page is a starting point rather than opened from another screen. A page in a touch group sits under its `DensityGroup` route group; the first unit in a touch group adds that group to the app shell's routes (stage 6, step 5). A persona whose first page isn't the attention-queue home gets it from the home route by the check `conventions.md` names. A link to a screen a later unit builds goes to the generated page for now, and the unit that builds the screen moves it. A way in the inventory marks `seam` is left for the build, and the implementer's report names it.
+3. **Fixtures** in `<Code>.React/src/test/fixtures/`, typed by the generated types and written in the glossary's words. The harness's answers go in `screens/fixtures.ts`, and the screen states in `screens/routes.ts`, the empty, error and form-error states `conventions.md` names included, and a touch state for a page in a touch group.
+4. **A story and a Vitest test.** Register the story in `STORY_MODULES` in `src/test/storybook-snapshots.test.tsx`, and render the test with `renderWithProviders`. Then the design lint (`npm run lint`) and the screenshots in the client theme (see Baselines). The page shows `conventions.md`'s strings, and a server's problem title as it is.
+5. **The grants.** A new permission goes to the roles, in `default-roles.json`, of the personas that use the screen. A reused one is granted already.
+6. **Design review**, on the unit's branch, before the unit merges. Once the unit's checks pass (below), dispatch conductor-design-steward (see Working with agents), against the brief and `conventions.md`, over the unit's captures from that run in every mode, plus the home and one generated list of the same page group for cohesion. Its brief says that a hand-built page showing the 501's "isn't built yet" load error is expected, by design, and no finding. The unit is flagged when any finding on its captures fails a litmus question or is ranked `blocks`. A flagged unit gets one revision on the same branch, with each flagged finding and the revision the steward gave for it (see Working with agents), then its checks run again, with no second review. The revision never edits `conventions.md`. Every finding that doesn't flag the unit, one in code outside the unit's diff or against a locked string included, goes in the stage's run-log note, or into an open question when it needs the client, for the build.
 
-The unit's own commit moves its inventory row to `prototype`. The unit's checks are the build, its integration tests, `npm run lint && npm run typecheck && npm test`, `npm run check:api` and `npm run screens -- --active`. A unit passes when its checks pass and the steward has reviewed it. Only then does it merge into `main`. The checks run once more at the stage's end.
+The unit's own commit, `Design intake stage 7: <first screen's name>`, moves its rows to `prototype`, their API marks from `stub to write` to `stub`, and the inventory's summary line. The unit's checks are the build, the integration tests, `npm run lint && npm run typecheck && npm test`, `npm run check:api` and `npm run screens -- --active`. A unit passes when its checks pass and the steward has reviewed it. Only then does it merge into `main`. The checks run once more at the stage's end.
 
 **No links of its own.** Stage 3 declared every link the generator can write. A unit never adds a link field to a spec, never ejects a generated file, and never hand-writes a picker or filter into a generated page. The inventory's `hand-built` links wait for the build.
 
-**Writes:** the endpoints, models and permissions, with their integration tests; the OpenAPI document and API types; the pages, routes and nav items; the fixtures, harness answers and screen states; the stories, Vitest tests, Storybook snapshots and baselines; `default-roles.json`; and the inventory rows.
+**Writes:** the endpoints, models and permissions, with their integration tests; the OpenAPI document and API types; the pages, routes, touch route groups and nav items; the fixtures, harness answers and screen states; the stories, Vitest tests, Storybook snapshots and baselines; `default-roles.json`; the inventory's rows and summary line; and `open-questions.md`.
 
 **Passes when** every hand-built row is `prototype` or its unit is parked with an open question, each stub's tests prove its 401, 403 and 501, and every check passes.
 
@@ -315,36 +315,38 @@ The unit's own commit moves its inventory row to `prototype`. The unit's checks 
 
 ## Stage 8: Acceptance
 
-Done by conductor-implementer, one unit per workflow. A unit that fails its checks three times is parked, and the stage goes on to the next workflow (see Working with agents).
+Done by conductor-implementer, one unit per workflow, in `workflows.md`'s order. A unit that fails its checks three times is parked, and the stage goes on to the next workflow (see Working with agents). Each unit's commit is `Design intake stage 8: WF-<n> <workflow name>`.
 
-For each requirement in `requirements.md` whose Scope is `in` and whose Verified by is `acceptance`, write a Playwright scenario in `<Code>.React/e2e/acceptance/<workflow>.spec.ts`, named for its workflow in kebab case. Each scenario:
+For each requirement in `requirements.md` whose Scope is `in` and whose Verified by is `acceptance`, write a Playwright scenario in `<Code>.React/e2e/acceptance/<workflow>.spec.ts`, named for its workflow in kebab case. A requirement two workflows list is written once, in the first. A requirement no workflow lists goes in the unit of the workflow its screen serves (the inventory's Workflow column), or, when its screen serves none, in a last unit of its own, `other`, written to `other.spec.ts`. Each scenario:
 
 - is tagged with every requirement it proves, as `{ tag: ['@REQ-14.3'] }`. A tag on `test.describe` counts for every test inside.
-- is written from the requirement, its workflow and the prototype's screens, finding elements by role and by label in the glossary's words
-- signs in as a user of the persona's role with `signInWithRole(page, roleName)` from `e2e/support/users.ts`, which has the seeded administrator invite a new person with the role. The role must already exist in `default-roles.json` and must not require MFA (`requiresMfa: false`), since the helper can't answer an MFA challenge.
-- is marked `test.fail()`
+- is written from the requirement, its workflow, the guesses of the questions in its Depends on, and the prototype's screens, finding elements by role and by label in the glossary's words. A screen still `planned` has no labels yet: its steps use labels guessed in the glossary's words, which the build may rename but never drop.
+- starts from records the seeded administrator makes through the endpoints the inventory names, a link given as `<field>ShortId`, with `e2e/support`'s record helpers, its helper for a change with `If-Match` among them. Its setup holds only what its requirement and workflow name: a scope or limit they don't name stays out.
+- signs in the persona who does the step, with `signInWithRole(page, roleName)` from `e2e/support/users.ts`, which has the seeded administrator invite a new person with the role and deactivates that person when the test ends. The role must already exist in `default-roles.json` and must not require MFA (`requiresMfa: false`), since the helper can't answer an MFA challenge. The persona's first page doesn't matter: the helper waits for the sign-in, not for the home page. A second persona in the same scenario signs in on a page from the `newPerson` fixture of `e2e/support/people.ts`; the file then imports that module's `test` in place of Playwright's, which keeps the name the tag check reads.
+- is marked with `test.fail(...)` in place of `test(...)`, as the fork's `e2e/acceptance/README.md` shows
 
 ```ts
 import { expect, test } from '@playwright/test';
 import { signInWithRole } from '../support/users';
 
-test('<what the persona does, in the glossary words>', { tag: ['@REQ-<item>.<n>'] }, async ({ page }) => {
-  test.fail();
+test.fail('<what the persona does, in the glossary words>', { tag: ['@REQ-<item>.<n>'] }, async ({ page }) => {
   await signInWithRole(page, '<Role>');
   // the workflow's steps, found by role and label
 });
 ```
 
-The tag check reads only a call named `test` (or `test.fail`, `test.skip`, `test.only`, `test.fixme`) whose title is a string literal and whose last argument is an inline function, as above. Tell the implementer never to alias `test`, compute a title or pass a named callback: the check wouldn't see that scenario.
+The tag check reads only a call named `test` (or `test.fail`, `test.skip`, `test.only`, `test.fixme`) whose title is a string literal and whose last argument is an inline function, as above. Tell the implementer never to alias `test`, compute a title or pass a named callback: the check wouldn't see that scenario. Setup more than one file needs goes in `e2e/acceptance/support/*.ts`, never copied into each file.
 
-**The mark is a ratchet**, and the implementer's brief says so, since its own rules would read the mark as a skipped test. While the feature isn't built, the scenario fails as expected and the gate passes. Once the feature works, Playwright fails the run with "expected to fail but passed", so the unit that built it removes the mark in the same change. A requirement counts as verified only when its scenarios pass with no mark. A scenario that already passes, because a generated screen does what it asks, loses its mark now. Never weaken an assertion to make a scenario pass or fail.
+**The mark is a ratchet**, and the implementer's brief says so, since its own rules would read the mark as a skipped test. While the feature isn't built, the scenario fails as expected and the gate passes. Once the feature works, Playwright fails the run with "expected to fail but passed", so the unit that built it removes the mark in the same change, turning `test.fail(` into `test(`. A requirement counts as verified only when its scenarios pass with no mark. A scenario that already passes, because a generated screen does what it asks, loses its mark now. Never weaken an assertion to make a scenario pass or fail.
+
+**A marked scenario fails at the unbuilt part**, never at sign-in, setup or a wrong label. The framework's end-to-end config gives each action a short timeout, so a step on a control that isn't built fails at once instead of waiting out the test, which Playwright would count as unexpected; never raise it. The unit reads each marked scenario's error from the run (Playwright's JSON reporter gives each one's error and step), checks that it stops at the unbuilt part, and its report says where each stops. A part of a requirement no screen in the inventory offers is left unasserted, and becomes an open question for the build.
 
 A requirement better proven below the UI (a time rule, arithmetic, a permission rule) says `integration` or `unit` and gets no scenario here. The build's units write those tests, tagged with the same ID.
 
-Each unit passes `npm run lint && npm run typecheck && npm test`, whose tag check fails any test under `e2e/acceptance/` without a `@REQ-<n>.<n>` tag that names a requirement in `requirements.md`, and `npm run test:e2e`, where every marked scenario fails as expected. The checks run once more at the stage's end.
+Each unit passes `npm run lint && npm run typecheck && npm test`, whose tag check fails any test under `e2e/acceptance/` without a `@REQ-<n>.<n>` tag that names a requirement in `requirements.md`, and `npm run test:e2e`, where every marked scenario fails as expected at its unbuilt part and the framework's own specs still pass: the scenarios share their database. The unit's checks run once more at the stage's end.
 
-**Writes:** `<Code>.React/e2e/acceptance/*.spec.ts`.
+**Writes:** `<Code>.React/e2e/acceptance/*.spec.ts`, `<Code>.React/e2e/acceptance/support/*.ts`, and `open-questions.md`.
 
-**Passes when** every in-scope `acceptance` requirement has a tagged scenario or belongs to a parked unit with an open question, each scenario is marked `test.fail()` unless it already passes, and every check passes.
+**Passes when** every in-scope `acceptance` requirement has a tagged scenario or belongs to a parked unit with an open question, each scenario is marked with `test.fail` unless it already passes, each marked scenario fails at its unbuilt part, and the unit's checks pass.
 
-**Sends**, in chat, and as a notification only when it added questions: "Acceptance written: <n> scenarios for <n> requirements, <n> already passing, <n> units parked." The next run reports that intake is done.
+**Sends**, in chat, and as a notification only when it added questions: "Acceptance written: <n> scenarios for <n> requirements, <n> scenarios already passing (<n> requirements verified), <n> units parked." The next run reports that intake is done.
