@@ -11,7 +11,7 @@ Pell Software's Claude Code toolkit. One plugin, many skills. Install once, get 
 | Command | What it does |
 |-|-|
 | `/pell:map-repo [refresh \| verify \| PROJECT-KEY]` | Map this repo's Jira, Confluence, Drive, and Bitbucket coordinates into a committed `docs/pell/context.md`; optionally build the project SOW at setup time. `verify` re-checks for drift. Read-only against every remote system. |
-| `/pell:init-client-repo <bitbucket link> [name "<display>"] [logo <path>] [ref <branch>] [--dry-run] [--reset]` | Start a client's Bitbucket repo from the Pell Web App Framework: clone it, fork the framework into it under the client's name, run and check it locally, then commit on `main`, create `staging` and push both. Read-only until you confirm the plan; saving the repos folder and creating the repo are each gated separately. |
+| `/pell:init-client-repo <bitbucket link> [name "<display>"] [logo <path>] [ref <branch>] [--dry-run] [--reset]` | Start a client's Bitbucket repo from the Pell Web App Framework: clone it, fork the framework into it under the client's name, run and check it locally, then commit on `main`, create `staging`, push both and block force pushes and deletion on them. Read-only until you confirm the plan; saving the repos folder and creating the repo are each gated separately. |
 
 ### Review primitives (single-dimension, read-only)
 
@@ -74,6 +74,7 @@ Finding PRs to review:
 
 - `frontend-router` — routes UI work to `frontend-design` (notify-don't-force).
 - `init-client-repo` — routes a Bitbucket repo link for a new client project to `/pell:init-client-repo`; never does the work itself.
+- `repo-standup` — builds a client project from the Pell Web App Framework end to end: it forks the framework through `/pell:init-client-repo`, installs a push guard, runs design intake, builds every requirement one unit at a time, hardens the result and writes the handoff for the owning engineer. Every session takes the prompt `/pell:repo-standup` in the fork's folder with auto mode on. It writes, commits and pushes in the fork without `(y/n)` prompts, and its only push is `git push origin main` to the client repo, which the guard enforces. It waits only at design intake's two checkpoints. Its Node tests are in `tests/repo-standup/`, outside the plugin.
 - `design-intake` — runs inside a client fork of the Pell Web App Framework and does the next design-intake stage (sources, extract, generate, brief, directions, lock, prototype, acceptance), then stops. It waits only at two checkpoints: the intake sheet and the direction pick. It writes and commits in the fork without `(y/n)` prompts, because the orchestrator runs it unattended, and pushes only to the client repo. Stage 3 declares the approved links between entities in the specs, and adds migrations rather than regenerating `Initial`, which it leaves to the engineer before the first deployment. Each call ends with one `design-intake: ...` outcome line, and a prototype or acceptance unit that fails its checks three times is parked with an open question.
 
 ## Agents (composable building blocks)
@@ -88,7 +89,7 @@ Repo-based reviewers (dispatched by the repo audits):
 
 Project scoper (dispatched by `/pell:scope` when the SOW cache is missing or stale, and by `/pell:map-repo` at setup time; `(y/n)`-gated before dispatch because the walk is the most expensive thing the plugin does):
 
-- `sow-builder` — returns `{sow_markdown, sources, stats, summary}` rather than findings; it produces a document, not a review. Pinned to `model: sonnet` — the only agent that does not inherit the orchestrator's model, because its work is mechanical.
+- `sow-builder` — returns `{sow_markdown, sources, stats, summary}` rather than findings; it produces a document, not a review. Pinned to `model: sonnet` — one of two agents (with `handoff-writer`) that do not inherit the orchestrator's model, because its work is mechanical.
 
 Repo mapper (dispatched by `/pell:map-repo`):
 
@@ -103,6 +104,10 @@ Design intake producers (dispatched by the `design-intake` skill):
 
 - `intake-analyst` — turns the converted SOW and documents into the project pack (cited requirements, glossary, personas, workflows, entity specs, default roles, the intake sheet), carries the engineer's corrections back into it, and declares the approved links in the specs. Returns `{files, questions, summary}` rather than findings, because it writes files.
 - `design-director` — brand capture and design brief, two or three direction themes on the client's own screens, and the lock into the client theme. Returns `{files, questions, summary}` rather than findings, because it writes files.
+
+Repo-standup handoff writer (dispatched by the `repo-standup` skill in phase 9, and at every other stop but the guard check's):
+
+- `handoff-writer` — writes `handoff.md`, a demo script per persona and the prose around `cost-report.md`'s tables from files that already exist, and computes no number. Returns `{files, questions, summary}` rather than findings, because it writes files. Pinned to `model: sonnet`, the second agent that does not inherit the orchestrator's model, because its work is mechanical.
 
 `conductor-design-steward` also has a screenshot mode, used by `design-intake`, that reviews a `screens-output/` run from the framework's screenshot harness.
 
