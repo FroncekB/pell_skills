@@ -1,5 +1,7 @@
 # Repo standup orchestrator Implementation Plan
 
+> **Status:** Tasks 1-15 and 18 built on branch orchestrator.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build the repo-standup orchestrator: a push guard, Bitbucket branch restrictions at fork time, and a Pell skill that runs a client build from the fork to the handoff, plus the framework half it needs (the `scoreboard` command, test results written to files, a seed login per persona, and the new pack files).

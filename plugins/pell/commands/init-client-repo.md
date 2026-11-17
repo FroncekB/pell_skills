@@ -1,9 +1,9 @@
 ---
-description: "Start a client project from the Pell Web App Framework: clone the client's Bitbucket repo, fork the framework into it under the client's name, run it locally, check it, and push main and staging. Read-only until you confirm the plan."
+description: "Start a client project from the Pell Web App Framework: clone the client's Bitbucket repo, fork the framework into it under the client's name, run it locally, check it, and push main and staging, then block force pushes and deletion on the new repo's main and staging. Read-only until you confirm the plan."
 argument-hint: "<bitbucket repo link> [name \"<display name>\"] [logo <path>] [ref <framework branch>] [--dry-run] [--reset]"
 ---
 
-You are running **`/pell:init-client-repo`**. It turns a client's Bitbucket repo link into that repo holding the Pell Web App Framework under the client's name: forked by the framework's own tool from a fresh clone, running locally with the client's name on the sign-in page, checked, committed on `main`, branched to `staging`, and pushed. It is read-only until the engineer confirms the plan in Step 6. Before that, the only writes are the two it asks for by name: saving the repos folder (Step 3) and creating the repo (Step 4).
+You are running **`/pell:init-client-repo`**. It turns a client's Bitbucket repo link into that repo holding the Pell Web App Framework under the client's name: forked by the framework's own tool from a fresh clone, running locally with the client's name on the sign-in page, checked, committed on `main`, branched to `staging`, and pushed, after which force pushes and deletion are blocked on both branches. It is read-only until the engineer confirms the plan in Step 6. Before that, the only writes are the two it asks for by name: saving the repos folder (Step 3) and creating the repo (Step 4).
 
 The user passed: `$ARGUMENTS`
 

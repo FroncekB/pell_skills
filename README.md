@@ -81,7 +81,7 @@ Twenty-two commands (plus one deprecated alias, `/pell:three-pass-review`), grou
 
 | Stage | Commands |
 |-|-|
-| **Repo setup** | [`map-repo`](#pellmap-repo-refresh--verify--with-sow--skip-sow--project-key--url----dry-run----verbose) · [`init-client-repo`](#pellinit-client-repo-bitbucket-repo-link-name-display-name-logo-path-ref-framework-branch---dry-run---reset) |
+| **Repo setup** | [`map-repo`](#pellmap-repo-refresh--verify--with-sow--skip-sow--project-key--url----dry-run----verbose) · [`init-client-repo`](#pellinit-client-repo-bitbucket-repo-link-name-display-name-logo-path-ref-framework-branch---dry-run---reset) · [`repo-standup`](#pellrepo-standup) (a skill, started by its slash name) |
 | **Starting work** | [`my-tickets`](#pellmy-tickets) · [`triage`](#pelltriage-key) · [`related`](#pellrelated-key) · [`precheck`](#pellprecheck-key--idea) · [`scope`](#pellscope-key--project-key) · [`groom`](#pellgroom-epic-key--keys--project-key--jql) · [`start-work`](#pellstart-work-key) · [`from-ticket`](#pellfrom-ticket-jira-key-freeform-context) |
 | **Reviewing code** | [`correctness-review`](#pellcorrectness-review) · [`quality-review`](#pellquality-review) · [`security-review`](#pellsecurity-review) · [`test-review`](#pelltest-review) · [`local-review`](#pelllocal-review) · [`four-pass-review`](#pellfour-pass-review-pr) · [`address-review`](#pelladdress-review-pr) · [`review-queue`](#pellreview-queue-repo-) |
 | **Auditing a whole repo** | [`repo-review`](#pellrepo-review) · [`repo-security-review`](#pellrepo-security-review) |
@@ -144,7 +144,7 @@ Walk this repo's Jira, Confluence, Drive, and Bitbucket coordinates once and wri
 
 ### `/pell:init-client-repo <bitbucket repo link> [name "<display name>"] [logo <path>] [ref <framework branch>] [--dry-run] [--reset]`
 
-Turn a client's Bitbucket repo link into that repo holding the Pell Web App Framework under the client's name: forked by the framework's own tool from a fresh clone, running locally with the client's name on the sign-in page, checked, committed on `main`, branched to `staging`, and pushed.
+Turn a client's Bitbucket repo link into that repo holding the Pell Web App Framework under the client's name: forked by the framework's own tool from a fresh clone, running locally with the client's name on the sign-in page, checked, committed on `main`, branched to `staging`, and pushed. It then blocks force pushes and deletion on the new repo's `main` and `staging` through Bitbucket branch restrictions, and tells you what to set by hand when it can't.
 
 **Usage:**
 
@@ -166,11 +166,44 @@ Turn a client's Bitbucket repo link into that repo holding the Pell Web App Fram
 6. On `y`: clones the client repo, runs the fork tool into it, starts the app, checks the sign-in page shows the client's name, then stops it
 7. Runs the build, the unit tests, lint, typecheck and `npm test`, the integration tests, the generator check and a leftover-name check, stopping before any commit if one fails; on Windows it then rewrites the active theme's screenshot baselines (`npm run screens -- --active --update-all`) so they show the client's name, elsewhere it adds a line to `docs/project/status.md`
 8. Commits on `main`, creates `staging`, and pushes both together with `git push --atomic`, never forced
+9. Blocks force pushes and deletion on `main` and `staging` with Bitbucket branch restrictions, when the connector offers the operation, otherwise prints the settings to apply by hand
 
 **Output:** the plan, then a report with the time to running and in total, the fork tool's time, the repo link, the folder, the pushed branches and next steps (turning on Bitbucket Pipelines and setting the CI's SQL password variable, `/pell:map-repo`, the intake sheet).
 
 **Side-effects:** read-only until the plan prompt, except two writes with their own `(y/n)`: saving the repos folder, and creating the Bitbucket repo. After the plan `y` it clones, runs local servers and checks, commits, and pushes `main` and `staging` to the client repo, which is the one standing yes. The database: with `PELLFW_TEST_SQL` set, it writes the fork's user secrets and creates the databases `<Code>` and `<Code>_Test_Fork` on that server; without it, it uses LocalDB (Windows only). It also adds a line to `docs/project/run-log.md`, and the fork's first Vite start exports the ASP.NET dev certificate for the app, as any app made from the template does. If a step fails, it stops before the commit and leaves the folder for you. `--dry-run` writes nothing beyond a temporary framework clone it deletes. Needs the Atlassian connector only to create a missing repo.
 
+---
+
+### `/pell:repo-standup`
+
+Build a client project from the Pell Web App Framework end to end, with two stops for the engineer. It is a skill, started by its slash name rather than a command file. The first run takes the same arguments as `/pell:init-client-repo` (the Bitbucket repo link, then optionally a name, a logo, SOW files, a site URL or brand files). Every later session takes the same prompt, `/pell:repo-standup`, opened in the fork's folder with **auto mode on**.
+
+**Usage:**
+
+```
+/pell:repo-standup https://bitbucket.org/pellsoftware/acme-field-ops    # first run: fork the repo, then build
+/pell:repo-standup                                                       # every later session, in the fork's folder
+```
+
+**What it does:**
+
+1. Runs `/pell:init-client-repo` (its own `(y/n)` gates and Bitbucket branch restrictions apply), then sets up the push guard in the fork and asks for an optional stop date
+2. Runs design intake (stages 1 to 8) and stops at its two checkpoints, the intake sheet and the direction pick
+3. Builds every requirement one unit at a time: implement, check, review, merge with `git merge --ff-only`. The scoreboard decides what is done, from test results and files, never a worker's claim
+4. Hardens the result with integration-gap audits and a security pass
+5. Writes the handoff for the Pell engineer who will own the project
+
+**The push guard.** Setup installs a `PreToolUse` hook and a git `pre-push` hook in the fork. The only push either allows is `git push origin main`, to the client repo named in `client.yaml`, never forced, never another branch or remote. The guard also denies reads and writes under `.git/` and `.claude/` once setup is done, so a run cannot loosen it. Because a session loads the guard only from the folder it starts in, open each later session in the fork's folder. The Bitbucket branch restrictions that `/pell:init-client-repo` sets are the server-side half, and the complete enforcement is the two together.
+
+**Checkpoints.** The run waits only on the engineer, only at design intake's two checkpoints, and never on the client. Every question it raises carries a guess, and the build goes on with it. Notifications go out through `PushNotification` at checkpoints, phase ends, stops and alerts (turn on mobile push in `/config`); when none can send, the same message appears in chat.
+
+**The handoff.** Written under `docs/project/` by the `handoff-writer` agent: `handoff.md` (one page), `scoreboard.md`, `open-questions.md` ready to send, `known-gaps.md`, a `demo/<persona>.md` per persona, `decisions.md` and `cost-report.md`. Everything is internal. A run is never closed: `State: done` means only that nothing could move, and the next session resumes if an answer or an edit has made a unit movable.
+
+**Side-effects:** writes, commits and pushes in the fork without `(y/n)` prompts, because the invocation is the yes and `git push origin main` is a standing yes, enforced by the guard. Every other side effect goes through `/pell:init-client-repo`'s gates. Staging deploy is skipped until the Azure module exists.
+
+**Tests:** the guard has Node tests in `tests/repo-standup/`, outside the shipped plugin. Run `node --test "tests/**/*.test.mjs"` from the repo root after any change to `plugins/pell/skills/repo-standup/hooks/`.
+
+---
 ---
 
 ## Starting work
@@ -607,6 +640,12 @@ Fires inside a client fork of the Pell Web App Framework (a repo with `client.ya
 
 The skill writes and commits inside the fork without `(y/n)` prompts, because the orchestrator runs it unattended; it pushes only to the client repo. It never deletes a migration: each model change gets an additive one, and it asks you to regenerate `Initial` before the first deployment. It dispatches `intake-analyst` and `design-director` (below), plus `conductor-implementer` and `conductor-design-steward`. A run picks up from the files in the fork alone. Every call ends with one outcome line for the orchestrator (`design-intake: ran stage <n> <name>`, `waiting on <path>`, `done` or `stopped: <reason>`); a prototype or acceptance unit that fails its checks three times is parked with an open question, and the stage moves on.
 
+### `repo-standup`
+
+Fires in a client fork or on a Bitbucket repo link when you say "start repo standup" or "continue the build", or run `/pell:repo-standup`. It works out where the run stands from the fork's files alone and carries on: design intake, then the build loop, hardening and the handoff. The full run, the push guard, the checkpoints and the handoff are described under [`/pell:repo-standup`](#pellrepo-standup). It dispatches `handoff-writer` (below), design intake's agents through the `design-intake` skill, and the `conductor-*` workers.
+
+The skill writes, commits and pushes in the fork without `(y/n)` prompts; its only push is `git push origin main` to the client repo, which its guard enforces.
+
 ---
 
 ## Composable building blocks (sub-agents)
@@ -626,6 +665,7 @@ The reviewers are also exposed as composable agents — any current or future co
 | Ticket code auditor | `ticket-code-auditor` | `{findings: [{category, severity, title, evidence, question, code_note, suggestion, related_tickets, thread_status}], touched, thread_read, thread_overlaps, summary}` |
 | Intake analyst | `intake-analyst` | `{files, questions, summary}` — not findings; writes the design-intake project pack (requirements, personas, entity specs, roles, intake sheet), carries the engineer's corrections into it, and declares the approved links |
 | Design director | `design-director` | `{files, questions, summary}` — not findings; writes the brand capture and design brief, the direction themes, and the locked client theme for design-intake |
+| Handoff writer | `handoff-writer` | `{files, questions, summary}` — not findings; pinned to `model: sonnet`; writes the repo-standup handoff (`handoff.md`, a demo script per persona, the prose in `cost-report.md`) from files that already exist and computes no number |
 
 This is the foundation of the workflow composers: commands like `/pell:wrap-up` dispatch these without re-implementing review logic.
 
