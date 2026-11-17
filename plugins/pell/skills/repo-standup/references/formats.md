@@ -130,17 +130,21 @@ Design intake's file. Design intake writes its lines in its own shape and the or
 - `<outcome>` is exactly one of the words below, followed by `:` and the note.
 - The note ends with the tokens by model, as `opus <n>, sonnet <n>`, with `k` or `m` allowed on each count. Write no other word followed by a number that reads like `opus 3` in a note, because the reader takes every such pair as a model's tokens.
 - When the conductor's own tokens are unknown, the note says `workers only` before the tokens by model.
+- A `phase` line carries only tokens that no other line counts: no unit's line and no `queue` line. So the cost tables can sum every line.
 
 |Outcome|Written when|Note, as an example|
 |-|-|-|
 |`merged`|A unit merged|`WF-1 approvals, 4 requirements Verified; opus 120k, sonnet 190k`|
+|`merged`, with no build|Its requirements were all Verified before it started|`already verified; opus 0, sonnet 0`|
 |`attempt-failed`|A unit's attempt failed|`attempt 2, done check left REQ-14.4 Built-unverified; opus 40k, sonnet 150k`|
 |`attempt-failed`, conductor's share unknown|The usage tool couldn't be loaded|`attempt 1, the e2e check failed; workers only; opus 20k, sonnet 70k`|
 |`failed-env`|An environmental failure, not an attempt|`SQL Server process failed to start; opus 0, sonnet 12k`|
 |`parked`|A unit parked on its third failed attempt|`3 attempts failed, Q-9 added; opus 90k, sonnet 300k`|
-|`phase`|A phase ended|`workflows ended, 12 merged; opus 1.4m, sonnet 2.1m`|
+|`phase`|A phase ended|`workflows ended, 12 merged; opus 15k, sonnet 0`|
 |`notified`|A notification was sent|`through Q-7; alerts: none`|
 |`stopped`|The run stopped|`3 parks in a row; opus 0, sonnet 0`|
+|`queue`, an audit|An integration-gap audit ran|`audit, 2 fix units; opus 60k, sonnet 0`|
+|`queue`, a hardening pass|A hardening pass ran|`hardening pass, 3 fix units; opus 240k, sonnet 30k`|
 |`queue`|The queue was built or changed|`built, 14 units; opus 80k, sonnet 0`|
 
 Full lines, one per shape. The `notified` line carries no token figure, so its minutes and tokens are `0`:
@@ -151,7 +155,7 @@ Full lines, one per shape. The `notified` line carries no token figure, so its m
 - 2026-11-16 15:12 | repo-standup workflows - | 0 min | 0 tokens | notified: through Q-7; alerts: none
 ```
 
-The `notified` line's note is `through Q-<n>; alerts: <comma list or none>`. `Q-<n>` is the highest question number the notification covers, which is how `scoreboard` knows what is new. `<comma list>` is `none`, or the alerts that notification carried, separated by `, `. The words are the scoreboard's own: `blocked-over-30`, and `parked-twice U-<n>` with one entry per unit, as in `alerts: blocked-over-30, parked-twice U-7, parked-twice U-9`. A third word, `security`, is the skill's own, for a high or critical security finding. The scoreboard doesn't print or de-duplicate it and ignores words it doesn't print, so the skill itself sends the security alert once per finding. When the notification tool is missing or doesn't send, the message goes in chat and the note adds `; chat only`.
+The `notified` line's note is `through Q-<n>; alerts: <comma list or none>`. `Q-<n>` is the highest question number the notification covers, which is how `scoreboard` knows what is new. `<comma list>` is `none`, or the alerts that notification carried plus every `parked-twice U-<n>` the previous `notified` line named, separated by `, `. The scoreboard reads only the last `notified` line, and a unit parked twice stays parked, so carrying those entries forward keeps it from raising them again. The words are the scoreboard's own: `blocked-over-30`, and `parked-twice U-<n>` with one entry per unit, as in `alerts: blocked-over-30, parked-twice U-7, parked-twice U-9`. A third word, `security`, is the skill's own, for a high or critical security finding. The scoreboard doesn't print or de-duplicate it and ignores words it doesn't print, so the skill itself sends the security alert once per finding. When the notification tool is missing or doesn't send, the message goes in chat and the note adds `; chat only`.
 
 **Lists.** Design intake's lines can carry lists. Each item sits on its own indented line under the stage's line, as `  - <item>`. The reader joins those lines into the note of the line above, so an indented line belongs to the line it follows. The orchestrator writes none of its own, and puts no unrelated line between a design intake line and its list.
 
@@ -176,14 +180,40 @@ Sent with `PushNotification`: one line, under 200 characters. `<counts>` is `<n>
 |Stop|`Run stopped: <reason>. <counts>. See docs/project/handoff.md`|
 |Stop at the guard check|`Run stopped: the push guard isn't loaded. Open a new session in the fork folder and type /pell:repo-standup.`|
 
-The reason in a stop is one of: `failed-env on 2 units in a row, <the failing check>`, `3 parks in a row`, `the stop date has passed`, `design intake stopped: <its reason>`, `guard not loaded; open a new session in the fork folder`. The same reason follows `stopped:` in `status.md`, as `State: stopped: guard not loaded; open a new session in the fork folder`. The guard stop's notification has its own wording, in the row above.
+The reason in a stop is one of:
+
+|Reason|When|
+|-|-|
+|`failed-env twice in a row, <the failing check>`|The scoreboard's `env-broken`, or a second `failed-env` line on any unit since the last `merged`, `parked` or `attempt-failed` line|
+|`3 parks in a row`|The scoreboard's `parks-in-a-row`|
+|`the stop date has passed`|The stop date, through the handoff|
+|`design intake stopped: <its reason>`|Design intake's `stopped:` line, or the skill's own `design intake stopped: no outcome line` after two calls with neither an outcome line nor a commit|
+|`guard not loaded; open a new session in the fork folder`|The guard check failed|
+|`main diverged`|A rebase onto `origin/main` conflicted, or the checks failed after it|
+|`an uncommitted file no unit wrote: <path>`|A file outside `docs/project/` was left uncommitted at a unit boundary|
+|`scoreboard: <the diagnostic>`|The scoreboard exited 1 on a line the engineer wrote|
+
+Phase 9's own reason, when the run ends with `State: done`, is in `handoff.md`. The same reason follows `stopped:` in `status.md`, as `State: stopped: guard not loaded; open a new session in the fork folder`. The guard stop's notification has its own wording, in the row above.
 
 ## Commit messages
 
 |When|Message|
 |-|-|
-|A unit starts, on `main`|`Unit U-<n> starts`|
-|A unit merges|`Unit U-<n>: <title>`|
+|A unit starts, on `main`, or an interrupted attempt starts over|`Unit U-<n> starts`|
+|A unit merges, or is marked merged as already verified|`Unit U-<n>: <title>`|
 |The conductor commits an engineer's edits to the pack|`Repo standup: the engineer's edits`|
+|Setup writes `status.md`|`Repo standup: setup`|
+|`status.md` alone, before a design intake call or at a checkpoint|`Repo standup: status`|
+|The queue is built or changed, or a unit goes back after a `failed-env`|`Repo standup: the queue`|
+|An attempt fails|`Repo standup: U-<n> attempt failed`|
+|A unit parks|`Repo standup: U-<n> parked`|
+|An integration-gap audit|`Repo standup: audit`|
+|A hardening pass|`Repo standup: hardening`|
+|The run stops|`Repo standup: stopped`|
+|The implementer's work, on the unit's branch|`Unit U-<n>: <title>, work`|
+|A fix round, on the unit's branch|`Unit U-<n>: <title>, fix`|
+|A `review` unit's `reviews.md` rows, on its branch|`Unit U-<n>: <title>, reviews`|
+|What is left on a unit's branch when the conductor leaves it|`Unit U-<n>: <title>, left over`|
+|The performance smoke test, on `perf/smoke`|`Performance smoke test`|
 
-Every commit message in the fork ends with the attribution line the session was given.
+Every commit message in the fork ends with the co-author line the session was given for its commits, as a last `-m`. The fork's `CLAUDE.md` names no line of its own, so when the session was given none, the message ends without one.

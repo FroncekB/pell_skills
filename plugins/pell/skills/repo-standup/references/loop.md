@@ -6,14 +6,14 @@ How phases 6 and 7 run, one unit at a time. `SKILL.md` holds the rules every pha
 
 - `<Code>` is `client.yaml`'s `name.code`, and `<skill>` is `${CLAUDE_PLUGIN_ROOT}/skills/repo-standup`. Commands run from the repository root, npm commands in `<Code>.React/`. Pack paths are under `docs/project/`.
 - **Design intake's references.** The formats of `requirements.md`, `open-questions.md`, `decisions.md`, `workflows.md` and `integrations.md` are in `${CLAUDE_PLUGIN_ROOT}/skills/design-intake/references/formats.md`. Its stage procedures and terms are in `stages.md` beside it.
-- **The checks** are the fork's `CLAUDE.md` "Standard commands" that check, run by the conductor one at a time, in this order, each passing: the build, the unit tests, the integration tests, `npm run lint && npm run typecheck && npm test`, `npm run check:api`, `npm run screens -- --active`, `npm run test:e2e`, and `generate --check`. They share the integration tests' database and port 7143, so two never run at once. A check that can outlast the tool's timeout runs in the background, and the conductor waits for its completion notice. A worker's claim that the checks pass is not a pass.
+- **The checks** are the fork's `CLAUDE.md` "Standard commands" that check, run by the conductor one at a time, in this order, each passing: the build, the unit tests, the integration tests, `npm run lint && npm run typecheck && npm test`, `npm run check:api`, `npm run screens -- --active`, `npm run test:e2e`, and `generate --check`. They share the integration tests' database and port 7143, so two never run at once. Run the React chain with the Bash tool; PowerShell 5.1 has no `&&`, so there it is `npm run lint; if ($?) { npm run typecheck }; if ($?) { npm test }`. A check that can outlast the tool's timeout runs in the background, and the conductor waits for its completion notice. A worker's claim that the checks pass is not a pass.
 - **Flakes, Baselines and Formatting** follow the rules of those names in design intake's `stages.md`, "Terms used below".
 - **The scoreboard** is:
   ```
   dotnet run --project tools/<Code>.Scaffolder -c Release -- scoreboard --json
   ```
   It prints one JSON object with the keys `movable`, `next`, `unowned`, `states`, `blockedPercent`, `remaining`, `parksInARow`, `envFailuresInARow`, `parkedTwice`, `sinceNotified` (`merged`, `questions`), `stop`, `alerts`, `batchDue` and `stale`. It also rewrites `docs/project/scoreboard.md` whole, one row per requirement with its state.
-  - It reads the results files the checks write. Before every run, every check runs in full first, unless they last ran in full and only files under `docs/project/` have changed since. A filtered run (`--filter`, `-g`, a single file) leaves partial results, so after one the check runs in full again before the scoreboard.
+  - It reads the results files the checks write. Before every run, every check runs in full first, unless they last ran in full in this session and only files under `docs/project/` have changed since. So a session's first scoreboard run always follows a full run of the checks. A filtered run (`--filter`, `-g`, a single file) leaves partial results, so after one the check runs in full again before the scoreboard.
   - `stale: true` means a commit came after the checks ran. That is expected when the commit touched only `docs/project/`, as bookkeeping does. Otherwise run the checks again.
   - On `main`, the rewritten `scoreboard.md` goes into the next commit. On a unit branch, read it, then `git restore docs/project/scoreboard.md`.
   - Exit 1 prints `<file>:<line>: <message>`. On a line the run wrote, fix it and run again; on a unit branch it counts as a failing check. On a line the engineer wrote, stop with `scoreboard: <message>`.
@@ -61,7 +61,7 @@ Number units from `U-1`; an ID is never reused. Commit as `Repo standup: the que
 Before each unit, and after the last:
 
 1. Re-read `status.md`.
-2. Sync with `origin` and commit the engineer's edits (`SKILL.md`, "Where the engineer answers").
+2. Commit the engineer's edits, then fetch and rebase onto `origin/main` (`SKILL.md`, "Where the engineer answers").
 3. **Answers and edits.** Read `open-questions.md` for answers that have no `answer to Q-<n> applied` line in `decisions.md` yet. Give each that line, in design intake's format, with the phase as its stage and `decided by: engineer`. An answer that differs from its guess also gets a `fix` unit naming the requirements it changes. An engineer's edit to the pack is handled the same way: a changed requirement gets a `fix` unit, and one moved out of scope leaves its unit, which becomes `dropped` when it holds no other. Commit as `Repo standup: the queue` when the queue changed.
 4. **The scoreboard.** Queue a `fix` unit for each `unowned` requirement. Act on `stop`, `alerts` and `batchDue` (`SKILL.md`).
 5. **The integration-gap audit** (below), when the `merged` lines number a multiple of 5 and no `queue: audit` line follows the last of them.
@@ -70,7 +70,7 @@ Before each unit, and after the last:
 
 ## One unit
 
-1. **Next.** The scoreboard's `next`.
+1. **Next.** The scoreboard's `next`. When `Phase:` is `staging` or `handoff`, as after a resume, set it to `workflows` (`SKILL.md`, "The Phase line"). When every one of the unit's requirements is already Verified in `scoreboard.md`, it is built already: mark it `merged`, append its line, `merged: already verified; opus 0, sonnet 0`, with 0 minutes and 0 tokens, and commit as `Unit U-<n>: <title>`. It gets no branch and no implementer, and the next unit follows.
 2. **Start.** In `queue.md`, mark the unit `in progress` and add one to its Attempts. In `status.md`, write its Unit line, Next and Scoreboard. Commit on `main` as `Unit U-<n> starts`. Note `get_usage` as the attempt's start.
 3. **Branch.** Run `git rev-parse main` for the expected tip, and use the hash it prints, written out. Then `git switch -C unit/U-<n> main`, in the fork's own checkout. No worktrees: one unit at a time.
 4. **Implement.** Dispatch `conductor-implementer` with the brief below, on the model the unit's risk names (Review). A `review` unit has no implementer here: go to step 5.
@@ -92,7 +92,7 @@ Before each unit, and after the last:
 
 **A failed attempt** is one whose checks or done check still fail after the implementer hands back, or whose blocker or major finding is still unfixed after its fix round. Leave the branch, append an `attempt-failed` line naming the attempt and what failed, and commit as `Repo standup: U-<n> attempt failed`. Keep the failure output, cut to what shows the cause, for the next brief. When this is the try's third failed attempt, park the unit. Otherwise the next attempt starts at step 2, with a fresh implementer. A try's failed attempts are the unit's `attempt-failed` lines since its last `parked` line.
 
-**An environmental failure** names the database connection, a held port, a missing SDK or tool, or the disk. It isn't an attempt. Leave the branch, take one off the unit's Attempts, mark it `queued`, append a `failed-env` line naming the check, and commit as `Repo standup: the queue`. The next unit is the first in `movable` other than this one. When it is the only one, it runs again, and a second `failed-env` on it in a row stops the run with `failed-env twice on U-<n>, <the check>`. The scoreboard's `env-broken` covers two units in a row. The patterns, matched in the failing output:
+**An environmental failure** names the database connection, a held port, a missing SDK or tool, or the disk. It isn't an attempt. Leave the branch, take one off the unit's Attempts, mark it `queued`, append a `failed-env` line naming the check, and commit as `Repo standup: the queue`. When this is the second `failed-env` line, on any unit, since the last `merged`, `parked` or `attempt-failed` line, stop the run with `failed-env twice in a row, <the check>`. Otherwise the next unit is the first in `movable` other than this one, or this one when it is the only one. The patterns, matched in the failing output:
 - `error occurred while establishing a connection to SQL Server`
 - `SQL Server process failed to start`
 - `EADDRINUSE`
@@ -135,14 +135,15 @@ Give paths, not contents.
 
 ## Raising the risk
 
-Match `git diff --name-only main...unit/U-<n>` against these paths. Any match makes the unit high.
+Any match below makes the unit high. Match the paths against `git diff --name-only main...unit/U-<n>`:
 - `<Code>.Domain/Authorization/**`, except `*.g.cs`
 - `<Code>.Domain/Identity/**`
 - `<Code>.API/Configuration/default-roles.json`
 - `<Code>.API/Controllers/{Auth,Invitations,Me,Permissions,Roles,Users}Controller.cs`
 - `<Code>.API/{Services,Models}/{Auth,Roles,Users}/**`
 - `<Code>.API/Integrations/**`, where integration clients go
-- added lines in non-test C# matching `.Remove(`, `.RemoveRange(`, `ExecuteDelete` or `[HttpDelete`
+
+Match the deletes against the diff's content, `git diff main...unit/U-<n> -- "*.cs"`: an added line (one starting with `+`) in a file outside the test projects that contains `.Remove(`, `.RemoveRange(`, `ExecuteDelete` or `[HttpDelete`.
 
 **The ratchet flag.** Read `git diff main...unit/U-<n> -- <Code>.React/e2e/acceptance/`. Any changed line flags the unit for the ratchet check, except a mark's removal: a removed `test.fail();` line, or a removed line whose added twin is the same text with `test.fail(` turned into `test(`.
 
@@ -187,13 +188,13 @@ A high or critical security finding also raises the security alert, once per fin
 
 ## The integration-gap audit
 
-Every 5 merged units, and as the first scan of each hardening pass, so it also runs at the end of phases 6 and 7. Dispatch one `conductor-integration-gap-auditor`, `opus`, on `main`, with the checkout, the base, and the requirements the units merged since the base verify. The base is the last `Repo standup: audit` commit (`git log -1 --format=%H --grep="^Repo standup: audit$"`), or, for the first audit, the oldest `Repo standup: the queue` commit.
+Every 5 merged units, and as the first scan of each hardening pass, so it also runs at the end of phases 6 and 7. Dispatch one `conductor-integration-gap-auditor`, `opus`, on `main`, with the checkout, the base, and the requirements the units merged since the base verify. The base is the last `Repo standup: audit` commit (`git log -1 --format=%H --grep="^Repo standup: audit$"`), or, for the first audit, the oldest `Repo standup: the queue` commit: the first line of `git log --reverse --format=%H --grep="^Repo standup: the queue$"`. Don't take the oldest commit to touch `queue.md`, which is the fork's skeleton.
 
 Each `blocks-workflow` or `misleading` finding becomes a `fix` unit, high when its files match the risk paths and standard otherwise. A `cosmetic` one goes to `known-gaps.md`'s minor findings. Append a `queue` line, `audit, <n> fix units`, and commit as `Repo standup: audit`.
 
 ## Hardening
 
-Phase 7 runs a pass when nothing is movable and there has been no pass, or `merged` lines follow the last `queue: hardening pass` line. After the first, a pass is scoped to what changed since the last `Repo standup: hardening` commit (`git log -1 --format=%H --grep="^Repo standup: hardening$"`, then `git diff --name-only <that hash> main`): security reads only the changed hand-written files; the dependency scans run when a `*.csproj`, `Directory.Packages.props` or `package-lock.json` changed; screens and design run when anything under `<Code>.React/` changed; the performance test runs when any code outside the tests changed.
+Phase 7 runs a pass when nothing is movable and there has been no pass, or `merged` lines follow the last `queue: hardening pass` line. A pass starts by setting `Phase: hardening` when it isn't already (`SKILL.md`, "The Phase line"). After the first, a pass is scoped to what changed since the last `Repo standup: hardening` commit (`git log -1 --format=%H --grep="^Repo standup: hardening$"`, then `git diff --name-only <that hash> main`): security reads only the changed hand-written files; the dependency scans run when a `*.csproj`, `Directory.Packages.props` or `package-lock.json` changed; screens and design run when anything under `<Code>.React/` changed; the performance test runs when any code outside the tests changed.
 
 1. **The integration-gap audit** (above), over what changed since the last audit.
 2. **Security.** `repo-security-reviewer`, `opus`, over the hand-written files from `git ls-files`, leaving out generated files (`*.g.cs`, `*.generated.ts`, `*.generated.tsx`, `<Code>.React/src/components/ui/`), migrations, `docs/`, baselines and images. Chunks of about 25 files, dispatched in one message, each with `mode: repo`, `repo_root`, `chunk_index`, `chunk_total`, `focus` and `files`, as `/pell:repo-security-review` dispatches them.
@@ -202,7 +203,7 @@ Phase 7 runs a pass when nothing is movable and there has been no pass, or `merg
 5. **Design.** `conductor-design-steward`, `opus`, in its screenshot mode over the whole contact sheet from step 4's run, against `design/brief.md` and `design/conventions.md`.
 6. **Performance smoke test**, below.
 
-Each finding of medium severity or more becomes a `fix` unit, high for a security finding, generated for one a spec edit alone fixes, and standard otherwise. Medium or more means a security finding of `medium` and up, a moderate or worse advisory, a failing axe or layout gate, a design finding that flags, and a timing over one second. Lower findings go to `known-gaps.md`, under "Logged by hardening". Append a `queue` line, `hardening pass, <n> fix units`, which marks the pass, and commit as `Repo standup: hardening`. The fix units run through the loop above, with `status.md`'s Phase at `hardening`.
+Each finding of medium severity or more becomes a `fix` unit, high for a security finding, generated for one a spec edit alone fixes, and standard otherwise. Medium or more means a security finding of `medium` and up, a moderate or worse advisory, a failing axe or layout gate, a design finding that flags, and a timing over one second. Lower findings go to `known-gaps.md`, under "Logged by hardening". Append a `queue` line, `hardening pass, <n> fix units`, which marks the pass, and commit as `Repo standup: hardening`. The fix units run through the loop above, with `Phase:` still `hardening`.
 
 **The performance smoke test.** It runs on a throwaway branch, `perf/smoke`, never merged or pushed. The conductor runs `git switch -C perf/smoke main`, then dispatches `conductor-implementer`, `sonnet`, to measure, not to build, with the branch, the expected tip and the sentinel as for a unit, and these steps:
 1. Set every spec's `sampleCount` in `specs/entities/` to 1000, or to a volume a requirement states when that is higher. Run `generate`, then the build.
