@@ -215,5 +215,6 @@ Phase 9's own reason, when the run ends with `State: done`, is in `handoff.md`. 
 |A `review` unit's `reviews.md` rows, on its branch|`Unit U-<n>: <title>, reviews`|
 |What is left on a unit's branch when the conductor leaves it|`Unit U-<n>: <title>, left over`|
 |The performance smoke test, on `perf/smoke`|`Performance smoke test`|
+|The handoff is written, in phase 9 and at each later stop|`Repo standup: handoff`|
 
 These are the conductor's commits, and the worker commits whose subjects it names. Design intake's stage commits keep design intake's own messages. Every message in this table ends with the co-author line the session was given for its commits, as a last `-m`. The fork's `CLAUDE.md` names no line of its own, so when the session was given none, the message ends without one.
