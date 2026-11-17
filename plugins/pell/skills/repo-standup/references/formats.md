@@ -177,7 +177,7 @@ Sent with `PushNotification`: one line, under 200 characters. `<counts>` is `<n>
 |Alert, a security finding|`Alert: high security finding on U-<n>; the merge is blocked. <counts>`|
 |Alert, parked twice|`Alert: U-<n> has parked twice. <counts>`|
 |Alert, blocked share|`Alert: <n>% of the remaining requirements are blocked on the client or on access. <counts>`|
-|Stop|`Run stopped: <reason>. <counts>. See docs/project/handoff.md`|
+|Stop|`Run stopped: <reason>. <counts>. See docs/project/handoff.md`, then ` Push failed.` or ` Not pushed.` at the very end when that applies. When the line would pass 200 characters, cut `<reason>` and end it with `...`. Never cut the counts, the path or the suffix.|
 |Stop at the guard check|`Run stopped: the push guard isn't loaded. Open a new session in the fork folder and type /pell:repo-standup.`|
 
 The reason in a stop is one of:
