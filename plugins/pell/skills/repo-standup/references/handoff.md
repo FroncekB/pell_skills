@@ -1,6 +1,6 @@
 # The handoff
 
-Written in phase 9, and again each time a resumed run stops. Everything is under `docs/project/`, and its reader is the Pell engineer who will own the project, not the client. `<skill>` is `${CLAUDE_PLUGIN_ROOT}/skills/repo-standup`, `<Code>` is `client.yaml`'s `name.code`.
+Written in phase 9, and at every other stop but the guard check's, which writes none (`SKILL.md`, "To stop"). Everything is under `docs/project/`, and its reader is the Pell engineer who will own the project, not the client. `<skill>` is `${CLAUDE_PLUGIN_ROOT}/skills/repo-standup`, `<Code>` is `client.yaml`'s `name.code`.
 
 ## The reading order
 
@@ -14,13 +14,15 @@ Written in phase 9, and again each time a resumed run stops. Everything is under
 
 ## The final sequence
 
-1. Run every check with every theme (`npm run screens`).
-2. Run `scoreboard --cost --rates <skill>/rates.json`. It rewrites `scoreboard.md` and the tables in `cost-report.md`.
-3. Dispatch `handoff-writer` (`sonnet`, pinned) with the repository root, `<Code>`, and the stop reason below. The stop reason is passed in the dispatch, because the writer runs before `status.md`'s final State is written. It reads `status.md` as it stands before that update, and trusts only the `Phase`, `Staging` and `Stop date` lines there, never `State`. It writes `handoff.md`, the demo scripts and `cost-report.md`'s prose, and ends with `{"files": [...], "questions": [...], "summary": "..."}`. Check that every path in `files` exists.
-4. Write `status.md`: `State: done` or `State: stopped: <reason>`, as below. Append the `stopped` line to `run-log.md` (outcome `stopped`, note `<reason>; opus <n>, sonnet <n>`, with `done` as the reason when it ends done). Commit everything as `Repo standup: handoff`, then push under `SKILL.md`'s rules.
+Phase 9 runs it with `done` as the reason, and every other stop but the guard check's runs it with its own (`SKILL.md`, "To stop").
+
+1. Run every check with every theme (`npm run screens`). At an environment failure (`failed-env twice in a row, ...`) the checks can't run: skip this step. At any other stop, a check that fails is noted, not fixed.
+2. Run `scoreboard --cost --rates <skill>/rates.json`. It rewrites `scoreboard.md` and the tables in `cost-report.md`. When it can't run, as when the environment failure took the SDK, or exits 1, as at a `scoreboard:` stop, leave both files as they are.
+3. Dispatch `handoff-writer` (`sonnet`, pinned) with the repository root, `<Code>`, the stop reason below, and the checks: `all passed`, or each final check that failed or wasn't run, and the scoreboard when it didn't run, each with why. The stop reason is passed in the dispatch, because the writer runs before `status.md`'s final State is written. It reads `status.md` as it stands before that update, and trusts only the `Phase`, `Staging` and `Stop date` lines there, never `State`. It writes `handoff.md`, the demo scripts and `cost-report.md`'s prose, and ends with `{"files": [...], "questions": [...], "summary": "..."}`. Check that every path in `files` exists, except a demo script the writer deleted (A resumed run, below), which must be gone.
+4. Write `status.md`: `State: done` or `State: stopped: <reason>`, as below. Append the `stopped` line to `run-log.md` (outcome `stopped`, note `<reason>; opus <n>, sonnet <n>`, with `done` as the reason when it ends done). Commit everything under `docs/project/` as `Repo standup: handoff`, then push under `SKILL.md`'s rules. After `main diverged`, whose push would be rejected, push nothing.
 5. Send the stop notification, `formats.md`'s Stop row, so "Run stopped" never fires before the push. Use the row's push suffix when the push failed or was skipped. Append its `notified` line, commit `run-log.md` alone as `Repo standup: status`, and push again under the same rules, unless the first push failed.
 
-The handoff is done when every requirement is in exactly one state, every check passes on `main`, and `handoff.md` is written.
+In phase 9, the handoff is done when every requirement is in exactly one state, every check passes on `main`, and `handoff.md` is written. At any other stop, it is done when `handoff.md` is written and names each check that failed or wasn't run.
 
 ## The stop reason
 
@@ -32,7 +34,7 @@ The conductor gives the writer the reason, and writes the same one to `status.md
 |Today is past `Stop date`|`State: stopped: the stop date has passed`|`the stop date has passed`|
 |Any other stop|`State: stopped: <reason>`, from `formats.md`'s reasons table|that reason|
 
-`done` means only that nothing could move when the run stopped. The next session runs the scoreboard again and resumes if an answer or an edit made a unit movable. A handoff written for a stop other than the guard check, which writes none, is rewritten at every later stop.
+`done` means only that nothing could move when the run stopped. The next session runs the scoreboard again and resumes if an answer or an edit made a unit movable. Every stop but the guard check's writes the handoff, and each later one rewrites it (A resumed run, below).
 
 Phase 9's notification is `formats.md`'s Stop row, with the reason from the table above (`nothing movable` for `done`).
 
@@ -45,7 +47,7 @@ One page. Sections in this order, with these headings. Copy numbers, never compu
 
 ## Why the run stopped
 
-<The reason, in one sentence. For nothing movable, name what remains: parked, Blocked-on-client and Blocked-on-access counts from scoreboard.md. For any other stop, say what would let the run move.>
+<The reason, in one sentence. For nothing movable, name what remains: parked, Blocked-on-client and Blocked-on-access counts from scoreboard.md. For any other stop, say what would let the run move. Then each final check that failed or wasn't run, and the scoreboard when it didn't run, with why, as the dispatch gives them.>
 
 ## Where it stands
 
@@ -79,6 +81,10 @@ Password: <the value of Seed:SampleUserPassword in <Code>.API/appsettings.Develo
 ## Where everything is
 
 <One line each: scoreboard.md, open-questions.md, known-gaps.md, demo/, decisions.md, cost-report.md.>
+
+## The push guard
+
+The push guard stays in this fork while the run might resume, and its pre-push hook refuses your own pushes to any branch but main. To take the repo over, delete .git/hooks/pre-push, .claude/settings.local.json and .claude/repo-standup/ by hand, not through a Claude Code session opened in this folder. /pell:repo-standup puts them back if the run resumes.
 ```
 
 **The three riskiest guesses.** The three unanswered questions in `open-questions.md` with the highest `Risk` (`high`, then `medium`, then `low`), by the `Risk` field and never by your own judgment. A tie goes to the question that blocks more requirements, then to the lower number. An unanswered question has an empty `Answer`. With fewer than three unanswered, list those, and with none write `None: every question is answered.`
@@ -100,6 +106,8 @@ Password: not set. Add "Seed": { "SampleData": true, "SampleUserPassword": "<cho
 `appsettings.Development.json` is the Development file. The sample password is never for production.
 
 **Unanswered questions.** The 10 riskiest unanswered questions, riskiest first (same order as the three guesses), with each `Blocks` list or `none`. The question text is as `open-questions.md` words it. When more than 10 are unanswered, add one line under the table, `<n> more in open-questions.md`, where `<n>` is the count of the rest, taken from the questions' headings and never estimated.
+
+**The push guard.** Copy the section as written: it is the same for every run (The guard stays in the fork, below).
 
 ## A demo script
 
@@ -147,4 +155,8 @@ After the markers, under `## Reading the numbers`:
 
 ## A resumed run
 
-A run that stops again rewrites `handoff.md`, the demo scripts and `cost-report.md`'s prose from the new files, never appends to the old ones. A demo script for a persona whose workflow is no longer Verified is deleted, and listed in `files`.
+A run that stops again rewrites `handoff.md`, the demo scripts and `cost-report.md`'s prose from the new files, never appends to the old ones. A demo script for a persona whose workflow is no longer Verified is deleted, and still listed in `files`: the one path there that doesn't exist, which the final sequence's check expects.
+
+## The guard stays in the fork
+
+The push guard stays installed while the run might resume: the `PreToolUse` guard (`.claude/settings.local.json` and `.claude/repo-standup/`) and the git `pre-push` hook, which refuses the engineer's own pushes to any branch but `main`. `handoff.md` says so in its last section. To take the repo over, the engineer deletes `.git/hooks/pre-push`, `.claude/settings.local.json` and `.claude/repo-standup/`, by hand and outside a guarded session, which can't touch them. When the engineer keeps other settings in `.claude/settings.local.json`, removing its repo-standup hook entry is enough. If the run resumes, `/pell:repo-standup` finds the guard gone and setup reinstalls it from the plugin (`SKILL.md`, "Where the run stands"). The same delete brings a plugin update's guard into the fork, since a guarded session can't rewrite the guard's own files.

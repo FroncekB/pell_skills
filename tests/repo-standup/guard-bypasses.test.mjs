@@ -4,12 +4,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, symlinkSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { symlinkSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import {
   CLIENT_ORIGIN, GUARD, HOOKS_DIR,
-  fakeRepo, allowed, denied, runEntry, git, makeClientDir, pushIn, decision,
+  fakeRepo, allowed, denied, runEntry, git, makeClientDir, pushIn, decision, tempDir,
 } from './helpers.mjs';
 
 const FW = 'git@bitbucket.org:pellsoftware/pell_web_app_framework.git';
@@ -214,7 +213,7 @@ test('stdin with a byte-order mark parses; stdin that does not parse is denied',
 });
 
 test('the entry gate compares real paths, so a junction cannot skip the guard', (t) => {
-  const link = path.join(mkdtempSync(path.join(tmpdir(), 'guard-link-')), 'linked');
+  const link = path.join(tempDir('guard-link-'), 'linked');
   try {
     symlinkSync(HOOKS_DIR, link, 'junction');
   } catch (error) {
@@ -232,7 +231,7 @@ test('the client repo comes from the pinned file, never client.yaml', () => {
   const dir = makeClientDir();
   writeFileSync(path.join(dir, 'client.yaml'), 'repository:\n  bitbucket: other/thing\n');
   assert.equal(pushIn(dir).stdout, '');
-  const unpinned = mkdtempSync(path.join(tmpdir(), 'guard-unpinned-'));
+  const unpinned = tempDir('guard-unpinned-');
   git(unpinned, 'init', '-q');
   git(unpinned, 'remote', 'add', 'origin', 'git@bitbucket.org:pellsoftware/acme.git');
   writeFileSync(path.join(unpinned, 'client.yaml'), 'repository:\n  bitbucket: pellsoftware/acme\n');

@@ -186,14 +186,14 @@ The reason in a stop is one of:
 |-|-|
 |`failed-env twice in a row, <the failing check>`|The scoreboard's `env-broken`, or a second `failed-env` line on any unit since the last `merged`, `parked` or `attempt-failed` line|
 |`3 parks in a row`|The scoreboard's `parks-in-a-row`|
-|`the stop date has passed`|The stop date, through the handoff|
+|`the stop date has passed`|The stop date|
 |`design intake stopped: <its reason>`|Design intake's `stopped:` line, or the skill's own `design intake stopped: no outcome line` after two calls with neither an outcome line nor a commit|
 |`guard not loaded; open a new session in the fork folder`|The guard check failed|
 |`main diverged`|A rebase onto `origin/main` conflicted, or the checks failed after it|
 |`an uncommitted file no unit wrote: <path>`|A file outside `docs/project/` was left uncommitted at a unit boundary|
 |`scoreboard: <the diagnostic>`|The scoreboard exited 1 on a line the engineer wrote|
 
-Phase 9's own reason, when the run ends with `State: done`, is in `handoff.md`. The same reason follows `stopped:` in `status.md`, as `State: stopped: guard not loaded; open a new session in the fork folder`. The guard stop's notification has its own wording, in the row above.
+Phase 9's own reason, when the run ends with `State: done`, is in `handoff.md`. The same reason follows `stopped:` in `status.md`, as `State: stopped: guard not loaded; open a new session in the fork folder`. Every stop but the guard check's runs the handoff's final sequence before its notification (`handoff.md`, "The final sequence"), so the Stop row's path is always written. The guard stop writes no handoff, and its notification has its own wording, in the row above.
 
 ## Commit messages
 
@@ -203,18 +203,18 @@ Phase 9's own reason, when the run ends with `State: done`, is in `handoff.md`. 
 |A unit merges, or is marked merged as already verified|`Unit U-<n>: <title>`|
 |The conductor commits an engineer's edits to the pack|`Repo standup: the engineer's edits`|
 |Setup writes `status.md`|`Repo standup: setup`|
-|`status.md` alone, never inside another commit: `State: running` when a session carries on, before a design intake call, or at a checkpoint|`Repo standup: status`|
+|`status.md` alone, never inside another commit: `State: running` when a session carries on, before a design intake call, or at a checkpoint; or `run-log.md` alone, after the handoff's stop notification|`Repo standup: status`|
 |The queue is built or changed, or a unit goes back after a `failed-env`|`Repo standup: the queue`|
 |An attempt fails|`Repo standup: U-<n> attempt failed`|
 |A unit parks|`Repo standup: U-<n> parked`|
 |An integration-gap audit|`Repo standup: audit`|
 |A hardening pass|`Repo standup: hardening`|
-|The run stops|`Repo standup: stopped`|
+|The run stops at the guard check|`Repo standup: stopped`|
 |The implementer's work, on the unit's branch|`Unit U-<n>: <title>, work`|
 |A fix round, on the unit's branch|`Unit U-<n>: <title>, fix`|
 |A `review` unit's `reviews.md` rows, on its branch|`Unit U-<n>: <title>, reviews`|
 |What is left on a unit's branch when the conductor leaves it|`Unit U-<n>: <title>, left over`|
 |The performance smoke test, on `perf/smoke`|`Performance smoke test`|
-|The handoff is written, in phase 9 and at each later stop|`Repo standup: handoff`|
+|The handoff is written: in phase 9, and at every other stop but the guard check's|`Repo standup: handoff`|
 
 These are the conductor's commits, and the worker commits whose subjects it names. Design intake's stage commits keep design intake's own messages. Every message in this table ends with the co-author line the session was given for its commits, as a last `-m`. The fork's `CLAUDE.md` names no line of its own, so when the session was given none, the message ends without one.

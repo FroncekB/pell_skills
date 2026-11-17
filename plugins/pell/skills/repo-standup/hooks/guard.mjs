@@ -1,8 +1,8 @@
 // PreToolUse hook: deny any `git push` that is not "push only to the client
 // repo's main, never forced". It recognizes one push shape and denies anything
 // else that might push. It is aimed at an agent's mistakes and plausible
-// workarounds, not at an adversary: the only complete enforcement is Bitbucket's
-// branch restrictions. Node standard library only.
+// workarounds, not at an adversary. Bitbucket's branch restrictions stop only
+// force pushes and deletion of main and staging. Node standard library only.
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import path from 'node:path';
@@ -19,8 +19,8 @@ export const PREFIX = 'repo-standup guard: ';
 export const FRAMEWORK_REPO = 'pellsoftware/pell_web_app_framework';
 const CANARY = 'repo-standup-guard-check';
 const SHELL_TOOLS = new Set(['Bash', 'PowerShell']);
-// Tool input fields holding a path; `paths` holds an array of them. No other field
-// is read: agent prompts name .git/pell-repo-standup.diff on purpose.
+// Tool input fields holding a path; `paths` holds an array of them. Besides these,
+// only `command` is read: agent prompts name .git/pell-repo-standup.diff on purpose.
 const PATH_FIELDS = ['file_path', 'path', 'notebook_path', 'source', 'destination', 'target'];
 const deny = (why) => ({ allow: false, reason: PREFIX + why });
 
@@ -107,7 +107,7 @@ function pathCandidates(word) {
 
 // Segment-level path rules: protected paths, globs, deletes, cd and links.
 // `line` is the whole command line.
-function checkPaths(seg, ctx, line) {
+function checkPaths(seg, ctx, line, powershell) {
   const words = seg.words;
   for (const w of words) {
     if (mixesGlobWithDotFolder(w.raw)) return deny('a glob or variable could name a protected folder');
@@ -127,6 +127,10 @@ function checkPaths(seg, ctx, line) {
   }
   if (DELETE_VERBS.has(name) && unwrapped.wrappers.includes('xargs') && NAMES_DOT_FOLDER.test(line)) {
     return deny('xargs runs a delete or move on a line that names .git or .claude');
+  }
+  // PowerShell binds piped objects to -Path, so the folder can come down the pipe.
+  if (DELETE_VERBS.has(name) && powershell && seg.piped && NAMES_DOT_FOLDER.test(line)) {
+    return deny('a pipeline runs a delete or move on a line that names .git or .claude');
   }
   if (CD_VERBS.has(name) && args.some((p) => insideClaudeDir(p, ctx))) return deny('entering the .claude folder is not allowed');
   if (LINK_VERBS.has(name)) return deny('creating links is not allowed');
@@ -285,11 +289,14 @@ export function repoFromUrl(url) {
   return m ? m[1].toLowerCase() : null;
 }
 
-// `command` is the shell command line for Bash and PowerShell, and a file path
-// for any other tool (Edit, Write, NotebookEdit, MultiEdit, a tool not yet invented).
-export function decide(toolName, command, repo) {
+// `field` says what `command` is. A `command` field is a shell command line: as
+// PowerShell for the PowerShell tool, and as Bash for any other tool (Bash, Monitor,
+// an MCP terminal). A `path` field is a file path, for any tool (Edit, Write,
+// NotebookEdit, MultiEdit, a tool not yet invented). Bash and PowerShell default
+// to `command`, every other tool to `path`.
+export function decide(toolName, command, repo, field = SHELL_TOOLS.has(toolName) ? 'command' : 'path') {
   const ctx = repo.pathContext ? repo.pathContext() : pathContext();
-  if (!SHELL_TOOLS.has(toolName)) {
+  if (field !== 'command') {
     return isProtected(String(command ?? ''), ctx)
       ? deny('this path (.git, the guard\'s files, or a settings file) is protected')
       : { allow: true };
@@ -309,13 +316,15 @@ export function decide(toolName, command, repo) {
     return deny(`cannot classify the command (${problems[0]}), and it names git or push`);
   }
 
-  const env = { tool: toolName, repo, ctx };
+  const env = { tool: powershell ? 'PowerShell' : 'Bash', repo, ctx };
   for (const segment of segments) {
-    const pathVerdict = checkPaths(segment, ctx, text);
+    const pathVerdict = checkPaths(segment, ctx, text, powershell);
     if (pathVerdict) return pathVerdict;
     const verdict = judgeSegment(segment, env);
     if (!verdict) continue;
     if (verdict.allow === false) return verdict;
+    // Another tool's working directory (a terminal tab's, say) is unknown here.
+    if (!SHELL_TOOLS.has(toolName)) return deny(`a push runs only from the Bash or PowerShell tool, not ${toolName}`);
 
     const shape = checkPushShape(verdict.push);
     if (shape.deny) return shape.deny;
@@ -434,26 +443,30 @@ function main() {
   }
   const tool = input?.tool_name;
   const toolInput = input?.tool_input && typeof input.tool_input === 'object' ? input.tool_input : {};
-  const shell = SHELL_TOOLS.has(tool);
-  const targets = shell
-    ? [toolInput.command]
-    : [...PATH_FIELDS.map((f) => toolInput[f]), ...[toolInput.paths ?? []].flat()].filter((v) => typeof v === 'string');
-  if (!shell && targets.length === 0) return;
-  if (shell && typeof targets[0] !== 'string') {
+  if (SHELL_TOOLS.has(tool) && typeof toolInput.command !== 'string') {
     denyOutput(`${PREFIX}the tool call has no command to judge`);
     return;
   }
+  // Any tool's string `command` is a command line; every tool's path fields are paths.
+  const targets = [
+    ...(typeof toolInput.command === 'string' ? [{ field: 'command', value: toolInput.command }] : []),
+    ...[...PATH_FIELDS.map((f) => toolInput[f]), ...[toolInput.paths ?? []].flat()]
+      .filter((v) => typeof v === 'string')
+      .map((value) => ({ field: 'path', value })),
+  ];
+  if (targets.length === 0) return;
   try {
     const repo = realRepo(path.resolve(input.cwd || '.'));
-    for (const target of targets) {
-      const result = decide(tool, target, repo);
+    for (const { field, value } of targets) {
+      const result = decide(tool, value, repo, field);
       if (!result.allow) {
         denyOutput(result.reason);
         return;
       }
     }
   } catch (error) {
-    if (!shell || /\b(git|push)\b/i.test(normalize(targets[0]))) {
+    // A command that names neither git nor push is let through; a path never is.
+    if (targets.some(({ field, value }) => field === 'path' || /\b(git|push)\b/i.test(normalize(value)))) {
       denyOutput(`${PREFIX}internal error while judging the call (${error.message})`);
     }
   }

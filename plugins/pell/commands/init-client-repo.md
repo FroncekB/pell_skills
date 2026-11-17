@@ -359,8 +359,9 @@ A failure stops the run before the commit: stop early with `Stopped before the c
 
 5. Block force pushes and deletion on `main` and `staging`, only once the push has succeeded and only with a yes already given for it: Step 4's create gate when this run created the repo, otherwise Step 6's plan gate. The restrictions are `kind: force` and `kind: delete` on each of the patterns `main` and `staging`, four in all and no other kind, so normal pushes stay allowed. Set them as Step 4 creates a repo, finding the operation at run time:
    1. Look for an operation that creates a Bitbucket branch restriction on `plugin:atlassian:atlassian`, through `discover` (for example `discover({query: "create Bitbucket branch restriction"})`).
-   2. If it offers one, run it with `executeWrite({name: "<the name discover returned>", inputs})` with no `cloudId`, once for each of the four restrictions. The inputs are the workspace, the slug, the kind and the pattern, under the parameter names `discover` shows. A restriction that already exists with the same kind and pattern counts as set. Report them as set only when all four are.
-   3. If `discover` offers none, the connector is absent, or a call fails, record the restrictions as not set, with the reason (`no branch-restriction operation`, `connector absent` or the call's error), and print the manual settings:
+   2. If it offers one, run it with `executeWrite({name: "<the name discover returned>", inputs})` with no `cloudId`, once for each of the four restrictions, and make all four calls even when one fails. The inputs are the workspace, the slug, the kind and the pattern, under the parameter names `discover` shows. Before treating a call's error as a failure, check whether it says the restriction already exists with the same kind and pattern: that one counts as set. Any other error leaves that restriction not set; note its kind and branch, as in `force on staging`.
+   3. If `discover` offers none or the connector is absent, record all four as not set, with the reason (`no branch-restriction operation` or `connector absent`).
+   4. The restrictions are set only when all four are. When any isn't, print the manual settings:
 
    > Block force pushes and deletion on main and staging yourself: in Bitbucket, open <ws>/<slug>, Repository settings, Branch restrictions, and for each of `main` and `staging` add Prevent a force push and Prevent deletion. Normal pushes stay allowed.
 
@@ -389,7 +390,7 @@ Next:
 - Start intake with docs/project/intake-sheet.md.
 ```
 
-In place of the `Branch rules` line above, print `Branch rules  not set (<reason>); set them in Repository settings, Branch restrictions` when Step 11 item 5 didn't set them. Omit the logo line when the fork has a logo. Add a transparency line for each skipped step, such as `- Repos folder not saved (you answered no)` or `- Screenshot baselines not recaptured: not Windows (see docs/project/status.md)`.
+In place of the `Branch rules` line above, print `Branch rules  not set (<reason>); set them in Repository settings, Branch restrictions` when Step 11 item 5 didn't set all four. `<reason>` is `no branch-restriction operation`, `connector absent`, or `<n> of 4 failed: <kinds and branches>`, as in `1 of 4 failed: force on staging`. Omit the logo line when the fork has a logo. Add a transparency line for each skipped step, such as `- Repos folder not saved (you answered no)` or `- Screenshot baselines not recaptured: not Windows (see docs/project/status.md)`.
 
 Then delete the temporary framework clone: `rm -rf '<temp>'`. If that fails, print `Couldn't delete <temp>; delete it yourself.`
 
@@ -419,7 +420,7 @@ Then delete the temporary framework clone: `rm -rf '<temp>'`. If that fails, pri
 | git can't reach the repo (SSH key, network) | Show git's message and stop (Step 4) |
 | `Host key verification failed` from `ls-remote` or the framework clone | Stop (early, for the clone) with the `ssh git@ssh.bitbucket.org host_key_info` steps and the three fingerprints. Never accept a key or edit `known_hosts` (Steps 4 and 5) |
 | Atlassian connector absent, no create-repository operation in `discover`, or the call fails | Degrade, never abort: ask the engineer to create the repo, private, and say "done" (Step 4) |
-| The branch restrictions can't be set: no operation, or a failed call | Degrade, never abort: print the manual settings, and say in the report that the restrictions weren't set (Step 11) |
+| The branch restrictions can't be set: no operation, or a failed call | Degrade, never abort: make all four calls even when one fails, print the manual settings, and say in the report which weren't set (Step 11) |
 | The framework ref doesn't exist | Show git's message and stop early (Step 5) |
 | The framework ref has no `tools/PellFramework.Fork` | Stop early: the ref is older than the fork tool (Step 5) |
 | The names have problems | Show them and ask for overrides (Step 6) |

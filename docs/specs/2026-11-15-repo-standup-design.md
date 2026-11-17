@@ -509,6 +509,12 @@ A Node script, `hooks/guard.mjs` in the skill, copied into the fork at setup. Ru
 - When the Atlassian connector has no branch-restriction operation, or the call fails, the command doesn't abort. It prints the exact settings to make by hand (Repository settings, Branch restrictions) and reports them as not set.
 - The framework repository's own branch protections aren't part of this.
 
+**After the final review (2026-11-16).** Where this differs from the paragraphs above, this wins.
+- The guard judges the `command` of any tool that carries one, as PowerShell for the PowerShell tool and as Bash for every other (Monitor, a terminal MCP), and checks every tool's path fields. A push runs only from the Bash or PowerShell tool, since another tool's working directory is unknown to the guard.
+- A PowerShell pipeline that deletes or moves, on a line naming `.git` or `.claude`, is denied, as `xargs` is.
+- Bitbucket's restrictions stop only force pushes and deletion on `main` and `staging`, so "the only complete enforcement" above overstates them: no layer is complete.
+- The guard stays in the fork after the handoff. The engineer deletes it by hand to take the repo over, and setup reinstalls it when the run resumes. That is also how a plugin update's guard reaches the fork, since a guarded session can't write the guard's files.
+
 Its tests are Node's built-in test runner, `tests/repo-standup/guard.test.mjs` at the repository root, outside the shipped plugin **(Claude's call)**: a first runnable test in this repo, so the architecture spec records the pattern.
 
 ## The handoff package
@@ -530,6 +536,8 @@ Written in phase 9, and again whenever a resumed run stops. All under `docs/proj
 8. **`cost-report.md`**: the `scoreboard --cost` tables, then the handoff writer's short reading of them and an estimate for the next run of a similar SOW.
 
 Before writing, the conductor runs every check with every theme (`npm run screens`), then `scoreboard --cost`. The handoff is done when every requirement is in exactly one state, every check passes on `main`, and `handoff.md` is written (decision 7). Then it commits, pushes and sends the stop notification.
+
+**After the final review (2026-11-16).** Every stop but the guard check's writes the handoff through this same sequence, not only phase 9 and a resumed run's stop. At an environment failure the final checks can't run: the handoff says so and why, and the sequence goes on without them.
 
 ## Agents
 

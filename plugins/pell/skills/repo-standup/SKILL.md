@@ -19,6 +19,7 @@ First, load the deferred tools in one ToolSearch call, `select:PushNotification,
 |-|-|
 |No `client.yaml` and `docs/project/` at the repository root|Phase 1, then setup|
 |`status.md` holds no `Phase:` line|Setup. A guard check that fails doesn't stop this session.|
+|The guard check (Every session) fails, and `.claude/repo-standup/guard.mjs` doesn't exist|Setup again: the engineer removed the guard, and setup reinstalls it|
 |The guard check (Every session) fails|Stop: `guard not loaded; open a new session in the fork folder`|
 |`HEAD` is on `unit/U-<n>` or `perf/smoke`, or a `queue.md` row is `in progress`|That attempt, or that hardening pass, starts over (`loop.md`, "An interrupted attempt")|
 |`Phase:` is `intake`, `foundation`, `design` or `prototype`|Design intake, phases 2 to 5|
@@ -35,7 +36,7 @@ A run is never closed. `State: done` means only that nothing could move when it 
 
 **Phase 1.** Run `/pell:init-client-repo` with the invocation's arguments. It asks its own yeses, and sets the Bitbucket branch restrictions itself. Then work in the folder its report names. Keep its `Branch rules` line, with the manual settings when it says `not set`, and repeat it to the engineer at the session's end. If the engineer meant an existing fork, tell them to open the session in that folder instead.
 
-**Setup**, once per fork, in this order. The guard goes live from `.claude/settings.local.json` and then denies reads and writes under `.git/` and `.claude/`, so that file is written last, and a setup that finds the guard live skips the install.
+**Setup**, once per fork, in this order. The guard goes live from `.claude/settings.local.json` and then denies reads and writes under `.git/` and `.claude/repo-standup/` and of the settings files, so that file is written last, and a setup that finds the guard live skips the install. Setup runs again when the engineer has removed the guard (`references/handoff.md`, "The guard stays in the fork"). That reinstall skips steps 1 and 9 and keeps `status.md` as it is, and it is also how a plugin update's guard reaches the fork, since no guarded session can write the guard's own files.
 1. Ask the engineer for an optional stop date (`yyyy-MM-dd`).
 2. Run the guard check's canary (Every session, step 1). A deny with the canary's reason means an earlier setup installed the guard and this session loaded it: go to step 9. Decide this by the canary alone, never by reading the guard's files.
 3. Run `git config --get core.hooksPath`. When it prints a value, git would skip the pre-push hook: stop, write nothing, and ask the engineer to unset it and type the prompt again.
@@ -52,7 +53,7 @@ Then call design intake. The session that ran setup never pushes, and ends at ch
 ## Every session
 
 Once the fork exists and setup is done, each invocation runs these, then goes on down the table above:
-1. **The guard check**, unless this session ran setup. Run exactly `git push --force --dry-run repo-standup-guard-check main` with the Bash tool. It is a canary the guard must refuse, and since that remote doesn't exist, nothing reaches the network. A deny whose reason is `repo-standup guard: canary` means the guard is loaded. Anything else, git's "does not appear to be a git repository" included, means it isn't: write `State: stopped: guard not loaded; open a new session in the fork folder`, append the `stopped` line, send `formats.md`'s guard-stop notification and append its `notified` line, commit as `Repo standup: stopped`, push nothing, and end the turn. With the guard not loaded, nothing denies those writes.
+1. **The guard check**, unless this session ran setup. Run exactly `git push --force --dry-run repo-standup-guard-check main` with the Bash tool. It is a canary the guard must refuse, and since that remote doesn't exist, nothing reaches the network. A deny whose reason is `repo-standup guard: canary` means the guard is loaded. Anything else, git's "does not appear to be a git repository" included, means it isn't. Then, when `.claude/repo-standup/guard.mjs` doesn't exist (`test -e`, which nothing denies while the guard isn't loaded), the engineer removed the guard: run setup to reinstall it (Phase 1 and setup), and the session ends as setup's does. Otherwise write `State: stopped: guard not loaded; open a new session in the fork folder`, append the `stopped` line, send `formats.md`'s guard-stop notification and append its `notified` line, commit as `Repo standup: stopped`, push nothing, and end the turn. With the guard not loaded, nothing denies those writes.
 2. **The notification check**, when the last `notified` line in `run-log.md` ends with `; chat only`.
 3. A read of `status.md`. Keep the State it holds as the session's starting State. As soon as the session goes on past the guard check to run anything, set `State: running`, and commit `status.md` alone as `Repo standup: status` (the command is in Phases 2 to 5), never inside the engineer's edits.
 
@@ -100,13 +101,14 @@ A push at merge rejected because the engineer pushed meanwhile takes the same pa
 - No push before design intake's stage 3 has passed (`run-log.md` has its stage 3 line), and none in a session whose guard check hasn't passed.
 - When `origin` is missing or isn't the client repo (`git remote get-url origin` against `repository.bitbucket`), skip every fetch and push, say so in the run-log note, and carry on.
 
-**Commands the guard denies.** Never write them. They hold for everything the session runs, design intake's stages included, and every worker's brief points here.
+**Commands the guard denies.** Never write them. They hold for everything the session runs, design intake's stages and any tool's `command` (Monitor's included) as well, and every worker's brief points here.
 - `git -c`, `git --no-pager`, or any git global option but `-C`
 - `git clean`
-- `cd` into `.claude`, and any read or write under `.git/` or `.claude/` once setup is done, except `.git/pell-repo-standup.diff`
+- `cd` into `.claude`; deleting or moving `.claude` or `.git`, through `xargs` or a PowerShell pipeline too; and, once setup is done, any read or write under `.git/` or `.claude/repo-standup/`, or of `.claude/settings.json`, `.claude/settings.local.json`, `~/.claude/settings*.json` or the home git config, except `.git/pell-repo-standup.diff`
 - a heredoc or `$(...)` in a commit message: use `-m`
 - `$(...)` in any git command's arguments: run `git rev-parse` first, then write its value
-- any push but `git push origin main` alone in its command, and `--no-verify` anywhere
+- any push but `git push origin main` alone in its command, run with the Bash or PowerShell tool, and `--no-verify` anywhere
+- any command that names the word `push`, a file name such as `push-settings.test.tsx` included, unless it is that push or git with a plain builtin subcommand (`git log --grep push`, `git commit -m "..."`). So `grep -rn push` and `npm test -- src/app/push-settings.test.tsx` are denied. Find such files with the Grep and Glob tools, run their tests by folder, and write commit messages with `-m`
 
 Also: never a foreground `sleep`. A wait uses a background command and its completion notice, or Monitor. PowerShell 5.1 has no `&&`: chain on success as `cmd1; if ($?) { cmd2 }`.
 
@@ -119,13 +121,21 @@ The scoreboard computes the numbers (`loop.md`, "Terms"). The conductor judges t
 |`stop: nothing-movable`|the scoreboard|Phase 7 while a hardening pass is due (the table above); then phases 8 and 9, and `State: done`|
 |`stop: env-broken`, or a second `failed-env` line on any unit since the last `merged`, `parked` or `attempt-failed` line|the scoreboard, `run-log.md`|Stop: `failed-env twice in a row, <the failing check>`|
 |`stop: parks-in-a-row`|the scoreboard|Stop: `3 parks in a row`|
-|Today is past `Stop date`|`status.md`, at each unit boundary|Finish the current attempt, then write the handoff (`references/handoff.md`), which stops with `the stop date has passed`|
+|Today is past `Stop date`|`status.md`, at each unit boundary|Finish the current attempt, then stop: `the stop date has passed`|
 |`design-intake: stopped: <reason>`|design intake|Stop: `design intake stopped: <reason>`|
 |The usage limit|the platform|Nothing: state is committed at each unit boundary, and an interrupted attempt starts over|
 
-**To stop:** send the question batch when `sinceNotified.questions` is above 0; write `State: stopped: <reason>` and append the `stopped` line; send the stop notification and append its `notified` line; commit as `Repo standup: stopped`; push under the rules above, except after `main diverged`, whose push would be rejected, so it pushes nothing; end the turn, telling the engineer the reason and what would let the run move. The notification comes before the commit so that its `notified` line is committed. At the stop date, the handoff's final sequence does the commit, the push and the notification.
+**To stop**, at every stop but the guard check's (Every session, step 1, which writes no handoff):
+1. Send the question batch when `sinceNotified.questions` is above 0, and append its `notified` line.
+2. Run the handoff's final sequence (`references/handoff.md`) with the stop reason: the final checks, `scoreboard --cost`, `handoff-writer`, `State: stopped: <reason>` and the `stopped` line, the commit `Repo standup: handoff`, the push, the stop notification and its `notified` line, then a last commit and push. At an environment failure (`failed-env twice in a row, ...`) the checks can't run: the sequence skips them, and the handoff says they weren't run and why. After `main diverged`, whose push would be rejected, it pushes nothing.
+3. End the turn, telling the engineer the reason and what would let the run move.
 
-**A stop already reported.** A session whose starting State is `stopped: 3 parks in a row` or `stopped: failed-env twice in a row, ...` takes the prompt as the engineer's go-ahead. It sets `State: running`, and until the next `merged` line ignores that stop's old trigger from both sources, the scoreboard's `stop` and the `run-log.md` rule in the table above, so the first unit boundary doesn't stop again for the old reason. Before that `merged` line, one new line of the same kind stops the run again: after `3 parks in a row`, a new `parked` line; after a `failed-env` stop, a new `failed-env` line. So a broken environment costs one more try, not a loop. A session that starts with the stop date passed runs nothing and asks the engineer to change or clear the `Stop date` line.
+**A stop already reported.** A session whose starting State is `stopped: <reason>` takes the prompt as the engineer's go-ahead, sets `State: running` and carries on. Whether an old stop still holds is read from `run-log.md`, never from the starting State, so a session cut off by the usage limit leaves the next one the same answer. For each repeatable reason, `3 parks in a row` and `failed-env twice in a row`, find the last `stopped` line whose note starts with it:
+- A `merged` line after it ends the matter: that stop's trigger counts again as usual.
+- While no line of its kind follows it (a `parked` line after `3 parks in a row`, a `failed-env` line after `failed-env twice in a row`), the matching stop is the old one: ignore it from both sources, the scoreboard's `stop` (`parks-in-a-row`, or `env-broken`) and the `run-log.md` rule in the table above, and carry on.
+- One line of its kind after it, with no `merged` line between, stops the run again for that reason. So a broken environment costs one more try, not a loop.
+
+A session that starts with the stop date passed runs nothing and asks the engineer to change or clear the `Stop date` line.
 
 **Alerts** send a notification and carry on, in `formats.md`'s wording:
 - each entry in `alerts`: `blocked-over-30`, and `parked-twice U-<n>`

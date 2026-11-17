@@ -1,6 +1,6 @@
 # Repo standup: the work loop
 
-How phases 6 and 7 run, one unit at a time. `SKILL.md` holds the rules every phase shares: where the run stands, where the engineer answers, the commit and push rules with the commands the guard denies, and the stops, alerts and question batches. `formats.md`, beside this file, holds the shape of every file the run writes and the wording of every message. This file doesn't repeat them.
+How phases 6 and 7 run, one unit at a time. `SKILL.md` holds the rules every phase shares: where the run stands, where the engineer answers, the commit and push rules with the commands the guard denies, and the stops, alerts and question batches. Every stop below but the guard check's runs the handoff's final sequence (`SKILL.md`, "To stop"). `formats.md`, beside this file, holds the shape of every file the run writes and the wording of every message. This file doesn't repeat them.
 
 ## Terms
 
@@ -92,7 +92,7 @@ Before each unit, and after the last:
 
 **A failed attempt** is one whose checks or done check still fail after the implementer hands back, or whose blocker or major finding is still unfixed after its fix round. Leave the branch, append an `attempt-failed` line naming the attempt and what failed, and commit as `Repo standup: U-<n> attempt failed`. Keep the failure output, cut to what shows the cause, for the next brief. When this is the try's third failed attempt, park the unit. Otherwise the next attempt starts at step 2, with a fresh implementer. A try's failed attempts are the unit's `attempt-failed` lines since its last `parked` line.
 
-**An environmental failure** names the database connection, a held port, a missing SDK or tool, or the disk. It isn't an attempt. Leave the branch, take one off the unit's Attempts, mark it `queued`, append a `failed-env` line naming the check, and commit as `Repo standup: the queue`. When this is the second `failed-env` line, on any unit, since the last `merged`, `parked` or `attempt-failed` line, stop the run with `failed-env twice in a row, <the check>`. Otherwise the next unit is the first in `movable` other than this one, or this one when it is the only one. The patterns, matched in the failing output:
+**An environmental failure** names the database connection, a held port, a missing SDK or tool, or the disk. It isn't an attempt. Leave the branch, take one off the unit's Attempts, mark it `queued`, append a `failed-env` line naming the check, and commit as `Repo standup: the queue`. When this is the second `failed-env` line, on any unit, since the last `merged`, `parked` or `attempt-failed` line, stop the run with `failed-env twice in a row, <the check>`: its handoff skips the final checks and says why, and a resumed session gets one more try (`SKILL.md`, "To stop" and "A stop already reported"). Otherwise the next unit is the first in `movable` other than this one, or this one when it is the only one. The patterns, matched in the failing output:
 - `error occurred while establishing a connection to SQL Server`
 - `SQL Server process failed to start`
 - `EADDRINUSE`

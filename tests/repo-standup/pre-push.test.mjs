@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, readFileSync, chmodSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync, copyFileSync, readFileSync, chmodSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { tempDir } from './helpers.mjs';
 import { decidePush } from '../../plugins/pell/skills/repo-standup/hooks/pre-push.mjs';
 
 const HOOKS = fileURLToPath(new URL('../../plugins/pell/skills/repo-standup/hooks/', import.meta.url));
@@ -79,7 +79,7 @@ function git(cwd, ...args) {
 }
 
 test('integration: the installed hook refuses a push whose URL is not the client repo', () => {
-  const root = mkdtempSync(path.join(tmpdir(), 'pre-push-it-'));
+  const root = tempDir('pre-push-it-');
   const remote = path.join(root, 'remote.git');
   const work = path.join(root, 'work');
   mkdirSync(work);
@@ -108,7 +108,7 @@ test('integration: the installed hook refuses a push whose URL is not the client
 });
 
 test('the hook trims CR from its URL argument and stdin lines (a CRLF checkout)', () => {
-  const dir = mkdtempSync(path.join(tmpdir(), 'pre-push-cr-'));
+  const dir = tempDir('pre-push-cr-');
   assert.equal(git(dir, 'init', '-q').status, 0);
   mkdirSync(path.join(dir, '.claude', 'repo-standup'), { recursive: true });
   writeFileSync(path.join(dir, '.claude', 'repo-standup', 'client-repo'), 'pellsoftware/acme\n');

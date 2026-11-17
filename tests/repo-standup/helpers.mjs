@@ -1,10 +1,24 @@
+import { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { decide } from '../../plugins/pell/skills/repo-standup/hooks/guard.mjs';
+
+// Every temp folder a test makes, removed when its test file ends. rmSync removes
+// a junction inside one without following it.
+const made = [];
+after(() => {
+  for (const dir of made.splice(0)) rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
+});
+
+export function tempDir(prefix) {
+  const dir = mkdtempSync(path.join(tmpdir(), prefix));
+  made.push(dir);
+  return dir;
+}
 
 export const HOOKS_DIR = fileURLToPath(new URL('../../plugins/pell/skills/repo-standup/hooks/', import.meta.url));
 export const GUARD = path.join(HOOKS_DIR, 'guard.mjs');
@@ -59,7 +73,7 @@ export function git(cwd, ...args) {
 
 // A temp git repo with origin set and the client repo pinned, as setup leaves a fork.
 export function makeClientDir(origin = 'git@bitbucket.org:pellsoftware/acme.git') {
-  const dir = mkdtempSync(path.join(tmpdir(), 'guard-entry-'));
+  const dir = tempDir('guard-entry-');
   git(dir, 'init', '-q');
   git(dir, 'remote', 'add', 'origin', origin);
   mkdirSync(path.join(dir, '.claude', 'repo-standup'), { recursive: true });

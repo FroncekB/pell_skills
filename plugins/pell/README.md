@@ -105,7 +105,7 @@ Design intake producers (dispatched by the `design-intake` skill):
 - `intake-analyst` — turns the converted SOW and documents into the project pack (cited requirements, glossary, personas, workflows, entity specs, default roles, the intake sheet), carries the engineer's corrections back into it, and declares the approved links in the specs. Returns `{files, questions, summary}` rather than findings, because it writes files.
 - `design-director` — brand capture and design brief, two or three direction themes on the client's own screens, and the lock into the client theme. Returns `{files, questions, summary}` rather than findings, because it writes files.
 
-Repo-standup handoff writer (dispatched by the `repo-standup` skill in phase 9, and whenever a resumed run stops):
+Repo-standup handoff writer (dispatched by the `repo-standup` skill in phase 9, and at every other stop but the guard check's):
 
 - `handoff-writer` — writes `handoff.md`, a demo script per persona and the prose around `cost-report.md`'s tables from files that already exist, and computes no number. Returns `{files, questions, summary}` rather than findings, because it writes files. Pinned to `model: sonnet`, the second agent that does not inherit the orchestrator's model, because its work is mechanical.
 

@@ -3,11 +3,11 @@
 // verbatim from the findings file.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, symlinkSync, readFileSync } from 'node:fs';
+import { mkdirSync, symlinkSync, readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathContext } from '../../plugins/pell/skills/repo-standup/hooks/protected-paths.mjs';
-import { SETTINGS, fakeRepo, allowed, denied, runEntry, decision } from './helpers.mjs';
+import { SETTINGS, fakeRepo, allowed, denied, runEntry, decision, tempDir } from './helpers.mjs';
 
 const BACKTICK = '\u0060';
 const PS = 'PowerShell';
@@ -16,7 +16,7 @@ const caseInsensitive = process.platform === 'win32' || process.platform === 'da
 
 // A repo whose paths resolve against a temp project, so path tests control the folders.
 function projectRepo() {
-  const projectDir = mkdtempSync(path.join(os.tmpdir(), 'guard-proj-'));
+  const projectDir = tempDir('guard-proj-');
   mkdirSync(path.join(projectDir, '.git'));
   mkdirSync(path.join(projectDir, '.claude', 'repo-standup'), { recursive: true });
   return { projectDir, repo: { ...fakeRepo(), pathContext: () => pathContext({ cwd: projectDir, projectDir }) } };
