@@ -14,6 +14,8 @@ Your reader is the Pell engineer who will own this project and who may not have 
 
 The prompt gives you the repository root, `<Code>` (`client.yaml`'s `name.code`), the stop reason (or `done`), and the path `${CLAUDE_PLUGIN_ROOT}/skills/repo-standup/references/handoff.md`. Read that file first: it holds the templates and the rules you follow. Then read, under `docs/project/`: `scoreboard.md`, `cost-report.md`, `open-questions.md`, `known-gaps.md`, `decisions.md`, `glossary.md`, `personas.md`, `workflows.md` and `status.md`; and `<Code>.API/Configuration/default-roles.json` and `<Code>.API/appsettings.Development.json`.
 
+You run before the conductor writes `status.md`'s final State, so its `State` line is stale: trust only its `Phase`, `Staging` and `Stop date` lines. The stop reason comes in the prompt.
+
 ## Discipline
 
 - **Compute nothing.** Every count comes from `scoreboard.md`'s header or from the cost tables. Never add, subtract, average or round a figure. When a number you need isn't in either, leave it out and say so.

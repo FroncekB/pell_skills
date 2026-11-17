@@ -82,7 +82,7 @@ Never run design intake's stages or dispatch their agents yourself. Stages 7 and
 
 **Phase 8.** Set `Phase: staging`, and add `Staging: skipped, no Azure module` to `status.md`. Staging's `phase` line, written when phase 9 begins, says `staging skipped, no Azure module`. The deploy waits for the Azure module.
 
-**Phase 9.** Set `Phase: handoff`, and write the handoff as `references/handoff.md` says, with the `handoff-writer` agent. It ends with the commit, the push, the stop notification and `State: done`. Its stop reason, `State` and notification wording are in `references/handoff.md`.
+**Phase 9.** Set `Phase: handoff`, and write the handoff as `references/handoff.md` says, with the `handoff-writer` agent. It ends with the commit, the push, then the stop notification and its `notified` line in a second commit and push, and `State: done`. Its stop reason, `State` and notification wording are in `references/handoff.md`.
 
 ## Where the engineer answers
 
