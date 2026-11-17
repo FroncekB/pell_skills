@@ -193,17 +193,16 @@ Build a client project from the Pell Web App Framework end to end, with two stop
 4. Hardens the result with integration-gap audits and a security pass
 5. Writes the handoff for the Pell engineer who will own the project
 
-**The push guard.** Setup installs a `PreToolUse` hook and a git `pre-push` hook in the fork. The only push either allows is `git push origin main`, to the client repo named in `client.yaml`, never forced, never another branch or remote. The guard also denies reads and writes under `.git/` and `.claude/` once setup is done, so a run cannot loosen it. Because a session loads the guard only from the folder it starts in, open each later session in the fork's folder. The Bitbucket branch restrictions that `/pell:init-client-repo` sets are the server-side half, and the complete enforcement is the two together.
+**The push guard.** Setup installs a `PreToolUse` hook and a git `pre-push` hook in the fork. The only push either allows is `git push origin main`, to the client repo, which the guard reads from the pinned `.claude/repo-standup/client-repo` file that setup writes from `client.yaml`'s `repository.bitbucket`, never forced, never another branch or remote. The guard also denies reads and writes under `.git/` and `.claude/` once setup is done, so a run cannot loosen it. Because a session loads the guard only from the folder it starts in, open each later session in the fork's folder. The Bitbucket branch restrictions that `/pell:init-client-repo` sets are the server-side half, and the complete enforcement is the two together.
 
 **Checkpoints.** The run waits only on the engineer, only at design intake's two checkpoints, and never on the client. Every question it raises carries a guess, and the build goes on with it. Notifications go out through `PushNotification` at checkpoints, phase ends, stops and alerts (turn on mobile push in `/config`); when none can send, the same message appears in chat.
 
-**The handoff.** Written under `docs/project/` by the `handoff-writer` agent: `handoff.md` (one page), `scoreboard.md`, `open-questions.md` ready to send, `known-gaps.md`, a `demo/<persona>.md` per persona, `decisions.md` and `cost-report.md`. Everything is internal. A run is never closed: `State: done` means only that nothing could move, and the next session resumes if an answer or an edit has made a unit movable.
+**The handoff.** Written under `docs/project/` by the `handoff-writer` agent: `handoff.md` (one page), `scoreboard.md`, `open-questions.md` ready to send, `known-gaps.md`, a `demo/<persona>.md` for each persona who signs in and has at least one Verified workflow, `decisions.md` and `cost-report.md`. Everything is internal. A run is never closed: `State: done` means only that nothing could move, and the next session resumes if an answer or an edit has made a unit movable.
 
 **Side-effects:** writes, commits and pushes in the fork without `(y/n)` prompts, because the invocation is the yes and `git push origin main` is a standing yes, enforced by the guard. Every other side effect goes through `/pell:init-client-repo`'s gates. Staging deploy is skipped until the Azure module exists.
 
 **Tests:** the guard has Node tests in `tests/repo-standup/`, outside the shipped plugin. Run `node --test "tests/**/*.test.mjs"` from the repo root after any change to `plugins/pell/skills/repo-standup/hooks/`.
 
----
 ---
 
 ## Starting work
@@ -642,7 +641,7 @@ The skill writes and commits inside the fork without `(y/n)` prompts, because th
 
 ### `repo-standup`
 
-Fires in a client fork or on a Bitbucket repo link when you say "start repo standup" or "continue the build", or run `/pell:repo-standup`. It works out where the run stands from the fork's files alone and carries on: design intake, then the build loop, hardening and the handoff. The full run, the push guard, the checkpoints and the handoff are described under [`/pell:repo-standup`](#pellrepo-standup). It dispatches `handoff-writer` (below), design intake's agents through the `design-intake` skill, and the `conductor-*` workers.
+Fires when you say "start repo standup" or "continue the build", or run `/pell:repo-standup`. It works out where the run stands from the fork's files alone and carries on: design intake, then the build loop, hardening and the handoff. The full run, the push guard, the checkpoints and the handoff are described under [`/pell:repo-standup`](#pellrepo-standup). It dispatches `handoff-writer` (below), design intake's agents through the `design-intake` skill, and the `conductor-*` workers.
 
 The skill writes, commits and pushes in the fork without `(y/n)` prompts; its only push is `git push origin main` to the client repo, which its guard enforces.
 
